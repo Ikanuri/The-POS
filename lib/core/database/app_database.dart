@@ -291,7 +291,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 42;
+  int get schemaVersion => 43;
 
   /// Key `app_settings` yang BOLEH ikut sync host->klien.
   ///
@@ -850,6 +850,49 @@ class AppDatabase extends _$AppDatabase {
                 transactionPayments.prabayarChangeTakenBeforeCheckout,
                 m);
           }
+          if (from < 43) {
+            // Bug nyata: `price_categories` (Fase B, v40) lupa dimasukkan ke
+            // `_allTables`/`masterData` sejak awal — persis bug `product_groups`
+            // yang sudah pernah diperbaiki (lihat dok `masterData`). Kategori
+            // yang owner buat TIDAK PERNAH sampai ke device kasir lain lewat
+            // sync LAN, dan backup penuh/"Alihkan Owner" MENGHAPUS SEMUA
+            // kategori (hilang total, `alt_prices.priceCategoryId` jadi
+            // orphan). Fix sync-nya cuma perlu masuk ke 2 daftar itu (lihat
+            // `_allTables`/`masterData` di bawah) — TAPI `deletePriceCategory`
+            // sebelumnya HARD DELETE baris (beda dari `product_groups` yang
+            // dari awal sudah tombstone `name=null`). Sync satu-arah host-
+            // >klien di app ini TIDAK PERNAH propagate DELETE (full-dump
+            // cuma bisa INSERT OR REPLACE apa yg ADA di host) — kalau
+            // `price_categories` ditambah ke `masterData` dgn delete masih
+            // hard-delete, penghapusan kategori di host tidak akan pernah
+            // terpropagasi (kategori basi nyangkut selamanya di klien).
+            // Solusinya: `name` jadi NULLABLE (lihat dok `PriceCategories`)
+            // supaya `deletePriceCategory` bisa tombstone spt `product_groups`,
+            // BUKAN nambah kolom `updatedAt` (jumlah baris realistis kecil
+            // sepanjang hidup toko, sama alasannya dgn `product_groups` —
+            // full-dump tiap sync sudah cukup, tidak perlu delta by waktu).
+            // `alterTable` merekonstruksi tabel dari definisi Dart TERKINI
+            // (kolom `name` nullable) — data lama (semua non-null) disalin
+            // apa adanya, tidak ada yang hilang/berubah.
+            //
+            // Fixture test migrasi LAMA (mis. `migration_v42_test.dart`)
+            // sengaja cuma bikin tabel yang relevan ke migrasi itu sendiri
+            // (bukan skema lengkap, lihat dok pola sama di blok `from < 41`
+            // di atas) — `price_categories` BISA belum ada sama sekali saat
+            // migrasi ini jalan di fixture semacam itu (fixture mengasumsikan
+            // migrasi v40 "sudah lewat" tanpa benar² menjalankannya). Cek
+            // keberadaan tabel dulu supaya `alterTable` tidak "no such table"
+            // pada fixture tsb — di DB produksi asli tabelnya SELALU ada
+            // (dibuat di blok `from < 40` pada upgrade berurutan yang sama).
+            final hasPriceCategories = (await customSelect(
+                    "SELECT name FROM sqlite_master WHERE type='table' "
+                    "AND name='price_categories'")
+                .get())
+                .isNotEmpty;
+            if (hasPriceCategories) {
+              await m.alterTable(TableMigration(priceCategories));
+            }
+          }
         },
         beforeOpen: (details) async {
           // Arsip dibuka read-only (query_only = ON) — jangan menulis apa pun.
@@ -1059,8 +1102,13 @@ class AppDatabase extends _$AppDatabase {
 
   // ─────────────────────── Price Categories (Fase B) ───────────────────────
 
+  /// `name IS NOT NULL` menyaring kategori yang ditombstone (lihat dok
+  /// `PriceCategories`/`deletePriceCategory`) — baris fisiknya masih ada di
+  /// DB (utk `alt_prices.priceCategoryId` lama & sync full-dump), tapi
+  /// TIDAK boleh muncul lagi di layar manapun.
   Future<List<PriceCategory>> getAllPriceCategories() =>
       (select(priceCategories)
+            ..where((t) => t.name.isNotNull())
             ..orderBy([
               (t) => OrderingTerm.asc(t.sortOrder),
               (t) => OrderingTerm.asc(t.name),
@@ -1068,8 +1116,10 @@ class AppDatabase extends _$AppDatabase {
           .get();
 
   /// Reaktif — layar Kategori Harga pakai ini supaya CRUD (tambah/ubah nama/
-  /// hapus/reorder) langsung tampil tanpa reload manual.
+  /// hapus/reorder) langsung tampil tanpa reload manual. Filter tombstone
+  /// sama dgn [getAllPriceCategories].
   Stream<List<PriceCategory>> watchPriceCategories() => (select(priceCategories)
+        ..where((t) => t.name.isNotNull())
         ..orderBy([
           (t) => OrderingTerm.asc(t.sortOrder),
           (t) => OrderingTerm.asc(t.name),
@@ -1092,7 +1142,7 @@ class AppDatabase extends _$AppDatabase {
     final maxSort = await priceCategoriesMaxSortOrder();
     await into(priceCategories).insert(PriceCategoriesCompanion.insert(
       id: id,
-      name: name,
+      name: Value(name),
       sortOrder: Value(maxSort + 1),
     ));
     return id;
@@ -1124,6 +1174,15 @@ class AppDatabase extends _$AppDatabase {
   /// layar detail kategori, aksi sengaja per-baris) yang menghapus baris
   /// totalnya — di sini aksinya massal/tidak diniatkan per-produk, jadi
   /// dipilih yang lebih aman (bisa dipulihkan manual, bukan hilang).
+  ///
+  /// Kategori itu sendiri: TOMBSTONE (`name=null`), BUKAN hard delete lagi
+  /// (schemaVersion 43) — persis pola [product_groups]. Sync satu-arah
+  /// host->klien tidak pernah propagate DELETE fisik; kalau barisnya
+  /// benar² hilang, penghapusan kategori tidak akan pernah sampai ke device
+  /// kasir lain. Baris fisiknya sengaja disisakan (id tetap ada) supaya
+  /// `alt_prices.priceCategoryId` lama (kalau ada yg blm sempat dilepas di
+  /// atas — seharusnya tidak, tapi defensif) tidak jadi FK ke id yang
+  /// hilang total.
   Future<void> deletePriceCategory(String id) async {
     await transaction(() async {
       await (update(altPrices)..where((t) => t.priceCategoryId.equals(id)))
@@ -1133,7 +1192,8 @@ class AppDatabase extends _$AppDatabase {
         marginType: Value(null),
         marginValue: Value(null),
       ));
-      await (delete(priceCategories)..where((t) => t.id.equals(id))).go();
+      await (update(priceCategories)..where((t) => t.id.equals(id)))
+          .write(const PriceCategoriesCompanion(name: Value(null)));
     });
   }
 
@@ -6221,6 +6281,14 @@ class AppDatabase extends _$AppDatabase {
     'product_units',
     'product_barcodes',
     'price_tiers',
+    // Fase B "Kategori Harga" (schemaVersion 40) — SEBELUMNYA lupa
+    // dimasukkan ke daftar ini (bug nyata, sama kelasnya dgn bug
+    // `product_groups` yg dulu juga terlewat) — restore backup penuh/
+    // "Alihkan Owner" MENGHAPUS SEMUA kategori tanpa ini (`alt_prices.
+    // priceCategoryId` jadi orphan). Ditaruh SEBELUM `alt_prices` (FK
+    // logis, walau bukan FK fisik lintas-restore) supaya urutan insert
+    // (forward, parent dulu)/delete (reversed, child dulu) tetap benar.
+    'price_categories',
     'alt_prices',
     'customer_groups',
     'customer_group_prices',
@@ -6365,6 +6433,15 @@ class AppDatabase extends _$AppDatabase {
       'product_groups',
       'product_units',
       'price_tiers',
+      // Fase B "Kategori Harga" — bug nyata SAMA PERSIS kelasnya dgn
+      // `product_groups` di atas (lihat dok komentarnya): kategori yg owner
+      // buat/hapus tidak pernah tersinkron ke klien sama sekali sebelumnya
+      // — `price_categories` lupa dimasukkan ke daftar ini sejak awal.
+      // Full-dump tiap sync (tanpa kolom `updated_at`) AMAN krn
+      // `deletePriceCategory` sekarang menombstone `name=null` (schemaVersion
+      // 43), bukan hard delete — sama alasan/pola persis `product_groups`.
+      // Ditaruh SEBELUM `alt_prices` (FK logis `alt_prices.priceCategoryId`).
+      'price_categories',
       'alt_prices',
       'product_barcodes',
       'product_group_tags',

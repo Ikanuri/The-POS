@@ -373,7 +373,9 @@ Future<PriceCategoryAssignOutcome?> pickPriceCategoryForRow({
                           ? Theme.of(ctx).colorScheme.primary
                           : null,
                     ),
-                    title: Text(c.name),
+                    // `getAllPriceCategories` sudah filter `name IS NOT
+                    // NULL` (kategori ditombstone tidak pernah masuk sini).
+                    title: Text(c.name!),
                     onTap: () => Navigator.pop(ctx, c),
                   ),
               ],

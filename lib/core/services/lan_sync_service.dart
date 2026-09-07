@@ -419,6 +419,13 @@ class LanSyncService {
     'product_groups',
     'product_units',
     'price_tiers',
+    // Fase B "Kategori Harga" — bug nyata, sama kelasnya dgn `product_groups`
+    // (lihat dok `masterData` di `AppDatabase`): kategori tidak pernah
+    // tersinkron ke klien sama sekali sebelumnya krn absen di SINI juga
+    // (bukan cuma di `dumpSince`'s `masterData`) — tanpa baris ini, klien
+    // diam-diam MEMBUANG payload `price_categories` walau host sudah
+    // benar mengirimnya (allowlist tolak nama tabel tak dikenal).
+    'price_categories',
     'alt_prices',
     'product_barcodes',
     'product_group_tags',

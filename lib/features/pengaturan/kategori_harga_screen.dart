@@ -96,7 +96,9 @@ class _CategoryTile extends ConsumerWidget {
           index: index,
           child: Icon(Icons.drag_handle, color: scheme.onSurfaceVariant),
         ),
-        title: Text(category.name),
+        // `watchPriceCategories` sudah filter `name IS NOT NULL`
+        // (kategori ditombstone tidak pernah masuk sini).
+        title: Text(category.name!),
         trailing: IconButton(
           icon: const Icon(Icons.edit_outlined, size: 20),
           tooltip: 'Ubah nama',
@@ -107,7 +109,7 @@ class _CategoryTile extends ConsumerWidget {
         ),
         onTap: () => Navigator.of(context).push(MaterialPageRoute(
           builder: (_) => KategoriHargaDetailScreen(
-              categoryId: category.id, categoryName: category.name),
+              categoryId: category.id, categoryName: category.name!),
         )),
       ),
     );

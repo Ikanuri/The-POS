@@ -7,6 +7,34 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-07 (sesi ketiga puluh empat — fix price_categories tidak ikut sync/backup)
+
+- `PENDING_HASH` — fix(db): `price_categories` (Kategori Harga) ikut sync LAN &
+  backup penuh — audit manual menemukan tabel ini ADA di skema (schemaVersion
+  40) tapi TIDAK ADA di `_allTables` (`dumpAllTables`/`restoreFromDump`, backup
+  penuh/"Alihkan Owner") maupun `masterData` (`dumpSince`, sync LAN harian)
+  ataupun `LanSyncService.clientMergeableTables` (allowlist merge sisi klien)
+  — 3 tempat sekaligus lupa dimasukkan. Dampak: kategori yang owner buat TIDAK
+  PERNAH sampai ke device kasir lain, dan restore backup/"Alihkan Owner"
+  MENGHAPUS SEMUA kategori (`alt_prices.priceCategoryId` jadi orphan).
+  Komplikasi: `deletePriceCategory()` sebelumnya HARD DELETE baris (beda dari
+  `product_groups` yang sudah tombstone `name=null`) — sync satu-arah host-
+  >klien di app ini tidak pernah propagate DELETE fisik, jadi hard-delete
+  berarti penghapusan kategori tidak akan pernah terpropagasi kalau langsung
+  ditambah ke `masterData` apa adanya. Fix: `PriceCategories.name` jadi
+  NULLABLE (schemaVersion 43, migrasi `alterTable`), `deletePriceCategory()`
+  diubah jadi tombstone (`name=null`, persis pola `product_groups`),
+  `getAllPriceCategories`/`watchPriceCategories` filter `name IS NOT NULL`.
+  Tabel ditambahkan ke `_allTables` (posisi SEBELUM `alt_prices`, FK logis
+  `alt_prices.priceCategoryId`), `masterData` (full-dump tiap sync tanpa
+  delta, sama pola `product_groups` — jumlah baris realistis kecil), dan
+  `clientMergeableTables`. Test: `migration_v43_test.dart` (kolom nullable +
+  data lama utuh), `price_categories_sync_test.dart` (create/rename/delete
+  ikut tersinkron via LAN sungguhan, dibuktikan gagal di kode lama),
+  `price_categories_backup_test.dart` (dumpAllTables/restoreFromDump
+  roundtrip, urutan FK terjaga), assert tombstone tambahan di
+  `price_categories_db_test.dart`.
+
 ## 2026-09-07 (sesi ketiga puluh tiga — fix pelanggan tidak terbawa di "Batalkan & Susun Ulang")
 
 - `b3bab3f` — fix(kasir): "Batalkan & Susun Ulang" bawa nama pelanggan

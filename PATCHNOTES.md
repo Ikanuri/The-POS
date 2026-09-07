@@ -8,6 +8,16 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 7 September 2026 (sesi ketiga puluh empat)
+
+### 🐛 Perbaikan
+- **Kategori Harga sekarang ikut tersinkron ke HP kasir/asisten lain, dan
+  ikut terbawa saat backup/"Alihkan Owner".** Sebelumnya kategori (mis.
+  "Grosir", "Rokok") yang dibuat owner tidak pernah sampai ke device lain
+  di toko yang sama, dan restore backup penuh/"Alihkan Owner" bisa
+  menghapus semua kategori itu (nama kategorinya hilang, walau produk yang
+  jadi anggotanya tetap aman).
+
 ## 7 September 2026 (sesi ketiga puluh tiga)
 
 ### 🐛 Perbaikan

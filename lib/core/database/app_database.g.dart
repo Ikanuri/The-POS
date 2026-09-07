@@ -2657,8 +2657,8 @@ class $PriceCategoriesTable extends PriceCategories
   static const VerificationMeta _nameMeta = const VerificationMeta('name');
   @override
   late final GeneratedColumn<String> name = GeneratedColumn<String>(
-      'name', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
+      'name', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _sortOrderMeta =
       const VerificationMeta('sortOrder');
   @override
@@ -2695,8 +2695,6 @@ class $PriceCategoriesTable extends PriceCategories
     if (data.containsKey('name')) {
       context.handle(
           _nameMeta, name.isAcceptableOrUnknown(data['name']!, _nameMeta));
-    } else if (isInserting) {
-      context.missing(_nameMeta);
     }
     if (data.containsKey('sort_order')) {
       context.handle(_sortOrderMeta,
@@ -2718,7 +2716,7 @@ class $PriceCategoriesTable extends PriceCategories
       id: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
       name: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}name'])!,
+          .read(DriftSqlType.string, data['${effectivePrefix}name']),
       sortOrder: attachedDatabase.typeMapping
           .read(DriftSqlType.int, data['${effectivePrefix}sort_order'])!,
       createdAt: attachedDatabase.typeMapping
@@ -2734,19 +2732,21 @@ class $PriceCategoriesTable extends PriceCategories
 
 class PriceCategory extends DataClass implements Insertable<PriceCategory> {
   final String id;
-  final String name;
+  final String? name;
   final int sortOrder;
   final DateTime createdAt;
   const PriceCategory(
       {required this.id,
-      required this.name,
+      this.name,
       required this.sortOrder,
       required this.createdAt});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['id'] = Variable<String>(id);
-    map['name'] = Variable<String>(name);
+    if (!nullToAbsent || name != null) {
+      map['name'] = Variable<String>(name);
+    }
     map['sort_order'] = Variable<int>(sortOrder);
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
@@ -2755,7 +2755,7 @@ class PriceCategory extends DataClass implements Insertable<PriceCategory> {
   PriceCategoriesCompanion toCompanion(bool nullToAbsent) {
     return PriceCategoriesCompanion(
       id: Value(id),
-      name: Value(name),
+      name: name == null && nullToAbsent ? const Value.absent() : Value(name),
       sortOrder: Value(sortOrder),
       createdAt: Value(createdAt),
     );
@@ -2766,7 +2766,7 @@ class PriceCategory extends DataClass implements Insertable<PriceCategory> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return PriceCategory(
       id: serializer.fromJson<String>(json['id']),
-      name: serializer.fromJson<String>(json['name']),
+      name: serializer.fromJson<String?>(json['name']),
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
@@ -2776,17 +2776,20 @@ class PriceCategory extends DataClass implements Insertable<PriceCategory> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
       'id': serializer.toJson<String>(id),
-      'name': serializer.toJson<String>(name),
+      'name': serializer.toJson<String?>(name),
       'sortOrder': serializer.toJson<int>(sortOrder),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
 
   PriceCategory copyWith(
-          {String? id, String? name, int? sortOrder, DateTime? createdAt}) =>
+          {String? id,
+          Value<String?> name = const Value.absent(),
+          int? sortOrder,
+          DateTime? createdAt}) =>
       PriceCategory(
         id: id ?? this.id,
-        name: name ?? this.name,
+        name: name.present ? name.value : this.name,
         sortOrder: sortOrder ?? this.sortOrder,
         createdAt: createdAt ?? this.createdAt,
       );
@@ -2824,7 +2827,7 @@ class PriceCategory extends DataClass implements Insertable<PriceCategory> {
 
 class PriceCategoriesCompanion extends UpdateCompanion<PriceCategory> {
   final Value<String> id;
-  final Value<String> name;
+  final Value<String?> name;
   final Value<int> sortOrder;
   final Value<DateTime> createdAt;
   final Value<int> rowid;
@@ -2837,12 +2840,11 @@ class PriceCategoriesCompanion extends UpdateCompanion<PriceCategory> {
   });
   PriceCategoriesCompanion.insert({
     required String id,
-    required String name,
+    this.name = const Value.absent(),
     this.sortOrder = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
-  })  : id = Value(id),
-        name = Value(name);
+  }) : id = Value(id);
   static Insertable<PriceCategory> custom({
     Expression<String>? id,
     Expression<String>? name,
@@ -2861,7 +2863,7 @@ class PriceCategoriesCompanion extends UpdateCompanion<PriceCategory> {
 
   PriceCategoriesCompanion copyWith(
       {Value<String>? id,
-      Value<String>? name,
+      Value<String?>? name,
       Value<int>? sortOrder,
       Value<DateTime>? createdAt,
       Value<int>? rowid}) {
@@ -19294,7 +19296,7 @@ typedef $$PriceTiersTableProcessedTableManager = ProcessedTableManager<
 typedef $$PriceCategoriesTableCreateCompanionBuilder = PriceCategoriesCompanion
     Function({
   required String id,
-  required String name,
+  Value<String?> name,
   Value<int> sortOrder,
   Value<DateTime> createdAt,
   Value<int> rowid,
@@ -19302,7 +19304,7 @@ typedef $$PriceCategoriesTableCreateCompanionBuilder = PriceCategoriesCompanion
 typedef $$PriceCategoriesTableUpdateCompanionBuilder = PriceCategoriesCompanion
     Function({
   Value<String> id,
-  Value<String> name,
+  Value<String?> name,
   Value<int> sortOrder,
   Value<DateTime> createdAt,
   Value<int> rowid,
@@ -19462,7 +19464,7 @@ class $$PriceCategoriesTableTableManager extends RootTableManager<
               $$PriceCategoriesTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback: ({
             Value<String> id = const Value.absent(),
-            Value<String> name = const Value.absent(),
+            Value<String?> name = const Value.absent(),
             Value<int> sortOrder = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<int> rowid = const Value.absent(),
@@ -19476,7 +19478,7 @@ class $$PriceCategoriesTableTableManager extends RootTableManager<
           ),
           createCompanionCallback: ({
             required String id,
-            required String name,
+            Value<String?> name = const Value.absent(),
             Value<int> sortOrder = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<int> rowid = const Value.absent(),

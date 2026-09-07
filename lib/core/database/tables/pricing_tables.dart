@@ -68,9 +68,21 @@ class AltPrices extends Table {
 /// sangat berbeda, mis. rokok margin tipis + telur margin tebal — margin
 /// SELALU per-produk lewat baris [AltPrices] yang menunjuk ke sini via
 /// `priceCategoryId`).
+///
+/// schemaVersion 43: [name] jadi NULLABLE — dipakai sbg penanda tombstone
+/// (bukan hard delete), persis pola [ProductGroups.name]. `deletePriceCategory`
+/// men-set `name=null` alih-alih menghapus barisnya: sync satu-arah
+/// host->klien (`dumpSince`/`masterData`) TIDAK PERNAH propagate DELETE
+/// (lihat dok `_allTables`/`masterData` di `AppDatabase`) — kalau barisnya
+/// benar² hilang dari host, penghapusan kategori TIDAK AKAN PERNAH sampai
+/// ke klien. Full-dump tiap sync (spt `product_groups`) baru bisa
+/// merefleksikan penghapusan itu kalau barisnya masih ada (dgn `name=null`)
+/// utk di-INSERT OR REPLACE ke klien. `getAllPriceCategories`/
+/// `watchPriceCategories` memfilter `name IS NOT NULL` supaya kategori yg
+/// ditombstone tidak lagi tampil di UI manapun.
 class PriceCategories extends Table {
   TextColumn get id => text()(); // UUID
-  TextColumn get name => text()();
+  TextColumn get name => text().nullable()();
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 

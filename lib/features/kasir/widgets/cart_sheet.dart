@@ -1093,7 +1093,10 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                       for (final cat in priceCategories) ...[
                         const SizedBox(width: 6),
                         ChoiceChip(
-                          label: Text(cat.name),
+                          // `priceCategoriesForToggleProvider` ->
+                          // `getAllPriceCategories` sudah filter `name IS
+                          // NOT NULL` (tombstone tidak pernah masuk sini).
+                          label: Text(cat.name!),
                           selected: activeCategoryId == cat.id,
                           onSelected: (_) => _onCategoryToggle(ref, cat.id),
                         ),

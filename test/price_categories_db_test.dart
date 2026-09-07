@@ -175,6 +175,16 @@ void main() {
     final cats = await db.getAllPriceCategories();
     expect(cats, isEmpty);
 
+    // Kategori itu sendiri TOMBSTONE (name=null), BUKAN hard delete — baris
+    // fisiknya tetap ada di DB (persis pola product_groups) supaya full-dump
+    // sync (masterData) bisa merefleksikan penghapusan ini ke klien lain.
+    final rawCat = await (db.select(db.priceCategories)
+          ..where((t) => t.id.equals(catId)))
+        .getSingleOrNull();
+    expect(rawCat != null, true,
+        reason: 'baris price_categories TIDAK boleh hilang total dari DB');
+    expect(rawCat!.name, isNull);
+
     // Baris AltPrice masih ada, tapi sudah lepas dari kategori & beku.
     final alts = await db.getAltPrices(unitId);
     expect(alts, hasLength(1));
