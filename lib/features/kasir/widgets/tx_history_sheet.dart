@@ -1425,9 +1425,30 @@ Future<void> _redoCartFromVoidedTransaction(
       }
     }
   }
+
+  // BUG (dilaporkan user, "pelanggan tidak terbawa"): utk pelanggan
+  // TERDAFTAR, `Transactions.customerName` SENGAJA disimpan null saat
+  // checkout (lihat dok kolom itu di `transaction_tables.dart` — customerId
+  // adl satu-satunya sumber kebenaran, nama diabaikan). `CartMeta.hasCustomer`
+  // cuma mengecek `customerName` (bukan `customerId`), jadi kalau field itu
+  // dibawa mentah dari `tx.customerName` (null), cart bar/`_holdCurrent`
+  // menganggap TIDAK ADA pelanggan sama sekali walau `customerId` sudah
+  // benar terisi. Resolve nama TERKINI dari tabel `customers` via
+  // `customerId` (pola sama pencocokan `matchedEmployee` di atas) supaya
+  // `CartMeta` yang terbentuk konsisten dgn hasil `setCustomer(id, name)`
+  // normal (SELALU bawa keduanya, id + nama non-null).
+  String? customerNameForMeta = tx.customerName;
+  final custId = tx.customerId;
+  if (custId != null) {
+    final cust = await (db.select(db.customers)
+          ..where((t) => t.id.equals(custId)))
+        .getSingleOrNull();
+    if (cust != null) customerNameForMeta = cust.name;
+  }
+
   ref.read(cartMetaProvider(kMainCartId).notifier).replaceAll(CartMeta(
         customerId: tx.customerId,
-        customerName: tx.customerName,
+        customerName: customerNameForMeta,
         employeeId: matchedEmployee?.id,
         employeeName: empName,
         replacesTxId: tx.id,

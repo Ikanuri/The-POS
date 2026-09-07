@@ -61,7 +61,8 @@ void main() {
   Future<void> seedTxWithItem(AppDatabase db, String txId,
       {int paid = 20000,
       String status = 'lunas',
-      String? internalNote}) async {
+      String? internalNote,
+      String? customerId}) async {
     await db.into(db.products)
         .insert(ProductsCompanion.insert(id: 'p1', name: 'Kopi Sachet'));
     await db.into(db.productUnits).insert(
@@ -74,6 +75,12 @@ void main() {
           paid: paid,
           changeAmount: 0,
           paymentMethod: 'tunai',
+          // Pola nyata `payment_screen.dart`: pelanggan TERDAFTAR ->
+          // customerName SENGAJA null (customerId satu-satunya sumber
+          // kebenaran) — lihat dok kolom di `transaction_tables.dart`.
+          customerId: customerId == null
+              ? const Value.absent()
+              : Value(customerId),
           internalNote: internalNote == null
               ? const Value.absent()
               : Value(internalNote),
@@ -146,6 +153,43 @@ void main() {
 
     expect(find.text('Bawa Pembayaran Lama?'), findsNothing,
         reason: 'nota tempo murni belum ada uang masuk sama sekali');
+  });
+
+  testWidgets(
+      'nota dgn PELANGGAN TERDAFTAR: "Batalkan & Susun Ulang" harus '
+      'membawa customerId + customerName (resolve dari tabel customers, '
+      'BUKAN tx.customerName mentah yg sengaja null) -> meta.hasCustomer '
+      'true & label chip pelanggan terisi', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(() async => db.close());
+    await db.into(db.customers).insert(CustomersCompanion.insert(
+          id: 'cust1',
+          name: 'Bu Sari',
+        ));
+    await seedTxWithItem(db, 'tx4', customerId: 'cust1');
+
+    final container = await pumpReceipt(tester, db, 'tx4');
+
+    await tester.tap(find.text('Batalkan'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Batalkan & Susun Ulang'));
+    await tester.pumpAndSettle();
+    // Nota lunas -> ditawari Pra-Bayar dulu, lewati saja (fokus tes pelanggan).
+    if (find.text('Bawa Pembayaran Lama?').evaluate().isNotEmpty) {
+      await tester.tap(find.text('Lewati'));
+      await tester.pumpAndSettle();
+    }
+
+    final meta = container.read(cartMetaProvider(kMainCartId));
+    expect(meta.customerId, 'cust1');
+    expect(meta.customerName, 'Bu Sari',
+        reason: 'nama HARUS di-resolve dari tabel customers via customerId, '
+            'bukan dibawa mentah dari tx.customerName (yg sengaja null utk '
+            'pelanggan terdaftar)');
+    expect(meta.hasCustomer, isTrue,
+        reason: '`hasCustomer` cuma cek customerName -> kalau nama kosong, '
+            'chip pelanggan di cart bar tampil seakan tidak ada pelanggan '
+            'sama sekali, walau customerId sudah benar terisi');
   });
 
   testWidgets(
