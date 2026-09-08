@@ -546,6 +546,9 @@ class _CartSheetState extends ConsumerState<CartSheet> {
     ref.read(cartMetaProvider(widget.cartId).notifier).clear();
     ref.read(cartPrabayarProvider(widget.cartId).notifier).clear();
     ref.read(cartDebtSettlementProvider(widget.cartId).notifier).clear();
+    // Bug fix: toggle kategori harga header (singleton per-cartId, TIDAK
+    // per-transaksi) juga harus ikut reset saat keranjang dikosongkan manual.
+    ref.read(cartPriceCategoryProvider(widget.cartId).notifier).clear();
     if (ctx.mounted) Navigator.of(ctx).pop();
   }
 

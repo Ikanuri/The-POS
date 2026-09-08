@@ -18,6 +18,7 @@ import '../../core/utils/input_formatters.dart';
 import '../laci_meja/laci_meja_reminder.dart';
 import 'cart_debt_settlement_provider.dart';
 import 'cart_meta_provider.dart';
+import 'cart_price_category_provider.dart';
 import 'cart_prabayar_provider.dart';
 import 'cart_provider.dart';
 import 'discount_allocation.dart';
@@ -981,6 +982,11 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       ref.read(cartMetaProvider(_cartId).notifier).clear();
       ref.read(cartPrabayarProvider(_cartId).notifier).clear();
       ref.read(cartDebtSettlementProvider(_cartId).notifier).clear();
+      // Bug fix: toggle kategori harga header (`kMainCartId` singleton, TIDAK
+      // per-transaksi) nempel ke transaksi BERIKUTNYA kalau tidak direset di
+      // sini — kasir aktifkan kategori, checkout, lalu transaksi baru diam-
+      // diam masih pakai kategori itu sampai manual di-"Normal"-kan.
+      ref.read(cartPriceCategoryProvider(_cartId).notifier).clear();
       if (mounted) {
         context.pushReplacement('/kasir/struk/$txId');
       }
@@ -1130,6 +1136,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
     notifier.clear();
     ref.read(cartMetaProvider(_cartId).notifier).clear();
+    ref.read(cartPriceCategoryProvider(_cartId).notifier).clear();
     if (mounted) {
       // Pop kembali ke ReceiptScreen (bukan context.go) agar await
       // context.push() di ReceiptScreen ter-resolve dan _load() dipanggil.
