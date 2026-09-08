@@ -2142,22 +2142,38 @@ class AppDatabase extends _$AppDatabase {
 
   // ───────────────────────── Tutup Kasir (Item 15) ─────────────────────────
 
-  /// Rekap kas hari ini: total tunai (paid), non-tunai (paid), jumlah nota.
-  /// Non-void; 'tempo' (belum dibayar) tidak dihitung sebagai kas masuk.
+  /// Rekap kas hari ini: total tunai, non-tunai, jumlah nota YANG BENAR-BENAR
+  /// menerima pembayaran dalam rentang ini.
+  ///
+  /// Basisnya `transaction_payments.paid_at`/`amount` (uang SUNGGUHAN
+  /// diterima per baris pembayaran), BUKAN `transactions.created_at`/`paid`
+  /// (tanggal nota dibuat & kumulatif nota) — nota yang DIBUAT hari
+  /// sebelumnya tapi baru DILUNASI hari ini (mis. pre-order DP 0, dilunasi
+  /// saat pengambilan) tetap muncul di rekonsiliasi kas hari pelunasan,
+  /// bukan hari nota dibuat. Metode dikelompokkan per baris pembayaran
+  /// (`transaction_payments.method`), bukan snapshot 1 nilai per nota —
+  /// benar utk nota metode campuran (sebagian tunai, sebagian transfer).
+  /// `amount=0` (baris jejak audit retur/edit) otomatis tidak menyumbang
+  /// apa pun ke SUM apa pun method-nya; 'tempo' tidak pernah muncul sbg
+  /// method baris pembayaran (tempo = belum ada uang masuk, tidak ada
+  /// baris payment) sehingga tidak perlu di-exclude eksplisit. Non-void
+  /// dicek dari status transaksi SAAT INI (bukan snapshot).
   Future<({int cash, int nonCash, int txCount})> getTodayCashRecap(
       DateTime from, DateTime to) async {
     final row = await customSelect(
       "SELECT "
-      "COALESCE(SUM(CASE WHEN payment_method='tunai' THEN paid ELSE 0 END),0) AS cash, "
-      "COALESCE(SUM(CASE WHEN payment_method NOT IN ('tunai','tempo') THEN paid ELSE 0 END),0) AS noncash, "
-      "COUNT(*) AS cnt "
-      "FROM transactions WHERE status != 'void' "
-      "AND created_at >= ? AND created_at <= ?",
+      "COALESCE(SUM(CASE WHEN tp.method='tunai' THEN tp.amount ELSE 0 END),0) AS cash, "
+      "COALESCE(SUM(CASE WHEN tp.method NOT IN ('tunai','tempo') THEN tp.amount ELSE 0 END),0) AS noncash, "
+      "COUNT(DISTINCT tp.transaction_id) AS cnt "
+      "FROM transaction_payments tp "
+      "JOIN transactions t ON t.id = tp.transaction_id "
+      "WHERE t.status != 'void' AND NOT tp.voided "
+      "AND tp.paid_at >= ? AND tp.paid_at <= ?",
       variables: [
         Variable.withInt(from.millisecondsSinceEpoch ~/ 1000),
         Variable.withInt(to.millisecondsSinceEpoch ~/ 1000),
       ],
-      readsFrom: {transactions},
+      readsFrom: {transactions, transactionPayments},
     ).getSingle();
     return (
       cash: (row.data['cash'] as num).toInt(),
