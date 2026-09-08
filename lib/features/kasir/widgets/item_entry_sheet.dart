@@ -443,18 +443,28 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
   /// Daftar pilihan harga untuk satuan terpilih: harga dasar + tier grosir
   /// (minQty>1) + Harga Lain. Item 19 — dipakai dropdown di sebelah field
   /// Harga (menggantikan chip yang menumpuk).
-  List<({String label, int price})> _priceOptions() {
+  List<({String label, int price, bool isCategory})> _priceOptions() {
     final sel = _sel;
     if (sel == null) return const [];
     return [
-      (label: 'Harga dasar', price: sel.trueBasePrice),
+      (label: 'Harga dasar', price: sel.trueBasePrice, isCategory: false),
       for (final t in sel.tiers.reversed)
         if (t.minQty > 1)
           (
             label: 'Grosir ≥${_fmtQty(t.minQty.toDouble())} ${sel.unitName}',
-            price: t.price
+            price: t.price,
+            isCategory: false,
           ),
-      for (final a in sel.altPrices) (label: a.label, price: a.price),
+      // `priceCategoryId != null` = chip Kategori Harga (Fase C), dibedakan
+      // dari chip "Harga Lain" ad-hoc biasa lewat aksen warna (lihat
+      // `_PriceChip.isCategory`) — supaya kasir bisa bedakan sekilas mana
+      // chip kategori vs harga-lain manual.
+      for (final a in sel.altPrices)
+        (
+          label: a.label,
+          price: a.price,
+          isCategory: a.priceCategoryId != null,
+        ),
     ];
   }
 
@@ -1138,6 +1148,7 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                               label: o.label,
                               price: o.price,
                               selected: _price == o.price,
+                              isCategory: o.isCategory,
                               onTap: () => _applyTierPrice(o.price),
                             ),
                         ],
@@ -1537,6 +1548,7 @@ class _PriceChip extends StatelessWidget {
     required this.price,
     required this.selected,
     required this.onTap,
+    this.isCategory = false,
   });
 
   final String label;
@@ -1544,9 +1556,18 @@ class _PriceChip extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
 
+  /// Fase C "Kategori Harga" — true bila chip ini berasal dari
+  /// `AltPrices.priceCategoryId` (bukan Harga Lain ad-hoc biasa). Diberi
+  /// aksen warna BERBEDA (`scheme.tertiary` + ikon `Icons.sell_outlined`,
+  /// konsisten dgn penanda kategori harga di tempat lain di app — mis.
+  /// badge baris keranjang `cart_sheet.dart`) supaya kasir bisa bedakan
+  /// sekilas mana chip kategori vs harga-lain manual.
+  final bool isCategory;
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final accent = isCategory ? scheme.tertiary : scheme.primary;
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: GestureDetector(
@@ -1555,11 +1576,17 @@ class _PriceChip extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
             color: selected
-                ? scheme.primary.withOpacity(0.12)
-                : scheme.surfaceContainerLowest,
+                ? accent.withOpacity(0.12)
+                : isCategory
+                    ? scheme.tertiary.withOpacity(0.06)
+                    : scheme.surfaceContainerLowest,
             borderRadius: BorderRadius.circular(11),
             border: Border.all(
-              color: selected ? scheme.primary : scheme.outlineVariant,
+              color: selected
+                  ? accent
+                  : isCategory
+                      ? scheme.tertiary.withOpacity(0.5)
+                      : scheme.outlineVariant,
               width: selected ? 1.4 : 0.75,
             ),
           ),
@@ -1567,13 +1594,23 @@ class _PriceChip extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w600,
-                  color: selected ? scheme.primary : scheme.onSurface,
-                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (isCategory) ...[
+                    Icon(Icons.sell_outlined,
+                        size: 11, color: selected ? accent : scheme.tertiary),
+                    const SizedBox(width: 3),
+                  ],
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: selected ? accent : scheme.onSurface,
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 2),
               Text(
@@ -1581,7 +1618,7 @@ class _PriceChip extends StatelessWidget {
                 style: AppTheme.numStyle(context,
                     size: 13.5,
                     weight: FontWeight.w700,
-                    color: selected ? scheme.primary : scheme.onSurface),
+                    color: selected ? accent : scheme.onSurface),
               ),
             ],
           ),

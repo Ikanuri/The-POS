@@ -65,8 +65,9 @@ void main() {
       'checkout sukses -> toggle kategori header direset ke Normal utk '
       'transaksi berikutnya', (tester) async {
     // Aktifkan toggle kategori sebelum checkout.
-    container.read(cartPriceCategoryProvider(kMainCartId).notifier)
-      ..setCategory('dummy-cat-id');
+    container
+        .read(cartPriceCategoryProvider(kMainCartId).notifier)
+        .setCategory('dummy-cat-id');
     expect(container.read(cartPriceCategoryProvider(kMainCartId)),
         'dummy-cat-id');
 
@@ -106,8 +107,9 @@ void main() {
   testWidgets(
       'kosongkan keranjang manual -> toggle kategori header ikut direset',
       (tester) async {
-    container.read(cartPriceCategoryProvider(kMainCartId).notifier)
-      ..setCategory('dummy-cat-id');
+    container
+        .read(cartPriceCategoryProvider(kMainCartId).notifier)
+        .setCategory('dummy-cat-id');
     container.read(cartProvider(kMainCartId).notifier).addItem(const CartItem(
           productId: 'p1',
           productUnitId: 'u1',

@@ -154,3 +154,32 @@ final cartMinusConfirmProvider =
     StateNotifierProvider<CartMinusConfirmNotifier, bool>((ref) {
   return CartMinusConfirmNotifier();
 });
+
+/// Toggle fitur chip Kategori Harga per-item di baris keranjang (BEDA dari
+/// toggle header "Normal"/kategori yg SUDAH ADA & tidak berubah — ini murni
+/// tampil/sembunyikan deretan chip per-baris produk yg tergabung kategori).
+/// Default ON — fitur baru langsung terlihat, kasir yg tidak butuh bisa
+/// matikan lewat sheet Pengaturan Keranjang.
+class CartPriceCategoryChipsNotifier extends StateNotifier<bool> {
+  CartPriceCategoryChipsNotifier() : super(true) {
+    _load();
+  }
+
+  static const _prefKey = 'cart_price_category_chips_v1';
+
+  Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    state = prefs.getBool(_prefKey) ?? true;
+  }
+
+  Future<void> set(bool value) async {
+    state = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_prefKey, value);
+  }
+}
+
+final cartPriceCategoryChipsProvider =
+    StateNotifierProvider<CartPriceCategoryChipsNotifier, bool>((ref) {
+  return CartPriceCategoryChipsNotifier();
+});

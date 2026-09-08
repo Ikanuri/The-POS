@@ -1126,6 +1126,30 @@ class AppDatabase extends _$AppDatabase {
         ]))
       .watch();
 
+  /// Kategori harga yang produk (via `productUnitId`) TERGABUNG — dipakai
+  /// chip kategori per-item di baris keranjang (`cart_sheet.dart`
+  /// `_CartItemTile`). Satu produk bisa tergabung di beberapa kategori
+  /// (beberapa baris `AltPrices` dgn `priceCategoryId` berbeda menunjuk ke
+  /// unit yg sama), diurutkan sama persis [getAllPriceCategories]. Filter
+  /// tombstone (`name IS NOT NULL`) sama dgn di sana.
+  Future<List<PriceCategory>> getPriceCategoriesForProductUnit(
+      String productUnitId) async {
+    final altRows = await (select(altPrices)
+          ..where((t) =>
+              t.productUnitId.equals(productUnitId) &
+              t.priceCategoryId.isNotNull()))
+        .get();
+    final catIds = altRows.map((r) => r.priceCategoryId!).toSet();
+    if (catIds.isEmpty) return [];
+    return (select(priceCategories)
+          ..where((t) => t.id.isIn(catIds) & t.name.isNotNull())
+          ..orderBy([
+            (t) => OrderingTerm.asc(t.sortOrder),
+            (t) => OrderingTerm.asc(t.name),
+          ]))
+        .get();
+  }
+
   /// `sortOrder` tertinggi saat ini (-1 bila kosong) — pola sama dgn
   /// [paymentMethodsMaxSortOrder], menaruh kategori baru di posisi paling
   /// bawah, bukan tie di default 0.

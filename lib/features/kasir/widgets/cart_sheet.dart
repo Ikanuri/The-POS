@@ -764,69 +764,156 @@ class _CartSheetState extends ConsumerState<CartSheet> {
     }
   }
 
-  /// Susulan (permintaan user): dialog "Pengaturan Keranjang" — berisi
-  /// posisi checkbox verifikasi (`CartCheckboxPosition`) DAN toggle
-  /// konfirmasi tombol minus stepper (`cartMinusConfirmProvider`, mencegah
-  /// missclick qty berkurang tanpa sengaja) — keduanya persisten
+  /// Susulan (permintaan user): sheet "Pengaturan Keranjang" — posisi
+  /// checkbox verifikasi (`CartCheckboxPosition`), toggle konfirmasi tombol
+  /// minus stepper (`cartMinusConfirmProvider`, mencegah missclick qty
+  /// berkurang tanpa sengaja), DAN toggle chip Kategori Harga per-item
+  /// (`cartPriceCategoryChipsProvider`) — semuanya persisten
   /// (SharedPreferences), berlaku global utk semua keranjang, bukan
-  /// per-`cartId`.
+  /// per-`cartId`. Redesain bottom sheet custom (gaya SAMA PERSIS dgn
+  /// "Pengaturan Struk" di `receipt_screen.dart::_showReceiptSettingsSheet`)
+  /// — menggantikan `AlertDialog` generik lama.
   void _showCartSettingsDialog(BuildContext ctx) {
-    showDialog<void>(
+    showModalBottomSheet<void>(
       context: ctx,
-      builder: (dCtx) => Consumer(
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (sheetCtx) => Consumer(
         builder: (context, dialogRef, _) {
+          final sheetScheme = Theme.of(sheetCtx).colorScheme;
           final current = dialogRef.watch(cartCheckboxPositionProvider);
           final minusConfirm = dialogRef.watch(cartMinusConfirmProvider);
-          return AlertDialog(
-            title: const Text('Pengaturan Keranjang'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Text('Letak checkbox verifikasi',
-                        style: Theme.of(context).textTheme.labelLarge),
-                  ),
-                  for (final pos in CartCheckboxPosition.values)
-                    RadioListTile<CartCheckboxPosition>(
-                      value: pos,
-                      groupValue: current,
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(pos.label),
-                      onChanged: (v) {
-                        if (v != null) {
-                          dialogRef
-                              .read(cartCheckboxPositionProvider.notifier)
-                              .set(v);
-                        }
-                      },
+          final showCategoryChips =
+              dialogRef.watch(cartPriceCategoryChipsProvider);
+          return Material(
+            color: sheetScheme.surface,
+            shape: const RoundedRectangleBorder(
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: SafeArea(
+              top: false,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        margin: const EdgeInsets.only(top: 8, bottom: 10),
+                        decoration: BoxDecoration(
+                          color: sheetScheme.outlineVariant,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
                     ),
-                  const Divider(height: 24),
-                  SwitchListTile(
-                    value: minusConfirm,
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Konfirmasi sebelum kurangi qty'),
-                    subtitle:
-                        const Text('Tap pertama tombol minus cuma bergetar sbg '
-                            'peringatan; tap berikutnya (selama stepper masih '
-                            'membesar) baru benar-benar mengurangi qty'),
-                    onChanged: (v) => dialogRef
-                        .read(cartMinusConfirmProvider.notifier)
-                        .set(v),
-                  ),
-                ],
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.tune,
+                              color: AppTheme.accent, size: 20),
+                          const SizedBox(width: 8),
+                          Text('Pengaturan Keranjang',
+                              style: Theme.of(sheetCtx)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.w700)),
+                        ],
+                      ),
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      child: Divider(height: 1),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                      child: Text('Letak checkbox verifikasi',
+                          style: Theme.of(context).textTheme.labelLarge),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                      child: Column(
+                        children: [
+                          for (final pos in CartCheckboxPosition.values)
+                            RadioListTile<CartCheckboxPosition>(
+                              value: pos,
+                              groupValue: current,
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              title: Text(pos.label),
+                              onChanged: (v) {
+                                if (v != null) {
+                                  dialogRef
+                                      .read(
+                                          cartCheckboxPositionProvider.notifier)
+                                      .set(v);
+                                }
+                              },
+                            ),
+                        ],
+                      ),
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      child: Divider(height: 1),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                      child: SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        secondary: CircleAvatar(
+                          radius: 18,
+                          backgroundColor: AppTheme.accent.withOpacity(0.12),
+                          child: const Icon(Icons.remove_circle_outline,
+                              color: AppTheme.accent, size: 20),
+                        ),
+                        value: minusConfirm,
+                        activeColor: AppTheme.accent,
+                        title: const Text('Konfirmasi sebelum kurangi qty'),
+                        subtitle: const Text(
+                          'Tap pertama tombol minus cuma bergetar sbg '
+                          'peringatan; tap berikutnya (selama stepper masih '
+                          'membesar) baru benar-benar mengurangi qty',
+                          style: TextStyle(fontSize: 11.5),
+                        ),
+                        onChanged: (v) => dialogRef
+                            .read(cartMinusConfirmProvider.notifier)
+                            .set(v),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      child: SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        secondary: CircleAvatar(
+                          radius: 18,
+                          backgroundColor:
+                              sheetScheme.tertiary.withOpacity(0.12),
+                          child: Icon(Icons.sell_outlined,
+                              color: sheetScheme.tertiary, size: 20),
+                        ),
+                        value: showCategoryChips,
+                        activeColor: AppTheme.accent,
+                        title: const Text(
+                            'Tampilkan chip Kategori Harga per-produk'),
+                        subtitle: const Text(
+                          'Deretan chip kategori harga di tiap baris '
+                          'keranjang, khusus produk yg tergabung kategori — '
+                          'tap chip utk terapkan harga kategori itu ke baris '
+                          'itu saja',
+                          style: TextStyle(fontSize: 11.5),
+                        ),
+                        onChanged: (v) => dialogRef
+                            .read(cartPriceCategoryChipsProvider.notifier)
+                            .set(v),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dCtx).pop(),
-                child: const Text('Tutup'),
-              ),
-            ],
           );
         },
       ),
@@ -1696,22 +1783,25 @@ class _CartItemTileState extends ConsumerState<_CartItemTile>
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
-                                if (item.priceOverridden) ...[
-                                  const SizedBox(width: 4),
-                                  Icon(Icons.edit,
-                                      size: 12, color: scheme.tertiary),
-                                ] else if (item.priceFromCategoryId !=
-                                    null) ...[
-                                  // Fase C — penanda "harga dari toggle
-                                  // kategori aktif", ikon SENGAJA beda dari
-                                  // pensil override manual di atas (supaya
-                                  // kasir bisa bedakan sekilas) — `else if`
-                                  // krn keduanya seharusnya tidak pernah
-                                  // bersamaan (lihat dok
-                                  // `CartItem.priceFromCategoryId`).
+                                if (item.priceFromCategoryId != null) ...[
+                                  // Fase C — penanda "harga dari kategori"
+                                  // (toggle header ATAU chip per-item baru,
+                                  // dicek DULUAN krn chip per-item SEKARANG
+                                  // juga menandai `priceOverridden=true`
+                                  // sekaligus, spy manual pick tetap menang
+                                  // atas header — lihat dok
+                                  // `CartItem.priceFromCategoryId` &
+                                  // `_ItemPriceCategoryChips._apply`). Ikon
+                                  // SENGAJA beda dari pensil override manual
+                                  // murni di bawah supaya kasir bisa bedakan
+                                  // sekilas.
                                   const SizedBox(width: 4),
                                   Icon(Icons.sell_outlined,
                                       size: 12, color: scheme.secondary),
+                                ] else if (item.priceOverridden) ...[
+                                  const SizedBox(width: 4),
+                                  Icon(Icons.edit,
+                                      size: 12, color: scheme.tertiary),
                                 ],
                                 if (isZeroed) ...[
                                   const SizedBox(width: 4),
@@ -1737,6 +1827,22 @@ class _CartItemTileState extends ConsumerState<_CartItemTile>
                                         : scheme.primary),
                               ),
                             ),
+                            // Fitur BARU — chip Kategori Harga per-item:
+                            // HANYA produk yg tergabung >=1 PriceCategories
+                            // (`AltPrices.priceCategoryId` produk INI),
+                            // toggle-able di sheet Pengaturan Keranjang
+                            // (`cartPriceCategoryChipsProvider`, default
+                            // ON). Deretan PENUH per kategori (bukan 1 pill
+                            // ringkas) supaya kasir langsung lihat semua
+                            // opsi + tap langsung terapkan, TIDAK termasuk
+                            // toggle header "Normal"/kategori yg SUDAH ADA
+                            // & tidak berubah sama sekali.
+                            if (ref.watch(cartPriceCategoryChipsProvider))
+                              _ItemPriceCategoryChips(
+                                item: item,
+                                effectiveQty: effectiveQty,
+                                cartId: cartId,
+                              ),
                             if (item.itemNote != null &&
                                 item.itemNote!.isNotEmpty)
                               Padding(
@@ -1866,6 +1972,129 @@ class _CartItemTileState extends ConsumerState<_CartItemTile>
                 ],
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Fitur BARU — deretan chip Kategori Harga per-item di baris keranjang,
+/// KHUSUS produk yg tergabung >=1 `PriceCategories` (dicek via `AltPrices`
+/// milik `productUnitId` baris ini). Chip "Normal" SELALU ikut disertakan
+/// (opsi kembali ke harga normal khusus baris ini). Scroll horizontal
+/// (bukan wrap) supaya baris tidak pernah tinggi ke bawah walau produknya
+/// tergabung banyak kategori.
+///
+/// Tap chip → [_apply] terapkan harga KHUSUS ke baris ini saja, independen
+/// dari toggle header (`cartPriceCategoryProvider`) — pola SAMA PERSIS dgn
+/// override manual yg sudah ada (`priceOverridden`): SELALU set
+/// `priceOverridden: true` sekaligus [priceFromCategoryId] SUPAYA
+/// `repriceCartForCategoryChange` (dipanggil saat toggle header berubah)
+/// SELALU skip baris ini (lihat guard `if (item.priceOverridden) { ...
+/// continue; }` di sana) — tidak perlu mekanisme baru, invariant prioritas
+/// manual > header yg sudah ada otomatis konsisten.
+class _ItemPriceCategoryChips extends ConsumerWidget {
+  const _ItemPriceCategoryChips({
+    required this.item,
+    required this.effectiveQty,
+    required this.cartId,
+  });
+
+  final CartItem item;
+  final double effectiveQty;
+  final String cartId;
+
+  Future<void> _apply(WidgetRef ref, String? categoryId) async {
+    final priceService = PriceService(ref.read(databaseProvider));
+    final resolved = await priceService.resolvePrice(
+      productUnitId: item.productUnitId,
+      qty: effectiveQty,
+      activeCategoryId: categoryId,
+    );
+    ref.read(cartProvider(cartId).notifier).setItem(item.copyWith(
+          price: resolved.price,
+          costPrice: resolved.costPrice,
+          priceFromCategoryId:
+              resolved.source == PriceSource.category ? categoryId : null,
+          priceOverridden: true,
+        ));
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final categories =
+        ref.watch(priceCategoriesForProductUnitProvider(item.productUnitId));
+    return categories.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (cats) {
+        if (cats.isEmpty) return const SizedBox.shrink();
+        final scheme = Theme.of(context).colorScheme;
+        final activeCategoryId = item.priceFromCategoryId;
+        return Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: SizedBox(
+            height: 26,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _miniChip(
+                    context,
+                    label: 'Normal',
+                    selected: activeCategoryId == null && item.priceOverridden,
+                    scheme: scheme,
+                    onTap: () => _apply(ref, null),
+                  ),
+                  for (final cat in cats) ...[
+                    const SizedBox(width: 6),
+                    _miniChip(
+                      context,
+                      label: cat.name ?? '',
+                      selected: activeCategoryId == cat.id,
+                      scheme: scheme,
+                      onTap: () => _apply(ref, cat.id),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _miniChip(
+    BuildContext context, {
+    required String label,
+    required bool selected,
+    required ColorScheme scheme,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: selected
+              ? scheme.tertiary.withOpacity(0.16)
+              : scheme.tertiary.withOpacity(0.06),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: selected
+                ? scheme.tertiary
+                : scheme.tertiary.withOpacity(0.4),
+            width: selected ? 1.2 : 0.75,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+            color: selected ? scheme.tertiary : scheme.onSurfaceVariant,
           ),
         ),
       ),

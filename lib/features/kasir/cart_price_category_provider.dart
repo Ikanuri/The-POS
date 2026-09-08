@@ -100,6 +100,19 @@ final priceCategoriesForToggleProvider =
   return db.getAllPriceCategories();
 });
 
+/// Kategori harga yang SATU produk (via `productUnitId`) tergabung —
+/// dipakai deretan chip per-item di baris keranjang (`_CartItemTile`,
+/// `cart_sheet.dart`). `family` per `productUnitId` (BUKAN per cartId) —
+/// hasilnya murni properti produk, sama utk semua baris yg menunjuk unit
+/// yg sama. `autoDispose` supaya cache tidak menumpuk selama sheet
+/// keranjang dibuka-tutup berkali-kali.
+final priceCategoriesForProductUnitProvider =
+    FutureProvider.autoDispose.family<List<PriceCategory>, String>(
+        (ref, productUnitId) {
+  final db = ref.watch(databaseProvider);
+  return db.getPriceCategoriesForProductUnit(productUnitId);
+});
+
 /// Re-price massal saat toggle kategori berubah (dinyalakan/dimatikan/
 /// diganti ke kategori lain) — dipanggil dari `cart_sheet.dart` SEBELUM
 /// `cartPriceCategoryProvider` state-nya diganti. Aturan (briefing user,
