@@ -6,12 +6,98 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 7 September 2026 (sesi ketiga puluh sembilan — gabung Total/
-Dibayar dgn nominal nota hutang di struk, susulan redesain ketiga). Versi
-kerja **2.53.2+111** (PATCH — murni bugfix tampilan, bukan fitur baru).
-schemaVersion **43** (tidak berubah)._
+_Update sesi 8 September 2026 (sesi keempat puluh — chip Kategori Harga
+per-item di keranjang, fix reset toggle kategori header antar-transaksi,
+redesain sheet Pengaturan Keranjang, fix Tutup Kasir salah hitung kas).
+Versi kerja **2.54.0+112** (MINOR — ada fitur baru terlihat pengguna, PATCH
+reset 0). schemaVersion **43** (tidak berubah — semua fitur sesi ini murni
+provider/query baru, tanpa migrasi)._
 
-## Sesi ini — gabung "Total"/"Dibayar" dgn nota hutang di struk SELESAI
+## Sesi ini — 4 item independen SELESAI
+
+1. **Chip Kategori Harga per-item di baris keranjang** (fitur BARU) — baris
+   produk yg tergabung >=1 `PriceCategories` (dicek via `AltPrices.priceCategoryId`
+   utk `productUnitId` baris itu) menampilkan deretan chip PENUH per
+   kategori + "Normal" di dekat subtotal, scrollable horizontal
+   (`SingleChildScrollView`, BUKAN wrap — baris tidak melebar ke bawah).
+   Tap chip → `_ItemPriceCategoryChips._apply` (`cart_sheet.dart`) resolve
+   harga via `PriceService.resolvePrice(activeCategoryId: ...)` lalu
+   `notifier.setItem(item.copyWith(..., priceOverridden: true))` — SENGAJA
+   reuse invariant `priceOverridden` yg sudah ada (BUKAN mekanisme baru)
+   supaya `repriceCartForCategoryChange` (dipanggil toggle HEADER, fitur
+   lama tidak berubah) otomatis skip baris ini selamanya sampai diubah
+   manual lagi — urutan prioritas manual > header konsisten tanpa
+   perubahan ke fungsi itu. Chip per-item digerbangi izin
+   `override_harga` sama beratnya dgn toggle header (`canOverrideHargaProvider`)
+   krn sama-sama mengubah harga jual. Toggle on/off seluruh fitur ini =
+   `cartPriceCategoryChipsProvider` (`theme_provider.dart`, persisted
+   SharedPreferences, default ON), dikontrol dari sheet Pengaturan
+   Keranjang (lihat #3). Badge kecil "harga dari kategori"
+   (`Icons.sell_outlined`) di baris nama produk SEKARANG dicek DULUAN
+   sebelum badge `priceOverridden` (`Icons.edit`) — chip per-item skrg BISA
+   set keduanya sekaligus (beda dari sebelumnya yg saling eksklusif).
+   DB baru: `AppDatabase.getPriceCategoriesForProductUnit()`. Di
+   `item_entry_sheet.dart`, chip Kategori Harga di `_priceOptions()` diberi
+   aksen `scheme.tertiary` + ikon `sell_outlined` (beda dari chip Harga
+   Lain biasa).
+
+2. **Fix reset toggle kategori header antar-transaksi** (BUG) —
+   `cartPriceCategoryProvider(kMainCartId)` singleton per-cartId (bukan
+   per-transaksi) nempel ke transaksi berikutnya. `clear()` ditambahkan di
+   `payment_screen.dart` (setelah checkout sukses & setelah tambah
+   belanjaan) dan `cart_sheet.dart::_confirmClear` (kosongkan manual).
+
+3. **Redesain sheet "Pengaturan Keranjang"** — dari `AlertDialog` generik
+   ke bottom sheet custom (gaya SAMA PERSIS "Pengaturan Struk"
+   `receipt_screen.dart::_showReceiptSettingsSheet`: handle bar, judul+ikon
+   aksen, `SwitchListTile` dgn leading `CircleAvatar`). Isi lama (posisi
+   checkbox verifikasi, konfirmasi minus qty) dipertahankan PLUS toggle
+   baru dari #1.
+
+4. **Fix Tutup Kasir salah hitung kas** (BUG NYATA) —
+   `getTodayCashRecap` (`app_database.dart`) sebelumnya basis
+   `transactions.created_at`/`paid` (tanggal NOTA DIBUAT + kumulatif
+   nota) — nota yg dibuat kemarin tapi dilunasi HARI INI (mis. pre-order
+   DP 0, dilunasi saat pengambilan) TIDAK PERNAH muncul di rekonsiliasi
+   kas hari pelunasan. Diganti JOIN `transaction_payments`
+   (`paid_at`/`amount` per baris pembayaran SUNGGUHAN, dikelompokkan per
+   `method` baris pembayaran, exclude `voided` & transaksi `status='void'`
+   saat ini). **Temuan verifikasi**: `'tempo'` TIDAK PERNAH muncul sbg
+   `method` di `transaction_payments` (tempo = belum ada uang masuk, tidak
+   ada baris payment sama sekali — dikonfirmasi lewat grep seluruh titik
+   `into(transactionPayments).insert(...)` di codebase, semua method yg
+   ditulis adalah metode pembayaran nyata atau `'retur'`/`'edit'` dgn
+   `amount=0` sbg jejak audit) — jadi filter exclude `'tempo'` di query
+   tetap dipertahankan sbg guard defensif (murni jaga-jaga, bukan krn
+   pernah ditemukan kasusnya) tanpa exclude tambahan yg tidak perlu utk
+   `'retur'`/`'edit'` (amount=0 otomatis tidak menyumbang SUM apa pun).
+   `readsFrom: {transactions, transactionPayments}` (2 tabel). Query ini
+   `Future` (bukan `Stream`) jadi tidak ada isu reactivity `.watch()`.
+
+**Regresi test lama akibat interaksi fitur baru** (SUDAH diperbaiki, bukan
+dibiarkan): `cart_sheet_price_category_toggle_test.dart` (scope finder ke
+`ChoiceChip` supaya tidak bentrok label dgn chip per-item baru di baris
+yg sama), `cart_minus_confirm_test.dart` (scope `Switch` finder ke
+`SwitchListTile` spesifik, sheet skrg py 2 Switch), `cash_closing_test.dart`
+(basis `transaction_payments`, txCount nota tempo tanpa pembayaran turun
+4→3 sesuai perilaku baru yg benar).
+
+**Test baru**: `test/tutup_kasir_recap_paid_at_test.dart` (5, WAJIB
+buktikan bug asli via revert-verify — nota created_at kemarin + payment
+paid_at hari ini), `test/cart_price_category_reset_test.dart` (2, checkout
+sukses & kosongkan manual mereset toggle header),
+`test/price_categories_for_product_unit_test.dart` (5, query DB murni),
+`test/cart_item_price_category_chips_test.dart` (5, widget: chip hanya
+tampil produk berkategori, scroll horizontal, tap override, toggle off),
+`test/cart_settings_sheet_redesign_test.dart` (2, sheet baru + toggle).
+SEMUA revert-verified. `flutter analyze` 0 issue. Full suite: **1581 test
+lulus, 0 gagal** (2 test lain gagal HANYA saat full-suite paralel —
+`proposal_unchanged_end_to_end_test.dart` — dan lolos bersih saat
+dijalankan terisolasi, flake pre-existing bukan regresi dari sesi ini).
+Commits `3004bcb`, `c2eae64`, `786fe9e`, `83ed2d0`. Push ke
+`claude/kategori-produk-qty-harga-mqjh21` lalu merge ke `main`.
+
+## Sesi sebelumnya — gabung "Total"/"Dibayar" dgn nota hutang di struk SELESAI
 
 User kirim screenshot: baris "Lunasi Nota #X" sudah menyatu ke list item
 struk (redesain ketiga, sesi lalu), TAPI baris "Total"/"Total akhir" &

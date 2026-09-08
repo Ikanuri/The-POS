@@ -8,6 +8,39 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 8 September 2026 (sesi keempat puluh)
+
+### ✨ Fitur Baru
+- **Chip Kategori Harga langsung di tiap baris keranjang.** Produk yang
+  tergabung di satu atau lebih Kategori Harga sekarang menampilkan deretan
+  chip (mis. "Normal", "Grosir", "Reseller") tepat di baris produknya
+  sendiri di keranjang — tap salah satu untuk langsung pakai harga
+  kategori itu KHUSUS untuk produk itu saja, tanpa perlu mengubah toggle
+  kategori di header (yang tetap berlaku untuk semua produk seperti
+  biasa). Kalau baris sudah dipilih manual begini, toggle header tidak
+  akan mengubahnya lagi sampai dipilih ulang secara manual. Bisa
+  dimatikan lewat menu Pengaturan Keranjang kalau tidak diperlukan.
+- **Sheet Pengaturan Keranjang tampil lebih rapi.** Sekarang berupa
+  panel yang muncul dari bawah layar (bukan kotak dialog kecil di
+  tengah), gaya sama seperti Pengaturan Struk — lebih lega dan mudah
+  dibaca, terutama di HP yang layarnya sempit.
+
+### 🐛 Perbaikan
+- **Toggle kategori harga di keranjang tidak lagi "nyangkut" ke
+  transaksi berikutnya.** Sebelumnya kalau kasir mengaktifkan kategori
+  harga (mis. "Grosir") untuk satu transaksi, pilihan itu tetap
+  menempel di transaksi BERIKUTNYA walau sudah lain pembeli — sekarang
+  otomatis kembali ke "Normal" setiap kali transaksi selesai dibayar
+  atau keranjang dikosongkan.
+- **Tutup Kasir sekarang menghitung uang yang benar-benar diterima
+  hari itu**, bukan cuma nota yang dibuat hari itu. Sebelumnya nota
+  yang dibuat kemarin tapi baru dilunasi hari ini (misalnya pesanan DP
+  yang diambil dan dilunasi belakangan) tidak pernah muncul di
+  rekonsiliasi kas hari pelunasannya — uang yang sudah diterima jadi
+  terasa "hilang" dari catatan Tutup Kasir hari itu, padahal datanya
+  aman di riwayat transaksi. Sekarang Tutup Kasir mengikuti tanggal
+  uang benar-benar diterima, bukan tanggal nota dibuat.
+
 ## 7 September 2026 (sesi ketiga puluh sembilan)
 
 ### 🐛 Perbaikan

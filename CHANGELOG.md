@@ -7,6 +7,41 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-08 (sesi keempat puluh — chip Kategori Harga per-item, fix reset toggle, redesain sheet Pengaturan Keranjang, fix Tutup Kasir)
+
+- `83ed2d0` — fix(test): gate chip Kategori Harga per-item ke izin
+  override_harga & perbaiki regresi test lama — chip per-item baru
+  digerbangi izin `override_harga` yg sama beratnya dgn toggle header
+  (cegah bypass gerbang harga lewat jalur baru). Perbaiki 3 test lama yg
+  regresi krn interaksi dgn fitur baru
+  (`cart_sheet_price_category_toggle_test.dart`,
+  `cart_minus_confirm_test.dart`, `cash_closing_test.dart`).
+- `786fe9e` — feat(kasir): chip Kategori Harga per-item di keranjang +
+  redesain sheet Pengaturan Keranjang — baris produk yg tergabung >=1
+  `PriceCategories` menampilkan deretan chip kategori (termasuk "Normal")
+  dekat subtotal baris, scrollable horizontal. Tap chip = manual override
+  per-item (reuse invariant `priceOverridden` yg sudah ada supaya toggle
+  header tidak pernah menimpanya lagi). Toggle on/off fitur ini
+  (`cartPriceCategoryChipsProvider`, default ON) di sheet "Pengaturan
+  Keranjang" yg diredesain dari `AlertDialog` generik jadi bottom sheet
+  custom (gaya sama dgn "Pengaturan Struk"). `item_entry_sheet.dart`: chip
+  Kategori Harga di `_priceOptions()` diberi aksen `scheme.tertiary` + ikon
+  `sell_outlined` beda dari chip Harga Lain biasa. DB baru:
+  `getPriceCategoriesForProductUnit()`.
+- `c2eae64` — fix(kasir): reset toggle kategori harga header saat
+  transaksi baru — `cartPriceCategoryProvider(kMainCartId)` singleton
+  (bukan per-transaksi) nempel ke transaksi berikutnya kalau tidak
+  direset; clear() ditambahkan setelah checkout sukses & di jalur
+  "Kosongkan Keranjang" manual.
+- `3004bcb` — fix(db): rekap Tutup Kasir pakai transaction_payments.paid_at,
+  bukan created_at — `getTodayCashRecap` sebelumnya filter tanggal & SUM
+  dari `transactions` (created_at nota + paid kumulatif), bukan
+  `transaction_payments` (paid_at + amount SUNGGUHAN per baris pembayaran)
+  — nota yg dibuat kemarin tapi dilunasi hari ini (mis. pre-order DP 0)
+  tidak pernah muncul di rekonsiliasi kas hari pelunasan. Basis diganti
+  JOIN `transaction_payments`, dikelompokkan per method baris pembayaran,
+  exclude payment voided & transaksi status void saat ini.
+
 ## 2026-09-07 (sesi ketiga puluh sembilan — gabung Total/Dibayar dgn nota hutang)
 
 - `5e7f737` — fix(kasir): gabung nominal nota hutang ke Total/Dibayar di

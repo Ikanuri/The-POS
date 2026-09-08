@@ -136,13 +136,18 @@ ketahuan user karena Total != Dibayar+Sisa jadi tidak nyambung.
 "belum diverifikasi" di bawah. Sisa scope yang GENUINELY belum tersentuh:
 
 - **Tutup Kasir** (`getTodayCashRecap`, dipakai `tutup_kasir_screen.dart`)
-  — TEMUAN LEBIH LUAS: "kas sistem" dihitung dari `SUM(paid)` mentah tanpa
-  dikurangi kembalian SAMA SEKALI, bahkan di transaksi normal TANPA reuse
-  kembalian — dugaan kuat "kas sistem" selalu overstated sebesar total
-  kembalian harian. Ini BEDA kategori dari bug reuse (lebih fundamental,
-  berpotensi bikin Tutup Kasir selalu "selisih" di toko manapun yang kasih
-  kembalian) — belum dikonfirmasi user apakah ini disengaja atau bug,
-  belum ada fix.
+  — **Update 8 September 2026 (commit `3004bcb`)**: basis tanggal/nominal
+  SUDAH diperbaiki dari `transactions.created_at`/`paid` (nota DIBUAT,
+  kumulatif) ke `transaction_payments.paid_at`/`amount` (uang SUNGGUHAN
+  diterima per baris pembayaran) — bug nota dibuat kemarin tapi dilunasi
+  hari ini tidak muncul di rekonsiliasi kas hari pelunasan SUDAH tertutup.
+  **MASIH BELUM disentuh** (temuan lebih luas, beda kategori bug): "kas
+  sistem" dihitung dari `SUM(amount)` baris pembayaran mentah TANPA
+  dikurangi kembalian (`change_given`) SAMA SEKALI, bahkan di transaksi
+  normal TANPA reuse kembalian — dugaan kuat "kas sistem" selalu
+  overstated sebesar total kembalian harian. Belum dikonfirmasi user
+  apakah ini disengaja atau bug, belum ada fix — lihat catatan
+  "PENTING kalau nanti fix Tutup Kasir" di bawah sebelum mengerjakan ini.
 - Tempat lain yang masih pakai pola `tx.total - tx.paid` mentah: `printer_
   service.dart` (`printReceipt`/struk cetak ESC/POS tunggal — beda dari
   `_ReceiptPaper` di receipt_screen.dart yang SUDAH diperbaiki),
