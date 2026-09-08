@@ -4,6 +4,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:the_pos/core/database/app_database.dart';
 
 /// Item 15 — Tutup Kasir: rekap kas hari ini + simpan satu entri per hari.
+///
+/// `getTodayCashRecap` basisnya `transaction_payments` (kapan & berapa uang
+/// SUNGGUHAN diterima), BUKAN `transactions.created_at`/`paid` — lihat dok
+/// di `app_database.dart` & bukti bug di `tutup_kasir_recap_paid_at_test.dart`.
 void main() {
   late AppDatabase db;
   setUp(() => db = AppDatabase(NativeDatabase.memory()));
@@ -28,27 +32,47 @@ void main() {
             createdAt: Value(at),
           ));
 
+  Future<void> addPayment({
+    required String id,
+    required String txId,
+    required int amount,
+    required String method,
+    required DateTime at,
+  }) =>
+      db.into(db.transactionPayments).insert(TransactionPaymentsCompanion.insert(
+            id: id,
+            transactionId: txId,
+            amount: amount,
+            method: method,
+            paidAt: Value(at),
+          ));
+
   test('getTodayCashRecap: tunai vs non-tunai vs count; void & tempo diabaikan',
       () async {
     final now = DateTime.now();
     final from = DateTime(now.year, now.month, now.day);
     await addTx(
         id: 't1', total: 50000, paid: 50000, method: 'tunai', status: 'lunas', at: now);
+    await addPayment(id: 'p1', txId: 't1', amount: 50000, method: 'tunai', at: now);
     await addTx(
         id: 't2', total: 30000, paid: 30000, method: 'qris', status: 'lunas', at: now);
+    await addPayment(id: 'p2', txId: 't2', amount: 30000, method: 'qris', at: now);
     await addTx(
         id: 't3', total: 20000, paid: 20000, method: 'tunai', status: 'lunas', at: now);
-    // void → diabaikan.
+    await addPayment(id: 'p3', txId: 't3', amount: 20000, method: 'tunai', at: now);
+    // void → diabaikan walau punya baris pembayaran.
     await addTx(
         id: 't4', total: 99000, paid: 99000, method: 'tunai', status: 'void', at: now);
-    // tempo (belum bayar) → tidak masuk kas.
+    await addPayment(id: 'p4', txId: 't4', amount: 99000, method: 'tunai', at: now);
+    // tempo (belum bayar sama sekali) → tidak ada baris transaction_payments.
     await addTx(
         id: 't5', total: 40000, paid: 0, method: 'tempo', status: 'tempo', at: now);
 
     final r = await db.getTodayCashRecap(from, now);
     expect(r.cash, 70000); // 50k + 20k
     expect(r.nonCash, 30000); // qris
-    expect(r.txCount, 4); // t1,t2,t3,t5 (void t4 tidak dihitung)
+    expect(r.txCount, 3, reason: 't1,t2,t3 (void t4 & tempo t5 tanpa '
+        'pembayaran tidak dihitung)');
   });
 
   test('saveCashClosing upsert: id deterministik → 1 baris per hari, ter-update',

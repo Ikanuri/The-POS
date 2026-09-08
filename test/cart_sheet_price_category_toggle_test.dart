@@ -128,12 +128,16 @@ void main() {
         deviceRole: 'owner', categoryProductUnitId: 'p1_u');
     addTearDown(() async => db.close());
 
-    expect(find.text('Normal'), findsOneWidget);
-    expect(find.text('Grosir'), findsOneWidget);
+    // Susulan: baris fitur BARU (chip Kategori Harga PER-ITEM) juga
+    // memakai label "Normal"/"Grosir" di baris keranjang produk anggota
+    // kategori — scope finder ke `ChoiceChip` (widget toggle HEADER,
+    // fitur lama, tidak diubah) supaya tidak bentrok dgn chip per-item.
+    expect(find.widgetWithText(ChoiceChip, 'Normal'), findsOneWidget);
+    expect(find.widgetWithText(ChoiceChip, 'Grosir'), findsOneWidget);
     expect(find.byIcon(Icons.sell_outlined), findsNothing,
         reason: 'belum toggle -> belum ada badge kategori');
 
-    await tester.tap(find.text('Grosir'));
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Grosir'));
     await tester.pumpAndSettle();
 
     final cart = container.read(cartProvider(kMainCartId));
@@ -147,7 +151,7 @@ void main() {
         reason: 'ikon pensil override manual harus TIDAK ikut muncul');
 
     // Matikan lagi -> kembali ke harga normal.
-    await tester.tap(find.text('Normal'));
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Normal'));
     await tester.pumpAndSettle();
     final cart2 = container.read(cartProvider(kMainCartId));
     final line2 = cart2.firstWhere((c) => c.productUnitId == unitId);
@@ -222,7 +226,7 @@ void main() {
     await tester.tap(find.text('buka keranjang'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Grosir'));
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Grosir'));
     await tester.pumpAndSettle();
 
     final line =
@@ -370,8 +374,8 @@ void main() {
     await tester.tap(find.text('buka keranjang'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Grosir'), findsOneWidget);
-    expect(find.text('Normal'), findsOneWidget);
+    expect(find.widgetWithText(ChoiceChip, 'Grosir'), findsOneWidget);
+    expect(find.widgetWithText(ChoiceChip, 'Normal'), findsOneWidget);
 
     await drain(tester);
   });

@@ -2023,6 +2023,13 @@ class _ItemPriceCategoryChips extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Gerbang SAMA beratnya dgn toggle header (`canToggleCategory` di
+    // `_CartSheetState.build`) — chip per-item JUGA mengubah harga jual,
+    // jadi device TANPA izin `override_harga` tidak boleh melihatnya sama
+    // sekali (mencegah bypass gerbang lewat jalur chip per-item).
+    final canOverrideHarga =
+        ref.watch(canOverrideHargaProvider).valueOrNull ?? false;
+    if (!canOverrideHarga) return const SizedBox.shrink();
     final categories =
         ref.watch(priceCategoriesForProductUnitProvider(item.productUnitId));
     return categories.when(

@@ -207,7 +207,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Konfirmasi sebelum kurangi qty'), findsOneWidget);
-    final switchFinder = find.byType(Switch);
+    // Susulan: sheet SEKARANG punya 2 `Switch` (toggle minus-confirm LAMA +
+    // toggle chip Kategori Harga per-item BARU) — scope ke `SwitchListTile`
+    // yg judulnya cocok, bukan `find.byType(Switch)` polos.
+    final switchFinder = find.descendant(
+      of: find.widgetWithText(SwitchListTile, 'Konfirmasi sebelum kurangi qty'),
+      matching: find.byType(Switch),
+    );
     expect(tester.widget<Switch>(switchFinder).value, isFalse);
 
     await tester.tap(switchFinder);
