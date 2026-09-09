@@ -7,6 +7,25 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-09 (sesi keempat puluh tiga — fix kembalian pre-checkout Pra-Bayar tidak terhitung di ringkasan struk)
+
+- `22ba425` — fix(kasir): kembalian Pra-Bayar yang diambil SEBELUM
+  checkout (`TransactionPayments.prabayarChangeTakenBeforeCheckout`)
+  sekarang ikut dijumlah ke Ringkasan atas struk — bug dilaporkan user via
+  screenshot: nota yang SEMUA kembaliannya berasal dari potongan
+  pre-checkout (bukan `changeGiven` momen checkout) menampilkan "Total" &
+  "Dibayar" SAMA-SAMA persis Total TANPA baris "Kembalian" sama sekali,
+  padahal Riwayat Pembayaran di bawahnya (fix `191570c`) sudah benar.
+  Fungsi baru `totalPrabayarChangeTakenBeforeCheckout()` (SUM semua baris
+  payment non-voided, bukan cuma baris terakhir spt `latestChangeGiven`)
+  digabung ke komponen checkout-moment di 3 tempat: in-app
+  (`_ReceiptScreenState._kembalianGabungan`), share/gambar
+  (`_ReceiptPaper`), cetak ESC/POS tunggal & nota gabungan
+  (`printer_service.dart`). Ringkasan atas in-app tampilkan breakdown 2
+  baris terpisah saat ada komponen pre-checkout: baris Kembalian
+  checkout-moment (tetap bisa ditoggle "sudah diambil") + baris italic
+  terpisah tanpa checkbox utk komponen pre-checkout (sudah pasti diambil).
+
 ## 2026-09-09 (sesi keempat puluh dua — fix nominal utama struk Pra-Bayar dipotong diam-diam)
 
 - `191570c` — fix(kasir): `buildPrabayarCheckout` menulis

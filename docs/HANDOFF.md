@@ -6,14 +6,62 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 9 September 2026 (sesi keempat puluh dua — fix nominal
-utama struk Pra-Bayar yang dipotong diam-diam oleh kembalian
-pre-checkout, dilaporkan user via screenshot). Versi kerja **2.54.2+114**
-(PATCH — murni bugfix, tanpa fitur baru). schemaVersion **43** (tidak
-berubah — kolom `prabayarChangeTakenBeforeCheckout` sudah ada dari sesi
-lalu, cuma berubah MAKNA pemakaiannya, bukan skema)._
+_Update sesi 9 September 2026 (sesi keempat puluh tiga — fix kembalian
+pre-checkout Pra-Bayar tidak ikut dihitung di Ringkasan atas struk,
+dilaporkan user via screenshot). Versi kerja **2.54.3+115** (PATCH —
+murni bugfix, tanpa fitur baru). schemaVersion **43** (tidak berubah)._
 
-## Sesi ini — fix nominal utama struk Pra-Bayar dipotong diam-diam oleh kembalian pre-checkout SELESAI
+## Sesi ini — fix kembalian pre-checkout Pra-Bayar tidak terhitung di Ringkasan atas struk SELESAI
+
+**Bug dilaporkan user** (screenshot): Pra-Bayar dikunci, kembalian Rp200
+diambil SEBELUM checkout → Ringkasan atas struk in-app menampilkan
+"Total" & "Dibayar" SAMA-SAMA persis Total, TANPA baris "Kembalian" sama
+sekali — padahal Riwayat Pembayaran di bawahnya (sudah benar sejak fix
+sesi lalu, `191570c`) menampilkan "Tunai Rp 254.000" + catatan
+"Kembalian Rp 200 sudah diambil sebelum checkout".
+
+**Akar masalah**: `dibayarDisplay(tx, payments, kembalian)` dipanggil dgn
+`_latestPayment?.changeGiven ?? 0` SAJA — TIDAK PERNAH
+mempertimbangkan `TransactionPayments.prabayarChangeTakenBeforeCheckout`
+(kolom TERPISAH, dari baris Pra-Bayar yg BUKAN pembayaran terakhir). Utk
+nota yg SEMUA kembaliannya dari potongan pre-checkout (bukan
+`changeGiven` momen checkout), `kembalian` param = 0 → jatuh ke
+`netPaidDisplay` (= Total, TANPA baris Kembalian).
+
+**Fix**: fungsi baru `totalPrabayarChangeTakenBeforeCheckout(payments)`
+(SUM SEMUA baris payment non-voided, BUKAN cuma baris terakhir spt
+`latestChangeGiven`) digabung dgn komponen checkout-moment di 3 tempat:
+- **In-app** (`_ReceiptScreenState`): getter `_kembalianGabungan` dipakai
+  utk argumen `dibayarDisplay`. Baris "Kembalian" checkout-moment
+  (`_ChangeTakenRow`, checkbox toggle) TIDAK berubah. Ditambah baris BARU
+  terpisah (italic, TANPA checkbox, label "Kembalian (sebelum checkout,
+  sudah diambil)") yang muncul saat `_totalPrabayarChangeTakenBeforeCheckout
+  > 0` — **keputusan desain**: breakdown 2 baris terpisah, BUKAN digabung
+  jadi 1 angka buta, supaya checkbox toggle (yg cuma valid utk komponen
+  checkout-moment) tidak jadi salah kaprah bisa di-uncheck utk bagian yg
+  sebenarnya sudah PASTI diambil (checkbox pre-checkout-nya sudah ditekan
+  kasir sebelum layar struk ini pernah ada).
+- **Share/gambar** (`_ReceiptPaper`): `kembalianGabungan` lokal = fix
+  analog, dipakai di baris "Bayar.."/"Kembali" (TIDAK ada breakdown 2
+  baris di sini — widget ini sudah tidak py breakdown per-payment sama
+  sekali, konsisten dgn desain sebelumnya).
+- **Cetak ESC/POS** (`printer_service.dart`): struk tunggal & nota
+  gabungan — pola sama (`kembalianGabungan`/`grandKembalian`).
+
+**Test**: `test/receipt_prabayar_change_taken_summary_test.dart` (7
+test: skenario user in-app+share+cetak, regresi kembalian normal, KOMBINASI
+checkout-moment+pre-checkout sekaligus). Semua revert-verified (6/7 gagal
+dgn pesan masuk akal sblm fix — 1 test regresi murni tetap hijau krn
+memang tidak disentuh bug ini). `flutter analyze` 0 issue. Full suite:
+**1597 test lulus, 0 gagal**.
+
+**Scope TIDAK disentuh**: `_buildMergedBytes`/`printMergedReceipt` (ESC/POS
+nota gabungan) diperbaiki di kode tapi TIDAK ada test baru menyentuhnya —
+codebase ini belum py `visibleForTesting` debug-hook utk builder gabungan
+(beda dari `debugBuildBytes` struk tunggal), jadi tidak ada precedent test
+existing utk dipakai; menambah hook baru di luar scope bug ini.
+
+## Sesi sebelumnya — fix nominal utama struk Pra-Bayar dipotong diam-diam oleh kembalian pre-checkout SELESAI
 
 **Bug dilaporkan user** (2 screenshot: keranjang & struk): Pra-Bayar
 dikunci Rp426.000, kembalian Rp600 diambil SEBELUM checkout (fitur

@@ -8,6 +8,21 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 9 September 2026 (sesi keempat puluh tiga)
+
+### 🐛 Perbaikan
+- **Ringkasan atas struk (in-app, struk gambar/bagikan, dan cetak) sekarang
+  selalu menampilkan baris "Kembalian" kalau memang ada kembalian yang
+  sudah diberikan — termasuk kembalian dari fitur "Pra-Bayar" yang diambil
+  SEBELUM checkout.** Sebelumnya, untuk nota yang kembaliannya HANYA dari
+  potongan pre-checkout itu (bukan dari kembalian saat checkout), Ringkasan
+  atas malah menampilkan "Total" dan "Dibayar" sama persis TANPA baris
+  "Kembalian" sama sekali — padahal Riwayat Pembayaran di bawahnya sudah
+  benar menampilkan nominal & catatan kembalian tersebut. Sekarang
+  keduanya konsisten: kasir/pemilik yang cuma lihat Ringkasan atas (tanpa
+  scroll ke Riwayat Pembayaran) tetap tahu ada kembalian yang sudah
+  diberikan.
+
 ## 9 September 2026 (sesi keempat puluh dua)
 
 ### 🐛 Perbaikan
