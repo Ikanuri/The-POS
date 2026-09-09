@@ -6,13 +6,68 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 9 September 2026 (sesi keempat puluh satu — fix lanjutan
-Tutup Kasir: net dari kembalian/`change_given`, ditemukan lewat audit
-mandiri thd fix `paid_at` sesi sebelumnya). Versi kerja **2.54.1+113**
+_Update sesi 9 September 2026 (sesi keempat puluh dua — fix nominal
+utama struk Pra-Bayar yang dipotong diam-diam oleh kembalian
+pre-checkout, dilaporkan user via screenshot). Versi kerja **2.54.2+114**
 (PATCH — murni bugfix, tanpa fitur baru). schemaVersion **43** (tidak
-berubah — query murni, tanpa migrasi)._
+berubah — kolom `prabayarChangeTakenBeforeCheckout` sudah ada dari sesi
+lalu, cuma berubah MAKNA pemakaiannya, bukan skema)._
 
-## Sesi ini — fix Tutup Kasir tidak net dari kembalian (`change_given`) SELESAI
+## Sesi ini — fix nominal utama struk Pra-Bayar dipotong diam-diam oleh kembalian pre-checkout SELESAI
+
+**Bug dilaporkan user** (2 screenshot: keranjang & struk): Pra-Bayar
+dikunci Rp426.000, kembalian Rp600 diambil SEBELUM checkout (fitur
+"kembalian sudah diambil" di footer keranjang) → struk/Riwayat
+Pembayaran menampilkan **"Tunai Rp 425.400"** (426.000 dikurangi 600)
+sbg nominal utama, padahal yang BENAR-BENAR dikunci/diterima kasir
+adalah Rp426.000. Potongan 600 seharusnya cuma catatan terpisah — persis
+pola `changeGiven` pada pembayaran normal (nominal utama TETAP gross
+tendered, kembalian di baris terpisah di bawahnya).
+
+**Akar masalah**: `buildPrabayarCheckout` (`payment_screen.dart`)
+menulis `TransactionPaymentsCompanion.amount` sbg `entry.amount - cut`
+(dipotong duluan), BEDA dari pola baris "sekarang" yang pakai `amount`
+GROSS + `changeGiven` terpisah.
+
+**Fix**: `amount` yang ditulis SEKARANG selalu `entry.amount` (gross
+ASLI), TIDAK PERNAH dipotong. Kolom `prabayarChangeTakenBeforeCheckout`
+(sudah ada, TIDAK ada migrasi baru) tetap merekam berapa yang dipotong,
+tapi maknanya jadi metadata TERPISAH murni (analog PERSIS `changeGiven`)
+— bukan lagi pengurang `amount`.
+
+**Invariant BARU** (mengganti invariant lama `Σ amount == combinedPaid`,
+yang PECAH krn `amount` skrg gross):
+`Σ (amount - changeGiven - prabayarChangeTakenBeforeCheckout) == combinedPaid`.
+
+**Titik yang ikut disesuaikan** (invariant lama pecah):
+- `getTodayCashRecap` (Tutup Kasir): bucket `cash` sekarang JUGA
+  mengurangi `prabayar_change_taken_before_checkout`, PERSIS perlakuan
+  `change_given` (potongan pre-checkout ini SELALU fisik tunai, terlepas
+  metode ASLI baris itu) — tanpa ini `cash` over-count.
+- `getCashInByMethod`/`getCashFlowDaily` (Arus Kas): net PER-METHOD juga
+  dikurangi kolom yang sama (konsisten dgn `change_given` yang sudah net
+  per-method di situ).
+- `netPaidDisplay`/`grossReceived` (`receipt_screen.dart`) **TIDAK
+  diubah** — `tx.paid` (`combinedPaid`) sudah dihitung NET dari
+  `poolTersedia` SEBELUM proses alokasi ke baris individual, jadi
+  independen dari cara `amount` per baris ditulis. Diverifikasi eksplisit
+  via test, bukan asumsi.
+- Riwayat Pembayaran in-app (`_buildPaymentTimeline`) & struk cetak/share
+  (`printer_service.dart`, `_ReceiptPaper` di `receipt_screen.dart`) —
+  **TIDAK perlu ubah kode**, keduanya sudah menampilkan `p.amount` apa
+  adanya (termasuk timeline "Pembayaran:" di struk cetak & gambar share,
+  DIVERIFIKASI langsung — bukan asumsi "cuma ringkasan") — begitu
+  `amount` tersimpan benar, tampilan otomatis benar.
+
+**Test**: `test/payment_prabayar_checkout_test.dart` (semua assersi
+invariant lama diupdate ke rumus baru + skenario persis 426.000/600
+ditambahkan), `test/receipt_prabayar_change_taken_before_checkout_test.dart`
+(widget test skenario user), `test/tutup_kasir_recap_paid_at_test.dart`
+(+2 test cash recap). Semua revert-verified (gagal dgn pesan masuk akal
+sblm fix, hijau lagi setelah). `flutter analyze` 0 issue. Full suite:
+**1590 test lulus, 0 gagal**.
+
+## Sesi sebelumnya — fix Tutup Kasir tidak net dari kembalian (`change_given`) SELESAI
 
 `getTodayCashRecap` (baru diperbaiki commit `3004bcb` sesi lalu utk basis
 `paid_at`) masih menjumlahkan `tp.amount` MENTAH (gross tendered) TANPA

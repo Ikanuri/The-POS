@@ -7,6 +7,21 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-09 (sesi keempat puluh dua — fix nominal utama struk Pra-Bayar dipotong diam-diam)
+
+- `191570c` — fix(kasir): `buildPrabayarCheckout` menulis
+  `TransactionPayments.amount` sbg nilai gross ASLI entri Pra-Bayar
+  (tidak lagi dipotong `changeTakenTotal`) — bug dilaporkan user via
+  screenshot: struk/Riwayat Pembayaran menampilkan "Tunai Rp 425.400"
+  padahal Rp426.000 yang benar-benar dikunci kasir, potongan Rp600
+  (kembalian sudah diambil sebelum checkout) seharusnya cuma catatan
+  terpisah. `prabayarChangeTakenBeforeCheckout` sekarang metadata murni
+  (analog `changeGiven`). Ikut disesuaikan: `getTodayCashRecap` (bucket
+  `cash` net dari kolom ini juga) & `getCashInByMethod`/
+  `getCashFlowDaily` (Arus Kas, net per-method). `netPaidDisplay`/
+  `grossReceived`/Riwayat Pembayaran/struk cetak-share TIDAK perlu
+  diubah (sudah benar begitu `amount` tersimpan benar).
+
 ## 2026-09-09 (sesi keempat puluh satu — fix Tutup Kasir tidak net dari kembalian)
 
 - `f9ae45b` — fix(db): `getTodayCashRecap` (Tutup Kasir) sekarang NET

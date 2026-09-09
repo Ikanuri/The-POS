@@ -8,6 +8,23 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 9 September 2026 (sesi keempat puluh dua)
+
+### 🐛 Perbaikan
+- **Struk & Riwayat Pembayaran fitur "Pra-Bayar" sekarang menampilkan
+  nominal yang PERSIS sama dengan uang yang benar-benar diterima kasir.**
+  Sebelumnya, kalau ada kembalian yang sudah diambil pembeli SEBELUM
+  checkout (fitur "kembalian sudah diambil" di keranjang) — misalnya
+  Pra-Bayar dikunci Rp426.000 lalu kembalian Rp600 diambil — struk malah
+  mencatat "Tunai Rp 425.400" (426.000 dikurangi 600 diam-diam) sebagai
+  nominal utama. Ini berbahaya kalau ada komplain pelanggan atau dugaan
+  kecurangan, karena nominal di struk harus persis sama dengan yang
+  benar-benar diserahkan pelanggan, bukan angka yang sudah "diproses".
+  Sekarang nominal utama tetap Rp426.000 (persis yang dikunci kasir), dan
+  potongan kembalian Rp600 tetap tercatat sebagai catatan terpisah di
+  bawahnya seperti sebelumnya. Rekap Tutup Kasir & Arus Kas juga
+  disesuaikan supaya tetap hitung uang tunai yang benar.
+
 ## 9 September 2026 (sesi keempat puluh satu)
 
 ### 🐛 Perbaikan
