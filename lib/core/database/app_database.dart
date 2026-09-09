@@ -2182,11 +2182,38 @@ class AppDatabase extends _$AppDatabase {
   /// method baris pembayaran (tempo = belum ada uang masuk, tidak ada
   /// baris payment) sehingga tidak perlu di-exclude eksplisit. Non-void
   /// dicek dari status transaksi SAAT INI (bukan snapshot).
+  ///
+  /// `cash` NET dari `change_given` (kembalian) — kembalian di app ini SELALU
+  /// diserahkan sbg uang FISIK TUNAI dari laci, apa pun metode pembayaran
+  /// ASLI baris yang menghasilkannya (Item 62: kalkulator kembalian dipakai
+  /// sama utk tunai maupun non-tunai, lihat `payment_screen.dart` — kelebihan
+  /// bayar via transfer/QRIS tidak bisa "dikembalikan" lewat rekening lagi,
+  /// jadi fisiknya tetap tunai). Beda SENGAJA dari [getCashInByMethod]/
+  /// [getCashFlowSummary] (tab Arus Kas) yang mengurangi `change_given` dari
+  /// bucket METODE ASALNYA sendiri — itu laporan akuntansi "nilai bersih per
+  /// kanal", sedangkan `getTodayCashRecap` ini rekonsiliasi FISIK laci
+  /// (`tutup_kasir_screen.dart` membandingkan `physical - recap.cash`), jadi
+  /// HARUS ikut fisik: `noncash` dapat FULL `amount` (uang non-tunai utuh
+  /// masuk rekening/dompet, tidak berkurang), `cash` yang dipotong SELURUH
+  /// `change_given` lintas metode. `cash` BOLEH negatif (mis. satu-satunya
+  /// pembayaran hari itu transfer dgn kembalian tunai) — itu valid, artinya
+  /// tunai laci net BERKURANG hari itu, JANGAN di-floor ke 0.
+  ///
+  /// Baris marker retur/edit nota BELUM-LUNAS (`method` 'retur'/'edit',
+  /// `amount` 0, lihat dok `_isReturLinkedPayment` di `receipt_screen.dart`)
+  /// DIKECUALIKAN dari pengurangan `change_given` — `changeGiven` di baris
+  /// itu murni catatan audit ("kembalian akan/sudah diperhitungkan saat nota
+  /// dilunasi nanti"), BUKAN uang yang benar-benar keluar dari laci HARI INI.
+  /// Refund SUNGGUHAN nota lunas (`returnPaidTransactionItems`/
+  /// `editPaidTransactionItem`) tidak kena masalah ini krn pakai `amount`
+  /// NEGATIF dgn `changeGiven` default 0.
   Future<({int cash, int nonCash, int txCount})> getTodayCashRecap(
       DateTime from, DateTime to) async {
     final row = await customSelect(
       "SELECT "
-      "COALESCE(SUM(CASE WHEN tp.method='tunai' THEN tp.amount ELSE 0 END),0) AS cash, "
+      "COALESCE(SUM(CASE WHEN tp.method='tunai' THEN tp.amount ELSE 0 END),0) "
+      "  - COALESCE(SUM(CASE WHEN tp.method NOT IN ('retur','edit') "
+      "      THEN tp.change_given ELSE 0 END),0) AS cash, "
       "COALESCE(SUM(CASE WHEN tp.method NOT IN ('tunai','tempo') THEN tp.amount ELSE 0 END),0) AS noncash, "
       "COUNT(DISTINCT tp.transaction_id) AS cnt "
       "FROM transaction_payments tp "

@@ -29,7 +29,8 @@ Future<void> _pay(String id,
         required int amount,
         required DateTime at,
         String method = 'tunai',
-        bool voided = false}) =>
+        bool voided = false,
+        int changeGiven = 0}) =>
     db.into(db.transactionPayments).insert(TransactionPaymentsCompanion.insert(
           id: id,
           transactionId: txId,
@@ -37,6 +38,7 @@ Future<void> _pay(String id,
           method: method,
           paidAt: Value(at),
           voided: Value(voided),
+          changeGiven: Value(changeGiven),
         ));
 
 void main() {
@@ -120,5 +122,73 @@ void main() {
     final recap = await db.getTodayCashRecap(hariIni, hariIniAkhir);
     expect(recap.cash, 0);
     expect(recap.nonCash, 0);
+  });
+
+  test(
+      'bayar tunai dgn kembalian -> cash recap NET (dikurangi kembalian), '
+      'bukan gross tendered', () async {
+    final hariIni = DateTime(2026, 9, 8);
+    final hariIniAkhir = DateTime(2026, 9, 8, 23, 59, 59);
+    // Belanja 30rb, bayar tunai 50rb -> kembalian 20rb. Uang yg BENAR-BENAR
+    // tertinggal di laci cuma 30rb, bukan 50rb (gross tendered).
+    await _tx('t1', total: 30000, createdAt: hariIni, paid: 30000);
+    await _pay('p1',
+        txId: 't1',
+        amount: 50000,
+        at: DateTime(2026, 9, 8, 9),
+        changeGiven: 20000);
+
+    final recap = await db.getTodayCashRecap(hariIni, hariIniAkhir);
+    expect(recap.cash, 30000,
+        reason: 'kas tunai harus net dari kembalian, bukan gross 50rb');
+  });
+
+  test(
+      'bayar via transfer dgn kembalian TUNAI -> non-tunai TETAP FULL (uang '
+      'transfer utuh), tunai laci BERKURANG (bahkan bisa NEGATIF) krn '
+      'kembalian fisik SELALU tunai apa pun metode aslinya', () async {
+    final hariIni = DateTime(2026, 9, 8);
+    final hariIniAkhir = DateTime(2026, 9, 8, 23, 59, 59);
+    // Belanja 80rb, bayar transfer 100rb -> kembalian 20rb diserahkan TUNAI
+    // (kasir tidak bisa "transfer balik" 20rb). Ini satu-satunya
+    // pembayaran hari ini -> tunai laci net NEGATIF (uang keluar dari
+    // modal, belum ada uang tunai masuk hari ini sama sekali).
+    await _tx('t1', total: 80000, createdAt: hariIni, paid: 80000);
+    await _pay('p1',
+        txId: 't1',
+        amount: 100000,
+        at: DateTime(2026, 9, 8, 9),
+        method: 'transfer',
+        changeGiven: 20000);
+
+    final recap = await db.getTodayCashRecap(hariIni, hariIniAkhir);
+    expect(recap.nonCash, 100000,
+        reason: 'uang transfer masuk utuh ke rekening, tidak berkurang');
+    expect(recap.cash, -20000,
+        reason: 'tunai laci berkurang 20rb krn kembalian fisik tunai — '
+            'JANGAN di-floor ke 0, ini valid utk rekonsiliasi kas fisik');
+  });
+
+  test(
+      'marker retur nota BELUM-LUNAS (method retur/edit, amount 0) dgn '
+      'change_given metadata TIDAK ikut dipotong dari cash — bukan uang '
+      'yg sungguhan keluar hari ini', () async {
+    final hariIni = DateTime(2026, 9, 8);
+    final hariIniAkhir = DateTime(2026, 9, 8, 23, 59, 59);
+    await _tx('t1', total: 50000, createdAt: hariIni, paid: 20000);
+    await _pay('p1', txId: 't1', amount: 20000, at: DateTime(2026, 9, 8, 9));
+    // Marker audit retur nota belum-lunas: amount 0, changeGiven metadata
+    // (BUKAN uang fisik yg keluar hari ini).
+    await _pay('p2',
+        txId: 't1',
+        amount: 0,
+        at: DateTime(2026, 9, 8, 10),
+        method: 'retur',
+        changeGiven: 15000);
+
+    final recap = await db.getTodayCashRecap(hariIni, hariIniAkhir);
+    expect(recap.cash, 20000,
+        reason: 'changeGiven marker retur/edit murni audit, tidak boleh '
+            'memotong kas fisik hari ini');
   });
 }
