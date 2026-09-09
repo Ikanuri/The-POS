@@ -30,7 +30,8 @@ Future<void> _pay(String id,
         required DateTime at,
         String method = 'tunai',
         bool voided = false,
-        int changeGiven = 0}) =>
+        int changeGiven = 0,
+        int? prabayarChangeTaken}) =>
     db.into(db.transactionPayments).insert(TransactionPaymentsCompanion.insert(
           id: id,
           transactionId: txId,
@@ -39,6 +40,9 @@ Future<void> _pay(String id,
           paidAt: Value(at),
           voided: Value(voided),
           changeGiven: Value(changeGiven),
+          prabayarChangeTakenBeforeCheckout: prabayarChangeTaken == null
+              ? const Value.absent()
+              : Value(prabayarChangeTaken),
         ));
 
 void main() {
@@ -190,5 +194,52 @@ void main() {
     expect(recap.cash, 20000,
         reason: 'changeGiven marker retur/edit murni audit, tidak boleh '
             'memotong kas fisik hari ini');
+  });
+
+  test(
+      'BUG DILAPORKAN USER: baris Pra-Bayar dgn prabayarChangeTakenBeforeCheckout '
+      '(kembalian diambil SEBELUM checkout) HARUS dikurangi dari cash — '
+      'persis perlakuan change_given, krn amount SEKARANG tersimpan gross',
+      () async {
+    final hariIni = DateTime(2026, 9, 8);
+    final hariIniAkhir = DateTime(2026, 9, 8, 23, 59, 59);
+    // Persis skenario user: Pra-Bayar 426rb dikunci, kembalian 600 diambil
+    // SEBELUM checkout. `amount` tersimpan GROSS (426000, fix
+    // buildPrabayarCheckout) — TANPA fix getTodayCashRecap ini, cash akan
+    // OVER-COUNT 600 (426000 dianggap semua tunai fisik, padahal 600-nya
+    // sudah balik ke pelanggan sebelum nota ini tercatat).
+    await _tx('t1', total: 425400, createdAt: hariIni, paid: 425400);
+    await _pay('p1',
+        txId: 't1',
+        amount: 426000,
+        at: DateTime(2026, 9, 8, 10),
+        prabayarChangeTaken: 600);
+
+    final recap = await db.getTodayCashRecap(hariIni, hariIniAkhir);
+    expect(recap.cash, 425400,
+        reason: 'cash HARUS net (426000-600), BUKAN 426000 (over-count '
+            'sebesar kembalian yg sudah diambil sebelum checkout)');
+  });
+
+  test(
+      'prabayarChangeTakenBeforeCheckout pada metode NON-tunai JUGA '
+      'dipotong dari cash (potongan pre-checkout SELALU fisik tunai, '
+      'terlepas dari metode pembayaran asli baris itu)', () async {
+    final hariIni = DateTime(2026, 9, 8);
+    final hariIniAkhir = DateTime(2026, 9, 8, 23, 59, 59);
+    await _tx('t1', total: 90000, createdAt: hariIni, paid: 90000);
+    await _pay('p1',
+        txId: 't1',
+        amount: 100000,
+        method: 'qris',
+        at: DateTime(2026, 9, 8, 10),
+        prabayarChangeTaken: 10000);
+
+    final recap = await db.getTodayCashRecap(hariIni, hariIniAkhir);
+    expect(recap.nonCash, 100000,
+        reason: 'uang non-tunai (qris) tetap FULL, tidak berkurang');
+    expect(recap.cash, -10000,
+        reason: 'tunai laci berkurang 10rb (kembalian fisik tunai pre-'
+            'checkout), walau metode ASLI baris ini qris — JANGAN di-floor');
   });
 }

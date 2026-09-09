@@ -105,4 +105,54 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));
   });
+
+  testWidgets(
+      'skenario BUG DILAPORKAN USER (screenshot keranjang & struk): '
+      'nominal utama HARUS "Tunai Rp 426.000" (BUKAN Rp 425.400 hasil '
+      'potongan diam-diam), dgn catatan kembalian Rp 600 TERPISAH di bawahnya',
+      (tester) async {
+    await db.into(db.transactions).insert(TransactionsCompanion.insert(
+        id: 'tx1',
+        localId: 'K1-1',
+        status: 'lunas',
+        total: 425400,
+        paid: 425400,
+        changeAmount: 0,
+        paymentMethod: 'tunai'));
+    await db.into(db.transactionItems).insert(
+        TransactionItemsCompanion.insert(
+            id: 'ti1',
+            transactionId: 'tx1',
+            productId: 'P1',
+            productUnitId: 'U1',
+            qty: 1,
+            priceAtSale: 425400,
+            originalPrice: 425400,
+            subtotal: 425400));
+    // Persis skenario user: Pra-Bayar dikunci Rp426.000, kembalian Rp600
+    // diambil SEBELUM checkout — `amount` tersimpan HARUS gross (426.000),
+    // potongannya metadata terpisah (fix `buildPrabayarCheckout`).
+    await db.into(db.transactionPayments).insert(
+        TransactionPaymentsCompanion.insert(
+            id: 'pay1',
+            transactionId: 'tx1',
+            amount: 426000,
+            method: 'tunai',
+            paidAt: Value(DateTime(2026, 9, 9, 10, 0)),
+            prabayarChangeTakenBeforeCheckout: const Value(600)));
+
+    await pumpWithFakeApp(tester,
+        db: db, child: const ReceiptScreen(transactionId: 'tx1'));
+
+    expect(find.textContaining(formatRupiah(426000)), findsWidgets,
+        reason: 'nominal utama Riwayat Pembayaran HARUS tampil sbg 426.000, '
+            'BUKAN 425.400 (426.000 dipotong diam-diam 600)');
+    expect(
+        find.textContaining(
+            'Kembalian ${formatRupiah(600)} sudah diambil sebelum checkout'),
+        findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+  });
 }

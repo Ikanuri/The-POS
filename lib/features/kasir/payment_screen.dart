@@ -112,9 +112,16 @@ class PrabayarCheckoutResult {
 /// `CartPrabayarNotifier.changeTakenTotal`/`poolAvailable`). Porsi itu WAJIB
 /// dipotong dari pool yang dihitung sbg kredit tersedia di sini — kalau
 /// tidak, kembalian yang sudah diserahkan akan dihitung ulang seakan masih
-/// tersedia (diserahkan DOBEL). Dipotong dari entri yang PALING BARU dikunci
-/// dulu (mundur) supaya `Σ payments.amount` tetap == `combinedPaid` (invariant
-/// yg SUDAH ADA sebelumnya, lihat `payment_prabayar_checkout_test.dart`).
+/// tersedia (diserahkan DOBEL). Dipotong (metadata saja) dari entri yang
+/// PALING BARU dikunci dulu (mundur), ditulis ke
+/// `TransactionPayments.prabayarChangeTakenBeforeCheckout` — TAPI `amount`
+/// per baris yang ditulis ke `TransactionPayments` TETAP nilai ASLI/gross
+/// entri itu (nominal yg BENAR-BENAR dikunci kasir), PERSIS pola
+/// `changeGiven` pada pembayaran normal: nominal utama tidak pernah
+/// dipotong diam-diam, potongannya dicatat TERPISAH. Invariant yang benar
+/// SEKARANG: `Σ (payments.amount - payments.changeGiven -
+/// payments.prabayarChangeTakenBeforeCheckout) == combinedPaid` (lihat
+/// `payment_prabayar_checkout_test.dart`).
 PrabayarCheckoutResult buildPrabayarCheckout({
   required String txId,
   required int cartTotal,
@@ -151,44 +158,46 @@ PrabayarCheckoutResult buildPrabayarCheckout({
           : nowMethodName);
 
   // Potong `effectiveChangeTaken` dari entri PALING BARU dikunci dulu
-  // (mundur) — entri yang habis terpotong (amount efektif 0) tidak
-  // menghasilkan baris `TransactionPayments` sama sekali (uangnya sudah
-  // sepenuhnya kembali ke pelanggan sebelum transaksi ini tercatat).
+  // (mundur) — SEKARANG (fix nominal struk) ini HANYA metadata: `amount`
+  // yang ditulis ke `TransactionPayments` TETAP `entry.amount` ASLI/gross
+  // (nominal yg BENAR-BENAR dikunci kasir), persis pola `changeGiven` pada
+  // pembayaran normal (amount = gross tendered, kembalian dicatat
+  // TERPISAH). `cutAmounts` cuma menandai berapa dari entri ini yang sudah
+  // fisik diserahkan balik ke pelanggan SEBELUM checkout, ditulis ke
+  // `prabayarChangeTakenBeforeCheckout` — siapa pun yang butuh nominal
+  // "net" (mis. `getTodayCashRecap`) WAJIB mengurangi kolom ini secara
+  // terpisah, ANALOG PERSIS cara `changeGiven` dikurangi dari `amount`.
+  // Invariant yang benar SEKARANG: Σ(amount - changeGiven -
+  // prabayarChangeTakenBeforeCheckout) == combinedPaid (bukan lagi
+  // Σ amount == combinedPaid, karena amount sekarang gross).
   var remainingCut = effectiveChangeTaken;
-  final effectiveAmounts = <String, int>{};
   // Susulan (permintaan user): berapa dari `amount` ASLI entri ini yang
   // dipotong sbg kembalian yang SUDAH diambil SEBELUM checkout — metadata
   // MURNI utk `TransactionPayments.prabayarChangeTakenBeforeCheckout`
-  // (lihat dok kolom itu), TIDAK mengubah `amount`/`changeGiven` efektif
-  // yang menjaga invariant `Σ payments.amount == combinedPaid`.
+  // (lihat dok kolom itu).
   final cutAmounts = <String, int>{};
   for (final e in prabayarEntries.reversed) {
-    if (remainingCut <= 0) {
-      effectiveAmounts[e.id] = e.amount;
-      continue;
-    }
+    if (remainingCut <= 0) continue;
     final cut = remainingCut < e.amount ? remainingCut : e.amount;
-    effectiveAmounts[e.id] = e.amount - cut;
     cutAmounts[e.id] = cut;
     remainingCut -= cut;
   }
 
   final payments = <TransactionPaymentsCompanion>[
     for (final p in prabayarEntries)
-      if ((effectiveAmounts[p.id] ?? p.amount) > 0)
-        TransactionPaymentsCompanion.insert(
-          id: genId(),
-          transactionId: txId,
-          amount: effectiveAmounts[p.id]!,
-          method: p.method,
-          methodName: Value(p.methodName),
-          paidAt: Value(p.lockedAt),
-          kasirId: Value(kasirId),
-          changeGiven: const Value(0),
-          prabayarChangeTakenBeforeCheckout: cutAmounts.containsKey(p.id)
-              ? Value(cutAmounts[p.id])
-              : const Value.absent(),
-        ),
+      TransactionPaymentsCompanion.insert(
+        id: genId(),
+        transactionId: txId,
+        amount: p.amount,
+        method: p.method,
+        methodName: Value(p.methodName),
+        paidAt: Value(p.lockedAt),
+        kasirId: Value(kasirId),
+        changeGiven: const Value(0),
+        prabayarChangeTakenBeforeCheckout: cutAmounts.containsKey(p.id)
+            ? Value(cutAmounts[p.id])
+            : const Value.absent(),
+      ),
     if (paidAmountNow > 0)
       TransactionPaymentsCompanion.insert(
         id: genId(),

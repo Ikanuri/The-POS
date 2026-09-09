@@ -313,16 +313,36 @@ void main() {
       expect(result.combinedChange, 0,
           reason: 'kembalian Rp40rb SUDAH diserahkan sebelumnya — TIDAK '
               'boleh dihitung ulang jadi kembalian tambahan di checkout ini');
-      // Invariant lama (sum(payments.amount) == combinedPaid) tetap terjaga
-      // — porsi yang sudah diambil dipotong dari entri PALING BARU dikunci
-      // (di sini cuma satu entri, jadi amount efektifnya 60rb).
-      expect(result.payments.fold<int>(0, (s, p) => s + p.amount.value), 90000);
+      // Invariant BARU (fix nominal struk): `amount` per baris TETAP nilai
+      // ASLI/gross entri Pra-Bayar (persis pola `changeGiven`) — potongan
+      // "kembalian sudah diambil" TIDAK LAGI mengurangi `amount`, hanya
+      // dicatat terpisah di `prabayarChangeTakenBeforeCheckout`. Invariant:
+      // Σ(amount - changeGiven - prabayarChangeTakenBeforeCheckout) ==
+      // combinedPaid.
       expect(result.payments, hasLength(2),
-          reason: 'baris entri Pra-Bayar (dipotong) + baris "sekarang"');
-      expect(result.payments[0].amount.value, 60000);
+          reason: 'baris entri Pra-Bayar (metadata potongan) + baris '
+              '"sekarang"');
+      expect(result.payments[0].amount.value, 100000,
+          reason: 'nominal utama HARUS tetap 100rb (yg BENAR-BENAR dikunci '
+              'kasir), BUKAN dipotong jadi 60rb');
       expect(result.payments[0].changeGiven.value, 0);
+      expect(result.payments[0].prabayarChangeTakenBeforeCheckout.value, 40000,
+          reason: 'metadata TERPISAH mencatat 40rb yg sudah diambil sbg '
+              'kembalian sebelum checkout');
       expect(result.payments[1].amount.value, 30000);
       expect(result.payments[1].changeGiven.value, 0);
+      final netSum = result.payments.fold<int>(
+          0,
+          (s, p) =>
+              s +
+              p.amount.value -
+              p.changeGiven.value -
+              (p.prabayarChangeTakenBeforeCheckout.present
+                  ? p.prabayarChangeTakenBeforeCheckout.value!
+                  : 0));
+      expect(netSum, 90000,
+          reason: 'invariant net: Σ(amount - changeGiven - '
+              'prabayarChangeTakenBeforeCheckout) == combinedPaid');
     });
 
     test('kembalian SEBAGIAN diambil, lockedSum SENDIRI masih menutup total: '
@@ -353,19 +373,33 @@ void main() {
       expect(result.status, 'lunas');
       expect(result.combinedChange, 0);
       // Potongan Rp10rb diambil dari entri PALING BARU dikunci (pbD2, t2)
-      // dulu (mundur) — entri pbD1 (t1) tetap utuh Rp30rb.
+      // dulu (mundur) — entri pbD1 (t1) tetap utuh Rp30rb. `amount` per
+      // baris TETAP gross (tidak dipotong) — hanya metadata yg mencatat
+      // potongannya.
       expect(result.payments, hasLength(2));
       expect(result.payments[0].amount.value, 30000,
           reason: 'entri PERTAMA (t1) tidak tersentuh');
-      expect(result.payments[1].amount.value, 30000,
-          reason: 'entri TERAKHIR (t2, 40rb) dipotong 10rb jadi 30rb');
-      expect(
-          result.payments.fold<int>(0, (s, p) => s + p.amount.value), 60000);
+      expect(result.payments[0].prabayarChangeTakenBeforeCheckout.present,
+          false);
+      expect(result.payments[1].amount.value, 40000,
+          reason: 'entri TERAKHIR (t2) nominal utama TETAP gross 40rb, '
+              'BUKAN dipotong jadi 30rb');
+      expect(result.payments[1].prabayarChangeTakenBeforeCheckout.value, 10000);
+      final netSum = result.payments.fold<int>(
+          0,
+          (s, p) =>
+              s +
+              p.amount.value -
+              p.changeGiven.value -
+              (p.prabayarChangeTakenBeforeCheckout.present
+                  ? p.prabayarChangeTakenBeforeCheckout.value!
+                  : 0));
+      expect(netSum, 60000);
     });
 
     test('changeTakenTotal MELEBIHI/SAMA lockedSum sepenuhnya (entri habis '
-        'terpotong): baris entri itu TIDAK muncul sama sekali di payments',
-        () {
+        'terpotong scr NET): baris entri itu TETAP muncul dgn amount gross '
+        '+ metadata potongan penuh (BUKAN hilang dari payments)', () {
       final lockedAt = DateTime(2026, 3, 1, 8, 0);
       final result = buildPrabayarCheckout(
         txId: 'txE',
@@ -387,11 +421,16 @@ void main() {
           reason: 'poolTersedia(0) + paidAmountNow(50rb)');
       expect(result.status, 'lunas');
       expect(result.combinedChange, 0);
-      expect(result.payments, hasLength(1),
-          reason: 'entri Pra-Bayar yg amount efektifnya 0 tidak menghasilkan '
-              'baris TransactionPayments sama sekali');
-      expect(result.payments.single.amount.value, 50000);
-      expect(result.payments.single.method.value, 'tunai');
+      expect(result.payments, hasLength(2),
+          reason: 'entri Pra-Bayar TETAP menghasilkan baris (amount gross '
+              '40rb, yg BENAR-BENAR dikunci kasir) + baris "sekarang"');
+      expect(result.payments[0].amount.value, 40000);
+      expect(result.payments[0].method.value, 'tunai');
+      expect(result.payments[0].prabayarChangeTakenBeforeCheckout.value, 40000,
+          reason: 'seluruh 40rb entri ini sudah diambil sbg kembalian '
+              'sebelum checkout');
+      expect(result.payments[1].amount.value, 50000);
+      expect(result.payments[1].method.value, 'tunai');
     });
 
     test('changeTakenTotal default 0 (perilaku lama TIDAK berubah)', () {
@@ -448,15 +487,25 @@ void main() {
       expect(result.payments[0].prabayarChangeTakenBeforeCheckout.present, false,
           reason: 'entri yg TIDAK kena potongan tidak boleh punya metadata '
               'ini sama sekali (bukan 0)');
-      // pbG2 (t2, PALING BARU) dipotong 10rb dari 40rb asli jadi 30rb —
-      // metadata harus merekam nilai yg dipotong (10rb), BUKAN amount
-      // efektif (30rb) atau amount asli (40rb).
-      expect(result.payments[1].amount.value, 30000);
+      // pbG2 (t2, PALING BARU) — `amount` TETAP gross 40rb ASLI (fix
+      // nominal struk), metadata merekam nilai yg dipotong (10rb) SECARA
+      // TERPISAH, tidak lagi mengurangi amount.
+      expect(result.payments[1].amount.value, 40000,
+          reason: 'nominal utama TETAP 40rb gross, BUKAN dipotong jadi 30rb');
       expect(result.payments[1].prabayarChangeTakenBeforeCheckout.value, 10000);
 
-      // Invariant lama TETAP terjaga — amount efektif (SUDAH dipotong)
-      // tidak berubah walau ada metadata baru ini.
-      expect(result.payments.fold<int>(0, (s, p) => s + p.amount.value), 60000);
+      // Invariant BARU — Σ(amount - changeGiven -
+      // prabayarChangeTakenBeforeCheckout) == combinedPaid.
+      final netSum = result.payments.fold<int>(
+          0,
+          (s, p) =>
+              s +
+              p.amount.value -
+              p.changeGiven.value -
+              (p.prabayarChangeTakenBeforeCheckout.present
+                  ? p.prabayarChangeTakenBeforeCheckout.value!
+                  : 0));
+      expect(netSum, 60000);
       expect(result.combinedPaid, 60000);
     });
 
@@ -487,12 +536,14 @@ void main() {
       expect(result.payments, hasLength(2));
       expect(result.payments[0].amount.value, 20000);
       expect(result.payments[0].prabayarChangeTakenBeforeCheckout.present, false);
-      expect(result.payments[1].amount.value, 5000);
+      expect(result.payments[1].amount.value, 30000,
+          reason: 'nominal utama TETAP gross 30rb, metadata (25rb) TERPISAH');
       expect(result.payments[1].prabayarChangeTakenBeforeCheckout.value, 25000);
     });
 
-    test('entri yg HABIS terpotong (amount efektif 0, tidak muncul di '
-        'payments) tidak bocorkan metadata ke baris lain', () {
+    test('entri yg habis terpotong SECARA NET tetap muncul di payments dgn '
+        'amount gross + metadata potongan penuh, tidak bocorkan metadata ke '
+        'baris lain', () {
       final lockedAt = DateTime(2026, 3, 1, 8, 0);
       final result = buildPrabayarCheckout(
         txId: 'txI',
@@ -509,13 +560,16 @@ void main() {
         changeTakenTotal: 40000,
       );
 
-      expect(result.payments, hasLength(1),
-          reason: 'entri pbI habis terpotong, tidak menghasilkan baris sama '
-              'sekali');
-      expect(result.payments.single.amount.value, 50000,
-          reason: 'baris "sekarang", bukan entri Pra-Bayar');
+      expect(result.payments, hasLength(2),
+          reason: 'entri pbI TETAP menghasilkan baris (amount gross), '
+              'BUKAN hilang walau seluruhnya sudah diambil sbg kembalian');
+      expect(result.payments[0].amount.value, 40000,
+          reason: 'baris entri Pra-Bayar (gross, bukan 0)');
+      expect(result.payments[0].prabayarChangeTakenBeforeCheckout.value, 40000);
+      expect(result.payments[1].amount.value, 50000,
+          reason: 'baris "sekarang", tidak terpengaruh potongan entri lain');
       expect(
-          result.payments.single.prabayarChangeTakenBeforeCheckout.present,
+          result.payments[1].prabayarChangeTakenBeforeCheckout.present,
           false);
     });
 
@@ -584,19 +638,89 @@ void main() {
           .getSingle();
       final payments = await db.getPaymentsForTx('txK');
 
-      // Invariant WAJIB (regresi dilindungi test lama juga) — ini
-      // menegaskan kolom baru TIDAK mengganggu invariant tsb.
-      expect(payments.fold<int>(0, (s, p) => s + p.amount), tx.paid,
-          reason: 'Σ payments.amount HARUS == transactions.paid/combinedPaid '
-              '— metadata baru tidak boleh menaikkan amount efektif');
+      // Invariant WAJIB (BARU, fix nominal struk) — `amount` per baris
+      // TETAP gross (tidak dipotong `prabayarChangeTakenBeforeCheckout`),
+      // jadi Σ payments.amount SENDIRI TIDAK LAGI == tx.paid — invariant yg
+      // benar SEKARANG mengurangi changeGiven & prabayarChangeTakenBefore-
+      // Checkout secara eksplisit dulu (persis pola `changeGiven`).
+      final netSum = payments.fold<int>(
+          0,
+          (s, p) =>
+              s +
+              p.amount -
+              p.changeGiven -
+              (p.prabayarChangeTakenBeforeCheckout ?? 0));
+      expect(netSum, tx.paid,
+          reason: 'Σ(amount - changeGiven - prabayarChangeTakenBeforeCheckout)'
+              ' HARUS == transactions.paid/combinedPaid');
 
       expect(payments, hasLength(2));
       expect(payments[0].amount, 30000);
       expect(payments[0].prabayarChangeTakenBeforeCheckout, null);
-      expect(payments[1].amount, 30000);
+      expect(payments[1].amount, 40000,
+          reason: 'nominal utama tersimpan gross (40rb ASLI dikunci kasir), '
+              'BUKAN dipotong jadi 30rb');
       expect(payments[1].prabayarChangeTakenBeforeCheckout, 10000,
           reason: 'metadata terbaca benar dari DB sungguhan (bukan cuma di '
               'objek Companion sebelum insert)');
+    });
+  });
+
+  group('buildPrabayarCheckout — skenario BUG DILAPORKAN USER (screenshot '
+      'keranjang & struk): Pra-Bayar Rp426.000 dikunci, kembalian Rp600 '
+      'diambil SEBELUM checkout', () {
+    test('nominal utama TransactionPayments.amount HARUS 426.000 (bukan '
+        '425.400) — Rp600 cuma catatan terpisah', () async {
+      final lockedAt = DateTime(2026, 9, 9, 10, 0);
+      final result = buildPrabayarCheckout(
+        txId: 'txUser',
+        cartTotal: 425400, // 426.000 - 600 (net setelah kembalian diambil)
+        prabayarEntries: [
+          PrabayarEntry(
+              id: 'pbUser',
+              amount: 426000,
+              method: 'tunai',
+              lockedAt: lockedAt),
+        ],
+        paidAmountNow: 0,
+        isTempo: false,
+        nowMethodType: 'tunai',
+        now: DateTime(2026, 9, 9, 10, 5),
+        kasirId: 'K1',
+        genId: genId,
+        changeTakenTotal: 600,
+      );
+
+      expect(result.combinedPaid, 425400,
+          reason: 'poolTersedia (426.000-600) == cartTotal, PAS');
+      expect(result.status, 'lunas');
+      expect(result.combinedChange, 0);
+      expect(result.payments, hasLength(1));
+      expect(result.payments.single.amount.value, 426000,
+          reason: 'BUG YG DILAPORKAN: nominal utama HARUS persis nominal yg '
+              'BENAR-BENAR dikunci/diterima kasir (426rb), BUKAN 425.400 '
+              '(426rb dipotong diam-diam 600)');
+      expect(result.payments.single.changeGiven.value, 0);
+      expect(result.payments.single.prabayarChangeTakenBeforeCheckout.value,
+          600,
+          reason: 'potongan 600 dicatat TERPISAH sbg metadata, persis pola '
+              'changeGiven pada pembayaran normal');
+
+      // Round-trip DB sungguhan.
+      await db.into(db.transactions).insert(TransactionsCompanion.insert(
+            id: 'txUser',
+            localId: 'txUser',
+            status: result.status,
+            total: 425400,
+            paid: result.combinedPaid,
+            changeAmount: result.combinedChange,
+            paymentMethod: result.displayMethodType,
+            createdAt: Value(DateTime(2026, 9, 9, 10, 5)),
+          ));
+      await db.batch((b) => b.insertAll(db.transactionPayments, result.payments));
+      final payments = await db.getPaymentsForTx('txUser');
+      expect(payments.single.amount, 426000);
+      expect(payments.single.prabayarChangeTakenBeforeCheckout, 600);
     });
   });
 }

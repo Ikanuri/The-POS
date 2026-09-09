@@ -4478,12 +4478,16 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                           ],
                         ),
                       ),
-                    // Fitur Pra-Bayar (susulan, permintaan user) — baris ini
-                    // punya `amount` yang SUDAH dipotong (`buildPrabayarCheckout`)
-                    // krn sebagian uangnya (`prabayarChangeTakenBeforeCheckout`)
-                    // SUDAH dikembalikan ke pembeli SEBELUM checkout (fase
-                    // keranjang, checkbox "kembalian sudah diambil" —
-                    // `cart_prabayar_provider.dart`). SENGAJA beda visual dari
+                    // Fitur Pra-Bayar (susulan, permintaan user) — `amount`
+                    // baris ini TETAP nilai ASLI/gross yg BENAR-BENAR dikunci
+                    // kasir (`buildPrabayarCheckout` — fix nominal struk,
+                    // dulu SEMPAT dipotong diam-diam, itu BUG yg dilaporkan
+                    // user via screenshot), sebagian uangnya
+                    // (`prabayarChangeTakenBeforeCheckout`) SUDAH dikembalikan
+                    // ke pembeli SEBELUM checkout (fase keranjang, checkbox
+                    // "kembalian sudah diambil" — `cart_prabayar_provider.
+                    // dart`) — dicatat TERPISAH di baris catatan di bawah ini,
+                    // BUKAN dikurangi dari nominal utama. SENGAJA beda visual dari
                     // `_ChangeTakenRow` (tanpa checkbox, label eksplisit
                     // "sebelum checkout") supaya TIDAK tertukar makna dgn
                     // kembalian NORMAL baris "sekarang"/kasir loket — ini

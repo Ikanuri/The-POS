@@ -2207,13 +2207,24 @@ class AppDatabase extends _$AppDatabase {
   /// Refund SUNGGUHAN nota lunas (`returnPaidTransactionItems`/
   /// `editPaidTransactionItem`) tidak kena masalah ini krn pakai `amount`
   /// NEGATIF dgn `changeGiven` default 0.
+  ///
+  /// `prabayar_change_taken_before_checkout` (kembalian Pra-Bayar yang SUDAH
+  /// diambil kasir SEBELUM checkout, lihat dok kolom itu & `payment_screen.
+  /// dart`) SEKARANG (sejak `amount` per baris Pra-Bayar ditulis GROSS,
+  /// bukan dipotong) JUGA WAJIB dikurangi dari `cash` — PERSIS perlakuan
+  /// `change_given`: potongan ini SELALU fisik tunai yang keluar dari laci,
+  /// terlepas dari metode pembayaran ASLI baris itu. Tanpa ini, `cash` akan
+  /// OVER-COUNT sebesar nominal yang sudah diserahkan balik ke pelanggan
+  /// sebelum transaksi ini tercatat.
   Future<({int cash, int nonCash, int txCount})> getTodayCashRecap(
       DateTime from, DateTime to) async {
     final row = await customSelect(
       "SELECT "
       "COALESCE(SUM(CASE WHEN tp.method='tunai' THEN tp.amount ELSE 0 END),0) "
       "  - COALESCE(SUM(CASE WHEN tp.method NOT IN ('retur','edit') "
-      "      THEN tp.change_given ELSE 0 END),0) AS cash, "
+      "      THEN tp.change_given ELSE 0 END),0) "
+      "  - COALESCE(SUM(CASE WHEN tp.method NOT IN ('retur','edit') "
+      "      THEN tp.prabayar_change_taken_before_checkout ELSE 0 END),0) AS cash, "
       "COALESCE(SUM(CASE WHEN tp.method NOT IN ('tunai','tempo') THEN tp.amount ELSE 0 END),0) AS noncash, "
       "COUNT(DISTINCT tp.transaction_id) AS cnt "
       "FROM transaction_payments tp "
@@ -5738,10 +5749,18 @@ class AppDatabase extends _$AppDatabase {
   /// tidak pernah benar-benar mengendap di laci. Baris pembayaran yang
   /// DIBATALKAN (`voided`) dilewati, dan refund retur nota lunas otomatis
   /// ikut terhitung karena `amount`-nya memang NEGATIF.
+  ///
+  /// NET juga dari `prabayar_change_taken_before_checkout` — sejak `amount`
+  /// baris Pra-Bayar ditulis GROSS (bukan dipotong, lihat `payment_screen.
+  /// dart`), potongan "kembalian sudah diambil sebelum checkout" itu, PERSIS
+  /// `change_given`, harus dikurangi dari bucket METODE ASALNYA SENDIRI di
+  /// sini (nilai bersih per kanal) — bukan cuma dari `cash` di
+  /// `getTodayCashRecap` (rekonsiliasi fisik laci, beda tujuan).
   Future<Map<String, int>> getCashInByMethod(DateTime from, DateTime to) async {
     final rows = await customSelect(
       'SELECT method, COALESCE(SUM(amount),0) AS amt, '
-      '  COALESCE(SUM(change_given),0) AS chg '
+      '  COALESCE(SUM(change_given),0) AS chg, '
+      '  COALESCE(SUM(prabayar_change_taken_before_checkout),0) AS cut '
       'FROM transaction_payments '
       'WHERE NOT voided AND paid_at >= ? AND paid_at <= ? '
       'GROUP BY method',
@@ -5753,8 +5772,9 @@ class AppDatabase extends _$AppDatabase {
     ).get();
     final out = <String, int>{};
     for (final r in rows) {
-      final net =
-          (r.data['amt'] as num).toInt() - (r.data['chg'] as num).toInt();
+      final net = (r.data['amt'] as num).toInt() -
+          (r.data['chg'] as num).toInt() -
+          (r.data['cut'] as num).toInt();
       if (net == 0) continue;
       out[r.data['method'] as String] = net;
     }
@@ -5771,7 +5791,8 @@ class AppDatabase extends _$AppDatabase {
     final toSec = to.millisecondsSinceEpoch ~/ 1000;
     final inRows = await customSelect(
       "SELECT strftime('%Y-%m-%d', datetime(paid_at,'unixepoch','localtime')) AS d, "
-      '  COALESCE(SUM(amount),0) - COALESCE(SUM(change_given),0) AS net '
+      '  COALESCE(SUM(amount),0) - COALESCE(SUM(change_given),0) '
+      '  - COALESCE(SUM(prabayar_change_taken_before_checkout),0) AS net '
       'FROM transaction_payments '
       'WHERE NOT voided AND paid_at >= ? AND paid_at <= ? GROUP BY d',
       variables: [Variable.withInt(fromSec), Variable.withInt(toSec)],
