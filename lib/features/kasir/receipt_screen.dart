@@ -102,6 +102,28 @@ int latestChangeGiven(List<TransactionPayment> payments) {
   return latest?.changeGiven ?? 0;
 }
 
+/// SUM seluruh `prabayarChangeTakenBeforeCheckout` dari SEMUA baris payment
+/// nota ini (kecuali `voided`) — bug dilaporkan user (screenshot): Pra-Bayar
+/// dikunci, kembalian diambil SEBELUM checkout (dicatat di kolom TERPISAH
+/// ini, BUKAN di `changeGiven` momen checkout dari [latestChangeGiven]) —
+/// ringkasan atas struk (Total/Dibayar/baris "Kembalian") tidak pernah
+/// mempertimbangkannya, jadi utk nota yang SEMUA kembaliannya dari potongan
+/// pre-checkout ini (bukan dari `changeGiven` momen checkout), ringkasan
+/// atas menampilkan "Dibayar" = "Total" TANPA baris "Kembalian" sama sekali
+/// — inkonsisten dgn Riwayat Pembayaran yang sudah benar menampilkan
+/// nominal gross + catatan "sudah diambil sebelum checkout" (fix commit
+/// `191570c`). Beda dgn [latestChangeGiven] (SATU baris TERAKHIR saja):
+/// di sini SEMUA baris di-SUM krn tiap baris Pra-Bayar berpotensi punya
+/// potongan pre-checkout sendiri-sendiri, dan bagian ini SUDAH PASTI
+/// diambil (checkbox pre-checkout sudah ditekan kasir sebelum layar struk
+/// ada) — beda dari [latestChangeGiven] yang BISA di-toggle "sudah
+/// diambil"-nya di layar ini.
+int totalPrabayarChangeTakenBeforeCheckout(List<TransactionPayment> payments) {
+  return payments
+      .where((p) => !p.voided)
+      .fold<int>(0, (s, p) => s + (p.prabayarChangeTakenBeforeCheckout ?? 0));
+}
+
 /// Dibayar utk ringkasan SAAT [kembalian] > 0 (baris Kembalian ditampilkan)
 /// — beda dari [netPaidDisplay] (dipasangkan dgn Sisa Tagihan, dipakai
 /// HANYA saat TIDAK ada kembalian). Dihitung dari Total + [kembalian]
@@ -125,6 +147,11 @@ int latestChangeGiven(List<TransactionPayment> payments) {
 /// fix Item 23 lama, TIDAK diseragamkan di sini (di luar scope perbaikan
 /// ini). Salah kirim nilai [kembalian] akan membuat Dibayar tidak
 /// konsisten dgn baris Kembalian yang BENAR-BENAR dirender di layar itu.
+///
+/// Sejak fix kembalian pre-checkout Pra-Bayar: [kembalian] WAJIB sudah
+/// GABUNGAN (checkout-moment + [totalPrabayarChangeTakenBeforeCheckout]),
+/// bukan checkout-moment saja — lihat pemanggil di `_ReceiptScreenState`
+/// & `_ReceiptPaper`.
 int dibayarDisplay(
     Transaction tx, List<TransactionPayment> payments, int kembalian) {
   return kembalian > 0 ? tx.total + kembalian : netPaidDisplay(tx, payments);
@@ -275,6 +302,24 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   /// paidAt dari `getPaymentsForTx`.
   TransactionPayment? get _latestPayment =>
       _payments.where((p) => !p.voided).lastOrNull;
+
+  /// SUM kembalian Pra-Bayar pre-checkout SEMUA baris nota ini — lihat dok
+  /// [totalPrabayarChangeTakenBeforeCheckout]. Komponen ini SUDAH PASTI
+  /// diambil (bukan bisa di-toggle spt [_latestPayment]?.changeGiven).
+  int get _totalPrabayarChangeTakenBeforeCheckout =>
+      totalPrabayarChangeTakenBeforeCheckout(_payments);
+
+  /// Kembalian GABUNGAN utk Ringkasan atas ("Dibayar" + keputusan tampil
+  /// baris "Kembalian"): checkout-moment ([_latestPayment]?.changeGiven,
+  /// BISA di-toggle "sudah diambil") + pre-checkout Pra-Bayar (SUM semua
+  /// baris, SUDAH PASTI diambil) — bug dilaporkan user (screenshot):
+  /// sebelum fix ini, nota yang SEMUA kembaliannya dari potongan
+  /// pre-checkout (bukan checkout-moment) tidak pernah menampilkan baris
+  /// "Kembalian" di Ringkasan atas sama sekali, walau Riwayat Pembayaran
+  /// di bawahnya sudah benar.
+  int get _kembalianGabungan =>
+      (_latestPayment?.changeGiven ?? 0) +
+      _totalPrabayarChangeTakenBeforeCheckout;
 
   /// Item 49g — true bila nota ini PERNAH diretur (ada baris `returnedAt`
   /// != null). Footer ringkasan ganti dari 3-baris biasa jadi breakdown
@@ -3404,7 +3449,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                             _SummaryRow(
                                 'Dibayar',
                                 '${_methodLabel(tx.paymentMethod, name: tx.methodName)} · '
-                                    '${formatRupiah(dibayarDisplay(tx, _payments, _latestPayment?.changeGiven ?? 0) + _debtSettlementTotal)}'),
+                                    '${formatRupiah(dibayarDisplay(tx, _payments, _kembalianGabungan) + _debtSettlementTotal)}'),
                           // Item 49b — ringkasan disederhanakan jadi 3 baris
                           // inti (state akhir akumulatif): Total / Dibayar /
                           // Kembalian-ATAU-Sisa. Baris "Uang Diterima" (uang
@@ -3421,6 +3466,49 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                                   ? null
                                   : (v) =>
                                       _toggleChangeTaken(_latestPayment!.id, v),
+                            ),
+                          // Bug dilaporkan user (screenshot): kembalian Pra-
+                          // Bayar yang diambil SEBELUM checkout tidak pernah
+                          // muncul di Ringkasan atas sama sekali (beda dari
+                          // Riwayat Pembayaran di bawah, yang sudah benar).
+                          // SENGAJA baris TERPISAH dari `_ChangeTakenRow` di
+                          // atas (bukan digabung jadi satu angka): komponen
+                          // ini SUDAH PASTI diambil (checkbox pre-checkout-
+                          // nya sudah ditekan kasir sebelum layar ini pernah
+                          // ada) jadi TIDAK boleh py checkbox yang bisa
+                          // di-uncheck — mirror pola catatan italic yang
+                          // sama persis di kartu Riwayat Pembayaran per-baris
+                          // (lihat di bawah), supaya maknanya tidak tertukar
+                          // dgn kembalian checkout-moment yang MASIH bisa
+                          // ditoggle.
+                          if (_totalPrabayarChangeTakenBeforeCheckout > 0)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 2),
+                              child: Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      'Kembalian (sebelum checkout, sudah diambil)',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontStyle: FontStyle.italic,
+                                        color: scheme.tertiary,
+                                      ),
+                                    ),
+                                  ),
+                                  Text(
+                                    formatRupiah(
+                                        _totalPrabayarChangeTakenBeforeCheckout),
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontStyle: FontStyle.italic,
+                                      color: scheme.tertiary,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           if (isKurangBayar)
                             _SummaryRow(
@@ -4633,6 +4721,14 @@ class _ReceiptPaper extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final remaining = netRemainingOwed(tx, payments);
+    // Bug dilaporkan user (screenshot) — sama fix dgn Ringkasan on-screen
+    // (`_ReceiptScreenState._kembalianGabungan`): kembalian pre-checkout
+    // Pra-Bayar (`prabayarChangeTakenBeforeCheckout`, SUM semua baris)
+    // WAJIB ikut dihitung, bukan cuma [latestChangeGiven] momen checkout —
+    // kalau tidak, nota yg SEMUA kembaliannya dari potongan pre-checkout
+    // tidak pernah tampil baris "Kembali" sama sekali di struk share/gambar.
+    final kembalianGabungan = latestChangeGiven(payments) +
+        totalPrabayarChangeTakenBeforeCheckout(payments);
     // Pembatas batch "Tambah Belanjaan" (Gaya A) — dilacak lintas iterasi
     // item saat menyusun baris di bawah.
     String? lastBatch;
@@ -4862,13 +4958,13 @@ class _ReceiptPaper extends StatelessWidget {
                         fontSize: 14, fontWeight: FontWeight.w900)),
               ],
             ),
-          if (dibayarDisplay(tx, payments, latestChangeGiven(payments)) > 0)
+          if (dibayarDisplay(tx, payments, kembalianGabungan) > 0)
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text('Bayar..', style: _mono),
                 Text(
-                    'Rp ${_fmtNum(dibayarDisplay(tx, payments, latestChangeGiven(payments)) + _debtSettlementTotal)}',
+                    'Rp ${_fmtNum(dibayarDisplay(tx, payments, kembalianGabungan) + _debtSettlementTotal)}',
                     style: _mono),
               ],
             ),
@@ -4886,14 +4982,14 @@ class _ReceiptPaper extends StatelessWidget {
           // Ringkasan on-screen (`isKurangBayar`+`_ChangeTakenRow` di atas
           // layar ini) sudah benar pakai 2 `if` independen; widget struk
           // gambar ini yang menyimpang. Sama fix dgn `printer_service.dart`.
-          if (latestChangeGiven(payments) > 0)
+          if (kembalianGabungan > 0)
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text('Kembali',
                     style: _mono.copyWith(
                         fontSize: 14, fontWeight: FontWeight.w900)),
-                Text('Rp ${_fmtNum(latestChangeGiven(payments))}',
+                Text('Rp ${_fmtNum(kembalianGabungan)}',
                     style: _mono.copyWith(
                         fontSize: 14, fontWeight: FontWeight.w900)),
               ],
