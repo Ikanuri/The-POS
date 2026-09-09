@@ -7,6 +7,23 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-09 (sesi keempat puluh satu — fix Tutup Kasir tidak net dari kembalian)
+
+- `f9ae45b` — fix(db): `getTodayCashRecap` (Tutup Kasir) sekarang NET
+  dari `change_given` (kembalian), bukan gross tendered — kembalian di app
+  ini selalu diserahkan fisik TUNAI apa pun metode pembayaran asalnya
+  (Item 62: kalkulator kembalian dipakai sama utk tunai & non-tunai), jadi
+  bucket `cash` dipotong SELURUH `change_given` lintas metode (boleh
+  negatif, tidak di-floor ke 0), sementara `nonCash` tetap FULL amount
+  (uang non-tunai utuh masuk rekening). Marker retur/edit nota belum-lunas
+  (`method` 'retur'/'edit', amount 0) dikecualikan dari pengurangan krn
+  `changeGiven`-nya cuma metadata audit, bukan uang yg sungguhan keluar.
+  Beda sengaja dari `getCashInByMethod`/`getCashFlowSummary` (tab Arus Kas)
+  yang net per-bucket metode asalnya sendiri — itu laporan akuntansi per
+  kanal, ini rekonsiliasi FISIK laci. 3 test baru
+  (`tutup_kasir_recap_paid_at_test.dart`), revert-verify: 2 gagal dgn
+  angka gross yg salah sblm fix.
+
 ## 2026-09-08 (sesi keempat puluh — chip Kategori Harga per-item, fix reset toggle, redesain sheet Pengaturan Keranjang, fix Tutup Kasir)
 
 - `83ed2d0` — fix(test): gate chip Kategori Harga per-item ke izin

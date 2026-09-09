@@ -8,6 +8,20 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 9 September 2026 (sesi keempat puluh satu)
+
+### 🐛 Perbaikan
+- **Tutup Kasir sekarang menghitung uang tunai yang BENAR-BENAR tersisa di
+  laci, bukan uang yang diterima sebelum kembalian diberikan.** Sebelumnya,
+  kalau pembeli bayar Rp50.000 untuk belanja Rp30.000 (kembalian
+  Rp20.000), Tutup Kasir mencatat Rp50.000 sebagai uang tunai masuk —
+  padahal Rp20.000-nya sudah diserahkan balik ke pembeli, jadi yang
+  sungguhan tertinggal di laci cuma Rp30.000. Selisih ini membuat rekap
+  Tutup Kasir tampak "lebih" dari uang fisik yang sebenarnya ada,
+  membingungkan saat rekonsiliasi kas harian. Sekarang dihitung bersih
+  (net) — juga berlaku kalau kembalian diserahkan tunai untuk pembayaran
+  yang aslinya transfer/QRIS.
+
 ## 8 September 2026 (sesi keempat puluh)
 
 ### ✨ Fitur Baru

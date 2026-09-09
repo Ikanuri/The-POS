@@ -6,14 +6,63 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 8 September 2026 (sesi keempat puluh — chip Kategori Harga
-per-item di keranjang, fix reset toggle kategori header antar-transaksi,
-redesain sheet Pengaturan Keranjang, fix Tutup Kasir salah hitung kas).
-Versi kerja **2.54.0+112** (MINOR — ada fitur baru terlihat pengguna, PATCH
-reset 0). schemaVersion **43** (tidak berubah — semua fitur sesi ini murni
-provider/query baru, tanpa migrasi)._
+_Update sesi 9 September 2026 (sesi keempat puluh satu — fix lanjutan
+Tutup Kasir: net dari kembalian/`change_given`, ditemukan lewat audit
+mandiri thd fix `paid_at` sesi sebelumnya). Versi kerja **2.54.1+113**
+(PATCH — murni bugfix, tanpa fitur baru). schemaVersion **43** (tidak
+berubah — query murni, tanpa migrasi)._
 
-## Sesi ini — 4 item independen SELESAI
+## Sesi ini — fix Tutup Kasir tidak net dari kembalian (`change_given`) SELESAI
+
+`getTodayCashRecap` (baru diperbaiki commit `3004bcb` sesi lalu utk basis
+`paid_at`) masih menjumlahkan `tp.amount` MENTAH (gross tendered) TANPA
+mengurangi `TransactionPayments.changeGiven` — tiap transaksi berkembalian
+membengkakkan rekap kas Tutup Kasir sebesar kembaliannya (uang itu sudah
+keluar lagi ke pembeli, tidak pernah benar-benar mengendap di laci).
+
+**Keputusan desain penting** (dicek hati-hati, JANGAN diubah tanpa
+verifikasi ulang sekuat ini): kembalian di app ini SELALU diserahkan FISIK
+TUNAI dari laci, apa pun metode pembayaran ASLI baris yang menghasilkannya
+— sejak Item 62, kalkulator kembalian dipakai SAMA utk tunai maupun
+non-tunai (`payment_screen.dart` `_paid`/`_tendered`), jadi transfer/QRIS
+kelebihan bayar BISA menghasilkan `changeGiven` juga, dan app ini TIDAK
+PUNYA mekanisme "kembalikan lewat rekening lagi" — fisiknya pasti tunai.
+Karena itu:
+- `cash` = `SUM(amount WHERE method='tunai')` **DIKURANGI SELURUH
+  `change_given` LINTAS SEMUA METODE** (bukan cuma dari baris method
+  'tunai' sendiri) — kalau satu-satunya pembayaran hari itu adalah
+  transfer 100rb dgn kembalian tunai 20rb, `cash` jadi **-20000** (VALID,
+  JANGAN di-floor ke 0 — itu representasi tunai laci net berkurang).
+- `nonCash` = `SUM(amount WHERE method NOT IN ('tunai','tempo'))` **UTUH,
+  TIDAK dikurangi** — uang transfer/QRIS masuk penuh ke rekening/dompet,
+  tidak berkurang oleh kembalian yang keluar via laci tunai.
+- Baris marker retur/edit nota BELUM-LUNAS (`method` 'retur'/'edit',
+  `amount=0`, jejak audit "retur nota belum lunas" — lihat
+  `_isReturLinkedPayment` di `receipt_screen.dart`) **DIKECUALIKAN** dari
+  pengurangan `change_given` — nilainya di baris itu murni metadata utk
+  histori/rekonsiliasi hutang, BUKAN uang yang sungguhan keluar laci HARI
+  itu (refund SUNGGUHAN nota lunas pakai `amount` NEGATIF dgn `method`
+  nyata, `changeGiven` default 0 — tidak kena masalah ini).
+- **SENGAJA beda** dari `getCashInByMethod`/`getCashFlowSummary` (tab Arus
+  Kas, `app_database.dart` ~line 5714) yang net `change_given` per BUCKET
+  METODE ASALNYA SENDIRI (`GROUP BY method`) — itu laporan akuntansi "nilai
+  bersih tiap kanal pembayaran", tujuannya beda dari `getTodayCashRecap`
+  yang REKONSILIASI FISIK LACI (`tutup_kasir_screen.dart` membandingkan
+  `physical - recap.cash` — kasir menghitung uang FISIK di tangan). Dua
+  fungsi ini BOLEH & MEMANG SEHARUSNYA menghasilkan angka tunai yang beda
+  utk hari yg sama kalau ada transaksi non-tunai berkembalian-tunai —
+  bukan inkonsistensi, tapi pertanyaan yang beda-beda yang dijawab.
+
+**Test baru**: `test/tutup_kasir_recap_paid_at_test.dart` (+3 test: tunai
+berkembalian → net bukan gross; transfer berkembalian tunai → nonCash
+utuh + cash negatif; marker retur/edit → changeGiven metadata TIDAK
+dipotong). Revert-verify: 2 dari 3 gagal dgn angka gross yg salah sblm
+fix (test marker retur sudah lolos bahkan tanpa fix krn method-nya bukan
+'tunai', jadi tidak masuk hitungan `cash` sama sekali di query lama —
+tetap dipertahankan sbg regression guard eksplisit thd fix ini sendiri).
+`flutter analyze` 0 issue. Full suite: **1586 test lulus, 0 gagal**.
+
+## Sesi sebelumnya — chip Kategori Harga per-item, fix reset toggle, redesain sheet Pengaturan Keranjang, fix Tutup Kasir (paid_at) SELESAI
 
 1. **Chip Kategori Harga per-item di baris keranjang** (fitur BARU) — baris
    produk yg tergabung >=1 `PriceCategories` (dicek via `AltPrices.priceCategoryId`
