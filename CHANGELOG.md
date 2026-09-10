@@ -7,6 +7,19 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-10 (sesi keempat puluh lima — ekspor CSV produk bisa dibagikan langsung)
+
+- `ae88a33` — feat(pengaturan): ekspor CSV produk (`_exportProductsCsv`,
+  `pengaturan_screen.dart`) sekarang pakai `saveOrShareExport`
+  (`export_destination.dart`, sudah dipakai backup/alih-owner/arsip/
+  price-sync) alih-alih langsung `FilePicker.saveFile` diam-diam —
+  muncul dialog pilihan "Bagikan" (share sheet OS) atau "Simpan ke
+  Perangkat". `saveOrShareExport` ditambah parameter opsional `title`
+  (default "Simpan Backup", 4 caller lama tidak berubah) supaya
+  dipanggil dgn `title: 'Simpan CSV'` dari sini. Test baru:
+  `test/pengaturan_export_csv_share_test.dart` (widget test, pola sama
+  `backup_share_option_test.dart`, revert-verified).
+
 ## 2026-09-10 (sesi keempat puluh empat — fix kembalian pre-checkout Pra-Bayar TERUS terhitung stlh Tambah Belanjaan)
 
 - `785e75d` — fix(kasir): regresi commit `22ba425` — begitu ada ronde

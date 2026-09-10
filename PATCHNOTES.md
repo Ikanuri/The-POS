@@ -8,6 +8,14 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 10 September 2026 (sesi keempat puluh lima)
+
+### ✨ Fitur Baru
+- **Ekspor Produk CSV sekarang bisa langsung dibagikan** (WhatsApp/email/
+  Google Drive/dll), tanpa perlu disimpan ke HP dulu — sama seperti
+  ekspor file backup. Cukup pilih "Bagikan" saat dialog muncul; opsi
+  "Simpan ke Perangkat" (alur lama) masih tersedia.
+
 ## 10 September 2026 (sesi keempat puluh empat)
 
 ### 🐛 Perbaikan

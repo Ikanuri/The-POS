@@ -6,14 +6,45 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 10 September 2026 (sesi keempat puluh empat — fix regresi
-commit `22ba425`: kembalian pre-checkout Pra-Bayar ronde ASLI TERUS ikut
-dihitung ke ringkasan kembalian meski nota sudah lewat ronde "Tambah
-Belanjaan" berikutnya, dilaporkan user). Versi kerja **2.54.4+116**
-(PATCH — murni bugfix, tanpa fitur baru). schemaVersion **43** (tidak
-berubah)._
+_Update sesi 10 September 2026 (sesi keempat puluh lima — ekspor CSV
+produk bisa dibagikan langsung, permintaan user "Buat ekspor csv produk
+bisa share juga (sama seperti file backup)"). Versi kerja **2.55.0+117**
+(MINOR — fitur baru terlihat pengguna). schemaVersion **43** (tidak
+berubah). CATATAN: sesi ini berjalan PARALEL dgn agen lain yang
+mengerjakan 2 task terpisah di `lib/features/laporan/`/`report_export.dart`
+pada branch yang sama — kalau ada perubahan HANDOFF ini yang belum
+tersinkron dari sesi itu, gabungkan (jangan timpa) saat baca ulang._
 
-## Sesi ini — fix kembalian pre-checkout Pra-Bayar TERUS terhitung setelah Tambah Belanjaan SELESAI
+## Sesi ini — ekspor CSV produk bisa dibagikan langsung SELESAI
+
+Permintaan user (persis): "Buat ekspor csv produk bisa share juga (sama
+seperti file backup)". `_exportProductsCsv` (`pengaturan_screen.dart`)
+sebelumnya panggil `FilePicker.platform.saveFile` langsung, tanpa opsi
+lain. Diganti pakai helper yang SUDAH ADA `saveOrShareExport`
+(`lib/core/utils/export_destination.dart`, sebelumnya dipakai
+`backup_screen.dart`/`alih_owner_screen.dart`/`arsip_screen.dart`/
+`price_sync_screen.dart`) — muncul dialog pilihan "Bagikan" (share sheet
+OS via `share_plus`, tulis ke temp file dulu) atau "Simpan ke Perangkat"
+(`FilePicker.saveFile`, alur lama).
+
+`saveOrShareExport` ditambah parameter opsional `title` (default
+`'Simpan Backup'` — SEMUA 4 caller lama TIDAK berubah perilaku/teksnya)
+karena judul itu misleading kalau dipakai apa adanya utk ekspor CSV
+(bukan backup) — dipanggil `title: 'Simpan CSV'` dari pengaturan_screen.
+dart. Prefix nama file temp share (`backup_...`) di `export_destination.
+dart` SENGAJA TIDAK diubah utk CSV — dicek: itu murni konvensi
+penamaan/pembersihan file temp (`TempShareCleanup`), bukan klaim isi
+file, jadi aman dipakai lintas jenis ekspor.
+
+**Test baru**: `test/pengaturan_export_csv_share_test.dart` (widget test,
+pola PERSIS `backup_share_option_test.dart` — tap "Export Produk CSV" →
+dialog "Simpan CSV" dgn tombol Bagikan & Simpan ke Perangkat muncul,
+Batal menutup tanpa memanggil plugin apa pun). Revert-verified (gagal
+dgn `findsNothing` utk teks "Simpan CSV" sblm fix). `flutter analyze` 0
+issue. Full suite: **1602 test lulus, 0 gagal** (naik dari 1601 — +1
+test file baru).
+
+## Sesi sebelumnya — fix kembalian pre-checkout Pra-Bayar TERUS terhitung setelah Tambah Belanjaan SELESAI
 
 **Bug dilaporkan user** (kata-kata persis): "ketika kembalian dari
 pre-paid sudah diambil, kemudian paid, dan ternyata tambah barang dan ada
