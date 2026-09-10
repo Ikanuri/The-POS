@@ -8,6 +8,19 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 10 September 2026 (sesi keempat puluh empat)
+
+### 🐛 Perbaikan
+- **Kembalian di struk (in-app, gambar/bagikan, dan cetak) tidak lagi
+  dihitung dobel setelah transaksi Pra-Bayar ditambah belanjaan lagi.**
+  Sebelumnya, kalau nota memakai Pra-Bayar dan kembaliannya sudah diambil
+  pelanggan SEBELUM checkout, lalu nota itu ditambah belanjaan lagi
+  ("Tambah Belanjaan") dan ada kembalian baru, ringkasan "Kembalian" ikut
+  menjumlahkan kembalian dari fase Pra-Bayar yang SUDAH diberikan ke
+  pelanggan sebelumnya — bisa membuat kasir tanpa sadar memberi kembalian
+  lebih kepada pelanggan. Sekarang ringkasan hanya menghitung kembalian
+  dari ronde yang sedang berjalan.
+
 ## 9 September 2026 (sesi keempat puluh tiga)
 
 ### 🐛 Perbaikan

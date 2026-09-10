@@ -6,12 +6,65 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 9 September 2026 (sesi keempat puluh tiga — fix kembalian
-pre-checkout Pra-Bayar tidak ikut dihitung di Ringkasan atas struk,
-dilaporkan user via screenshot). Versi kerja **2.54.3+115** (PATCH —
-murni bugfix, tanpa fitur baru). schemaVersion **43** (tidak berubah)._
+_Update sesi 10 September 2026 (sesi keempat puluh empat — fix regresi
+commit `22ba425`: kembalian pre-checkout Pra-Bayar ronde ASLI TERUS ikut
+dihitung ke ringkasan kembalian meski nota sudah lewat ronde "Tambah
+Belanjaan" berikutnya, dilaporkan user). Versi kerja **2.54.4+116**
+(PATCH — murni bugfix, tanpa fitur baru). schemaVersion **43** (tidak
+berubah)._
 
-## Sesi ini — fix kembalian pre-checkout Pra-Bayar tidak terhitung di Ringkasan atas struk SELESAI
+## Sesi ini — fix kembalian pre-checkout Pra-Bayar TERUS terhitung setelah Tambah Belanjaan SELESAI
+
+**Bug dilaporkan user** (kata-kata persis): "ketika kembalian dari
+pre-paid sudah diambil, kemudian paid, dan ternyata tambah barang dan ada
+kembalian, total kembalian dihitung bahkan dari fase pre-paid (yang tentu
+uang itu sudah di pelanggan). Ini bug serius karena kasir akan bayar
+kembalian lebih (yang sebelumnya sudah diberikan kepada pelanggan) jika
+tidak aware." Regresi dari fix sesi lalu (`22ba425`) — ringkasan atas
+struk (in-app, share/gambar, cetak) menjumlah `prabayarChangeTakenBeforeCheckout`
+dari SEMUA baris payment TANPA syarat, termasuk baris ronde checkout ASLI
+yang sudah tuntas/historis begitu ada ronde "Tambah Belanjaan" berikutnya
+pada nota yang sama.
+
+**Kenapa heuristik timestamp/jumlah-baris TIDAK dipakai**: ronde checkout
+ASLI sendiri BISA punya banyak baris payment (beberapa entri Pra-Bayar +
+satu baris "sekarang") yang semuanya SAH ikut dihitung — jadi "kalau >=2
+baris, exclude" salah. `paidAt` juga tidak bisa dipakai sbg urutan
+andal: baris "sekarang" ronde ASLI sendiri `paidAt`-nya (submission
+checkout) ALAMI lebih baru dari baris Pra-Bayar (`lockedAt`) di ronde yang
+SAMA — jadi tidak bisa dibedakan dari ronde Tambah Belanjaan yang
+sungguhan lebih baru pakai timestamp saja.
+
+**Fix**: `_confirmAddItems` (payment_screen.dart, alur "Tambah
+Belanjaan") menulis baris payment dgn marker `note: 'Tambah belanjaan'`
+(SATU-SATUNYA tempat literal ini ditulis sbg payment note di codebase) &
+TIDAK PERNAH set `prabayarChangeTakenBeforeCheckout` (field itu eksklusif
+milik ronde checkout asli). Jadi: keberadaan >=1 baris non-voided dgn
+`note == 'Tambah belanjaan'` = ronde asli sudah tertutup/historis →
+`totalPrabayarChangeTakenBeforeCheckout()` (`receipt_screen.dart`)
+kembalikan 0 utk kasus itu (helper baru `_hasLaterAddItemsRound`).
+Duplikat inline yg sama diperbaiki di `printer_service.dart`: builder
+struk tunggal (~line 980) & builder nota gabungan (~line 1422, per-tx
+scoped). `_buildPaymentTimeline`/Riwayat Pembayaran per-baris — TIDAK
+disentuh, tetap benar menampilkan histori tiap ronde apa adanya.
+`_latestPayment?.changeGiven` (kembalian ronde SAAT INI) — TIDAK disentuh,
+sudah benar & tidak bawa `prabayarChangeTakenBeforeCheckout` di baris
+Tambah Belanjaan mana pun (ronde ke-2, ke-3, dst — tidak perlu
+special-case tambahan).
+
+**Test baru**: `test/receipt_prabayar_change_taken_after_add_items_test.dart`
+(4 test: fungsi murni skenario bug persis + regresi tanpa Tambah
+Belanjaan, in-app Ringkasan atas, cetak ESC/POS struk tunggal). Revert-
+verified (3 skenario-bug gagal dgn nilai lama 105150/breakdown row yg
+seharusnya sudah tidak ada/`Rp 220,900` sblm fix — 1 test regresi tetap
+hijau krn memang tidak disentuh bug ini). Builder nota GABUNGAN diperbaiki
+di kode tapi TIDAK ada test baru menyentuhnya langsung — codebase belum
+punya `visibleForTesting` debug-hook utk builder gabungan (beda dari
+`debugBuildBytes` struk tunggal), sama seperti keterbatasan yg sudah
+dicatat di sesi sebelumnya. `flutter analyze` 0 issue. Full suite:
+**1601 test lulus, 0 gagal**.
+
+## Sesi sebelumnya — fix kembalian pre-checkout Pra-Bayar tidak terhitung di Ringkasan atas struk SELESAI
 
 **Bug dilaporkan user** (screenshot): Pra-Bayar dikunci, kembalian Rp200
 diambil SEBELUM checkout → Ringkasan atas struk in-app menampilkan

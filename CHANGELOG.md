@@ -7,6 +7,27 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-10 (sesi keempat puluh empat — fix kembalian pre-checkout Pra-Bayar TERUS terhitung stlh Tambah Belanjaan)
+
+- `785e75d` — fix(kasir): regresi commit `22ba425` — begitu ada ronde
+  "Tambah Belanjaan" (`note == 'Tambah belanjaan'`) SETELAH ronde checkout
+  ASLI Pra-Bayar, potongan `prabayarChangeTakenBeforeCheckout` ronde ASLI
+  (sudah tuntas/historis, sudah diberikan ke pelanggan) TIDAK BOLEH lagi
+  ikut disumbangkan ke ringkasan "Kembalian" ronde SAAT INI — sebelumnya
+  `totalPrabayarChangeTakenBeforeCheckout()` (`receipt_screen.dart`) &
+  duplikatnya di `printer_service.dart` (struk tunggal & gabungan)
+  menjumlah SEMUA baris tanpa syarat, sehingga kasir berpotensi
+  memberikan kembalian LEBIH (yang sebagian sudah diberikan di ronde
+  Pra-Bayar sebelumnya). Fix: tambah pengecekan
+  `_hasLaterAddItemsRound`/`hasLaterAddItemsRound` (ada baris payment
+  non-voided dgn `note == 'Tambah belanjaan'`) sebelum menjumlah — kalau
+  ada, kembalikan 0 utk komponen pre-checkout ronde asli. Riwayat
+  Pembayaran per-baris (`_buildPaymentTimeline`) TIDAK disentuh, tetap
+  benar menampilkan histori masing-masing ronde apa adanya. Test baru:
+  `test/receipt_prabayar_change_taken_after_add_items_test.dart` (4 test:
+  fungsi murni skenario bug + regresi, in-app Ringkasan atas, cetak
+  ESC/POS struk tunggal — semua revert-verified).
+
 ## 2026-09-09 (sesi keempat puluh tiga — fix kembalian pre-checkout Pra-Bayar tidak terhitung di ringkasan struk)
 
 - `22ba425` — fix(kasir): kembalian Pra-Bayar yang diambil SEBELUM
