@@ -31,13 +31,14 @@ class LaporanScreen extends ConsumerStatefulWidget {
 class _LaporanScreenState extends ConsumerState<LaporanScreen>
     with SingleTickerProviderStateMixin {
   // Item 49d — "Pengeluaran", lalu "Arus Kas", ditambah di PALING AKHIR
-  // (bukan disisipkan di tengah) supaya index tab 0-3 yg dipakai
-  // `ReportTab.values[index]` utk ekspor PDF/Excel tetap sama persis, tak
-  // perlu ubah pemetaan itu. Sama seperti "Hutang"/"Stok" (index 4/5),
-  // kedua tab ini TIDAK punya padanan `ReportTab` & tidak bisa diekspor
-  // (lihat _canExportCurrentTab).
+  // (bukan disisipkan di tengah) supaya index tab 0-3 yg SUDAH dipakai
+  // `ReportTab.values[index]` tetap sama persis, tak perlu ubah pemetaan
+  // lama. "Hutang"/"Stok"/"Pengeluaran"/"Arus Kas" (index 4-7) sekarang
+  // SEMUA punya padanan `ReportTab` juga (permintaan user: tambahkan
+  // ekspor PDF/Excel ke tab yang belum punya) — lihat `report_export.dart`.
   late final TabController _tabController =
       TabController(length: 8, vsync: this);
+  final _exportButtonKey = GlobalKey();
 
   @override
   void dispose() {
@@ -61,20 +62,11 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
             ),
             onPressed: () => _pickRange(context, range),
           ),
-          PopupMenuButton<String>(
+          IconButton(
+            key: _exportButtonKey,
             icon: const Icon(Icons.download_outlined),
             tooltip: 'Export tab ini',
-            onSelected: (v) => _export(range, v),
-            itemBuilder: (_) => [
-              PopupMenuItem(
-                value: 'pdf',
-                child: Text('Export PDF — ${_tabName(_tabController.index)}'),
-              ),
-              PopupMenuItem(
-                value: 'xlsx',
-                child: Text('Export Excel — ${_tabName(_tabController.index)}'),
-              ),
-            ],
+            onPressed: () => _showExportMenu(range),
           ),
         ],
         bottom: TabBar(
@@ -133,25 +125,54 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
         'Hutang',
         'Stok',
         'Pengeluaran',
+        'Arus Kas',
       ][i];
-
-  /// Tab Hutang (index 4), Stok (index 5, Item 30c) & Pengeluaran (index 6,
-  /// Item 49d) tidak punya padanan [ReportTab] & tidak diekspor — Stok
-  /// adalah snapshot "sekarang" (bukan data terikat rentang tanggal spt tab
-  /// lain); Pengeluaran sengaja ditahan dari ekspor (scope terpisah, lihat
-  /// PLAN.md Item 47 soal ekspor PDF/Excel pengeluaran).
-  bool get _canExportCurrentTab =>
-      _tabController.index < ReportTab.values.length;
 
   String _fmt(DateTime dt) =>
       '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}';
 
-  Future<void> _export(DateTimeRange range, String format) async {
-    if (!_canExportCurrentTab) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Tab Hutang tidak bisa diekspor.')));
-      return;
+  /// Dropdown ekspor custom (bukan `PopupMenuButton` bawaan) — 2 chip
+  /// PDF/Excel, tiap chip py 2 zona tap independen (badan chip = unduh ke
+  /// HP, ikon share = bagikan langsung tanpa nangkring lokal). `showMenu`
+  /// dgn `PopupMenuItem(enabled: false, ...)` supaya `InkWell` bawaan item
+  /// tidak ikut menelan tap — chip sendiri yang pop() dgn nilai
+  /// `(aksi, format)`, baru dieksekusi SETELAH menu tertutup.
+  Future<void> _showExportMenu(DateTimeRange range) async {
+    final box =
+        _exportButtonKey.currentContext!.findRenderObject() as RenderBox;
+    final overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox;
+    final position = RelativeRect.fromRect(
+      Rect.fromPoints(
+        box.localToGlobal(Offset.zero, ancestor: overlay),
+        box.localToGlobal(box.size.bottomRight(Offset.zero), ancestor: overlay),
+      ),
+      Offset.zero & overlay.size,
+    );
+
+    final result = await showMenu<(String action, String format)>(
+      context: context,
+      position: position,
+      color: Theme.of(context).colorScheme.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      items: [
+        PopupMenuItem<(String action, String format)>(
+          enabled: false,
+          padding: EdgeInsets.zero,
+          child: _ExportChipsPanel(tabName: _tabName(_tabController.index)),
+        ),
+      ],
+    );
+    if (result == null || !mounted) return;
+    final (action, format) = result;
+    if (action == 'share') {
+      await _share(range, format);
+    } else {
+      await _export(range, format);
     }
+  }
+
+  Future<void> _export(DateTimeRange range, String format) async {
     final device = ref.read(deviceProvider);
     final tab = ReportTab.values[_tabController.index];
     // Indikasi proses untuk ekspor yang melibatkan tangkapan grafik.
@@ -162,6 +183,25 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
         content: Text('Menyiapkan laporan ${_tabName(_tabController.index)}…'),
       ));
     await exportReport(
+      context: context,
+      ref: ref,
+      range: range,
+      tab: tab,
+      format: format,
+      storeName: device.storeName,
+    );
+  }
+
+  Future<void> _share(DateTimeRange range, String format) async {
+    final device = ref.read(deviceProvider);
+    final tab = ReportTab.values[_tabController.index];
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        duration: const Duration(seconds: 1),
+        content: Text('Menyiapkan laporan ${_tabName(_tabController.index)}…'),
+      ));
+    await shareReport(
       context: context,
       ref: ref,
       range: range,
@@ -186,5 +226,146 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
             picked.end.year, picked.end.month, picked.end.day, 23, 59, 59, 999),
       );
     }
+  }
+}
+
+/// Panel dropdown ekspor custom (permintaan user: "bukan default template
+/// flutter") — dua chip berdampingan (PDF badge merah, Excel badge hijau),
+/// masing-masing punya 2 zona tap terpisah lihat `_ExportFormatChip`.
+class _ExportChipsPanel extends StatelessWidget {
+  const _ExportChipsPanel({required this.tabName});
+  final String tabName;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.all(10),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            child: Text(
+              'Export $tabName',
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: scheme.onSurfaceVariant),
+            ),
+          ),
+          const SizedBox(height: 6),
+          const _ExportFormatChip(
+            format: 'pdf',
+            badgeColor: Color(0xFFDC3545),
+            icon: Icons.picture_as_pdf_rounded,
+            label: 'PDF',
+          ),
+          const SizedBox(height: 8),
+          const _ExportFormatChip(
+            format: 'xlsx',
+            badgeColor: Color(0xFF1D6F42),
+            icon: Icons.grid_on_rounded,
+            label: 'Excel',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Satu chip format ekspor (PDF ATAU Excel) dgn 2 zona tap independen:
+/// - Badan chip (badge + label) → unduh ke penyimpanan HP (`FilePicker.
+///   saveFile`, perilaku lama).
+/// - Ikon share (dipisah garis vertikal tipis) → bagikan langsung lewat
+///   share sheet OS, TANPA nangkring di penyimpanan lokal dulu.
+///
+/// Keduanya pop() menu dgn `(aksi, format)` — `LaporanScreen._showExportMenu`
+/// yang mengeksekusi aksi SETELAH menu tertutup, chip ini murni UI +
+/// pemilihan aksi (mudah diuji tanpa menyentuh plugin native sungguhan).
+class _ExportFormatChip extends StatelessWidget {
+  const _ExportFormatChip({
+    required this.format,
+    required this.badgeColor,
+    required this.icon,
+    required this.label,
+  });
+
+  final String format;
+  final Color badgeColor;
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: 230,
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Expanded(
+            child: InkWell(
+              borderRadius:
+                  const BorderRadius.horizontal(left: Radius.circular(12)),
+              onTap: () =>
+                  Navigator.of(context).pop(('download', format)),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 30,
+                      height: 30,
+                      decoration: BoxDecoration(
+                        color: badgeColor,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(icon, size: 17, color: Colors.white),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(label,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w700, fontSize: 13)),
+                          Text('Unduh ke HP',
+                              style: TextStyle(
+                                  fontSize: 10.5,
+                                  color: scheme.onSurfaceVariant)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Container(width: 1, height: 34, color: scheme.outlineVariant),
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius:
+                  const BorderRadius.horizontal(right: Radius.circular(12)),
+              onTap: () => Navigator.of(context).pop(('share', format)),
+              child: Padding(
+                padding: const EdgeInsets.all(10),
+                child: Icon(Icons.ios_share_rounded,
+                    size: 18, color: scheme.primary),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

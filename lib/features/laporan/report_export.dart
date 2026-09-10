@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -9,8 +10,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'package:share_plus/share_plus.dart';
 
 import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
@@ -19,10 +22,23 @@ import '../../core/utils/chart_utils.dart';
 
 // Ekspor laporan PER KATEGORI (tab). Setiap tab punya PDF & XLSX sendiri.
 // Grafik di PDF = tangkapan widget chart asli aplikasi (identik tampilannya).
-// Pengiriman lewat FilePicker.saveFile (bukan Printing.sharePdf) agar tidak
-// merasterisasi seluruh halaman → menghindari Out of Memory & gagal diam.
+// Dua jalur tujuan file: [exportReport] (simpan ke penyimpanan lewat
+// FilePicker.saveFile — bukan Printing.sharePdf agar tidak merasterisasi
+// seluruh halaman → menghindari Out of Memory & gagal diam) & [shareReport]
+// (langsung ke share sheet OS lewat file sementara, TANPA nangkring di
+// storage — dipicu dari ikon share di dropdown ekspor custom `laporan_
+// screen.dart`, pola sama `saveOrShareExport` di `export_destination.dart`).
 
-enum ReportTab { ringkasan, produk, pelanggan, transaksi }
+enum ReportTab {
+  ringkasan,
+  produk,
+  pelanggan,
+  transaksi,
+  hutang,
+  stok,
+  pengeluaran,
+  arusKas,
+}
 
 final _fmtRp =
     NumberFormat.currency(locale: 'id_ID', symbol: 'Rp', decimalDigits: 0);
@@ -34,10 +50,52 @@ String _tabLabel(ReportTab t) => switch (t) {
       ReportTab.produk => 'Produk',
       ReportTab.pelanggan => 'Pelanggan',
       ReportTab.transaksi => 'Transaksi',
+      ReportTab.hutang => 'Hutang',
+      ReportTab.stok => 'Stok',
+      ReportTab.pengeluaran => 'Pengeluaran',
+      ReportTab.arusKas => 'Arus Kas',
     };
+
+/// Hutang (buku hutang "sekarang") & Stok (snapshot nilai inventori
+/// "sekarang") TIDAK terikat rentang tanggal — beda dari tab lain yang
+/// laporan aktivitas dalam periode. Judul PDF kedua tab ini menampilkan
+/// "per [tanggal ekspor]", bukan rentang tanggal yang sedang dipilih user.
+bool _isSnapshotTab(ReportTab t) =>
+    t == ReportTab.hutang || t == ReportTab.stok;
 
 // ─── Orkestrator ekspor ────────────────────────────────────────────────────
 
+Future<Uint8List> _buildReportBytes(BuildContext context, AppDatabase db,
+    DateTimeRange range, ReportTab tab, String format, String storeName) {
+  return format == 'pdf'
+      ? _buildPdf(context, db, range, tab, storeName)
+      : _buildXlsx(db, range, tab);
+}
+
+/// Dipakai HANYA oleh test (`test/report_export_new_tabs_test.dart`) —
+/// jembatan tipis ke `_buildReportBytes` yang privat, supaya Tier 1 bisa
+/// membuktikan builder PDF/XLSX tiap tab jalan thd `AppDatabase` sungguhan
+/// TANPA menembus `FilePicker.saveFile`/`Share.shareXFiles` (plugin native
+/// tanpa mock method channel di codebase ini, lihat dok
+/// `backup_share_option_test.dart`).
+@visibleForTesting
+Future<Uint8List> buildReportBytesForTest({
+  required BuildContext context,
+  required AppDatabase db,
+  required DateTimeRange range,
+  required ReportTab tab,
+  required String format,
+  required String storeName,
+}) =>
+    _buildReportBytes(context, db, range, tab, format, storeName);
+
+String _reportFileName(ReportTab tab, DateTimeRange range, String ext) =>
+    'laporan_${_tabLabel(tab).toLowerCase().replaceAll(' ', '_')}_'
+    '${_fmtDateFile.format(range.start)}-${_fmtDateFile.format(range.end)}.$ext';
+
+/// Simpan laporan ke penyimpanan perangkat (`FilePicker.saveFile`) — perilaku
+/// lama, dipicu tekan BADAN chip PDF/Excel (bukan ikon share) di dropdown
+/// ekspor.
 Future<void> exportReport({
   required BuildContext context,
   required WidgetRef ref,
@@ -48,16 +106,11 @@ Future<void> exportReport({
 }) async {
   final db = ref.read(databaseProvider);
   try {
-    final Uint8List bytes;
-    if (format == 'pdf') {
-      bytes = await _buildPdf(context, db, range, tab, storeName);
-    } else {
-      bytes = await _buildXlsx(db, range, tab);
-    }
+    final bytes =
+        await _buildReportBytes(context, db, range, tab, format, storeName);
     if (!context.mounted) return;
     final ext = format == 'pdf' ? 'pdf' : 'xlsx';
-    final fname = 'laporan_${_tabLabel(tab).toLowerCase()}_'
-        '${_fmtDateFile.format(range.start)}-${_fmtDateFile.format(range.end)}.$ext';
+    final fname = _reportFileName(tab, range, ext);
     final path = await FilePicker.platform.saveFile(
       fileName: fname,
       bytes: bytes,
@@ -72,6 +125,46 @@ Future<void> exportReport({
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text('Gagal export: $e'),
+      backgroundColor: Theme.of(context).colorScheme.error,
+    ));
+  }
+}
+
+/// Bagikan laporan LANGSUNG lewat share sheet OS, TANPA nangkring di
+/// penyimpanan lokal dulu — dipicu tekan ikon share di chip PDF/Excel.
+/// Byte-building sama persis dgn [exportReport] (`_buildReportBytes`),
+/// cuma tujuan akhirnya beda: file sementara (dibersihkan `TempShareCleanup`
+/// spt file share lain di app ini) → `Share.shareXFiles`.
+Future<void> shareReport({
+  required BuildContext context,
+  required WidgetRef ref,
+  required DateTimeRange range,
+  required ReportTab tab,
+  required String format, // 'pdf' | 'xlsx'
+  required String storeName,
+}) async {
+  final db = ref.read(databaseProvider);
+  try {
+    final bytes =
+        await _buildReportBytes(context, db, range, tab, format, storeName);
+    if (!context.mounted) return;
+    final ext = format == 'pdf' ? 'pdf' : 'xlsx';
+    final fname = _reportFileName(tab, range, ext);
+    final dir = await getTemporaryDirectory();
+    final file = File(
+        '${dir.path}/laporan_${DateTime.now().millisecondsSinceEpoch}_$fname');
+    await file.writeAsBytes(bytes);
+    if (!context.mounted) return;
+    await Share.shareXFiles([XFile(file.path)],
+        text: 'Laporan ${_tabLabel(tab)}'
+            '${storeName.isEmpty ? '' : ' - $storeName'}');
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Laporan ${_tabLabel(tab)} ($ext) dibagikan')));
+  } catch (e) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('Gagal membagikan: $e'),
       backgroundColor: Theme.of(context).colorScheme.error,
     ));
   }
@@ -104,6 +197,8 @@ Future<Uint8List> _buildPdf(BuildContext context, AppDatabase db,
         ('Transaksi', '${d.txCount}'),
         ('HPP', _fmtRp.format(d.cogs)),
         ('Laba Kotor', _fmtRp.format(d.profit)),
+        ('Pengeluaran', _fmtRp.format(d.expenses)),
+        ('Laba Bersih', _fmtRp.format(d.netProfit)),
       ]));
       if (donut != null) {
         body.add(pw.SizedBox(height: 14));
@@ -247,6 +342,178 @@ Future<Uint8List> _buildPdf(BuildContext context, AppDatabase db,
         ],
         flex: const [2, 1.8, 2.4, 2, 1.6],
       ));
+
+    case ReportTab.hutang:
+      final debts = await db.getDebtBook();
+      final totalDebt = debts.fold<int>(0, (s, e) => s + e.debt);
+      const cap = 1000;
+      final capped = debts.length > cap ? debts.sublist(0, cap) : debts;
+      body.add(_pdfKpiGrid([
+        ('Total Hutang', _fmtRp.format(totalDebt)),
+        ('Pelanggan Berhutang', '${debts.length}'),
+      ]));
+      body.add(pw.SizedBox(height: 14));
+      body.add(_pdfSection('Buku Hutang (diurut paling lama menunggak)'));
+      body.add(pw.SizedBox(height: 4));
+      if (debts.length > cap) {
+        body.add(pw.Text(
+          'Menampilkan $cap pelanggan paling lama menunggak dari '
+          '${debts.length}.',
+          style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
+        ));
+        body.add(pw.SizedBox(height: 4));
+      }
+      body.add(_pdfTable(
+        ['Pelanggan', 'Menunggak', 'Nota', 'Jumlah Hutang'],
+        [
+          for (final e in capped)
+            [e.name, '${e.daysOverdue} hari', '${e.count}', _fmtRp.format(e.debt)]
+        ],
+        aligns: const [
+          pw.TextAlign.left,
+          pw.TextAlign.center,
+          pw.TextAlign.center,
+          pw.TextAlign.right,
+        ],
+        flex: const [3, 1.6, 1, 2],
+      ));
+
+    case ReportTab.stok:
+      final s = await _fetchStok(db);
+      body.add(_pdfKpiGrid([
+        ('Nilai Inventori', _fmtRp.format(s.grandTotal)),
+        ('Produk Tanpa Harga Pokok', '${s.missingCostCount}'),
+      ]));
+      body.add(pw.SizedBox(height: 14));
+      body.add(_pdfSection('Nilai per Kategori'));
+      body.add(pw.SizedBox(height: 4));
+      body.add(_pdfTable(
+        ['Kategori', 'Nilai'],
+        [for (final c in s.perCategory) [c.label, _fmtRp.format(c.value)]],
+        aligns: const [pw.TextAlign.left, pw.TextAlign.right],
+        flex: const [3, 2],
+      ));
+      if (s.negativeStock.isNotEmpty) {
+        body.add(pw.SizedBox(height: 14));
+        body.add(_pdfSection(
+            'Stok Negatif (${s.negativeStock.length}) - perlu ditinjau'));
+        body.add(pw.SizedBox(height: 4));
+        body.add(_pdfTable(
+          ['Produk', 'Stok'],
+          [for (final r in s.negativeStock) [r.name, _fmtQty(r.stock)]],
+          aligns: const [pw.TextAlign.left, pw.TextAlign.right],
+          flex: const [3, 1],
+        ));
+      }
+
+    case ReportTab.pengeluaran:
+      final byType = await db.getExpenseBreakdownByType(range.start, range.end);
+      final daily = await db.getExpenseDailyTotals(range.start, range.end);
+      final total = byType.values.fold(0, (s, v) => s + v);
+      final entries = byType.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+      body.add(_pdfKpiGrid([
+        ('Total Pengeluaran', _fmtRp.format(total)),
+      ]));
+      body.add(pw.SizedBox(height: 14));
+      body.add(_pdfSection('Rincian per Jenis'));
+      body.add(pw.SizedBox(height: 4));
+      body.add(_pdfTable(
+        ['Jenis', 'Porsi', 'Nominal'],
+        [
+          for (final e in entries)
+            [
+              _expenseTypeLabel(e.key),
+              total > 0 ? '${(e.value / total * 100).round()}%' : '0%',
+              _fmtRp.format(e.value),
+            ]
+        ],
+        aligns: const [
+          pw.TextAlign.left,
+          pw.TextAlign.center,
+          pw.TextAlign.right,
+        ],
+        flex: const [3, 1.4, 2],
+      ));
+      if (daily.isNotEmpty) {
+        final sortedDaily = daily.entries.toList()
+          ..sort((a, b) => a.key.compareTo(b.key));
+        body.add(pw.SizedBox(height: 14));
+        body.add(_pdfSection('Tren Harian'));
+        body.add(pw.SizedBox(height: 4));
+        body.add(_pdfTable(
+          ['Tanggal', 'Nominal'],
+          [
+            for (final e in sortedDaily)
+              [_fmtDate.format(e.key), _fmtRp.format(e.value)]
+          ],
+          aligns: const [pw.TextAlign.left, pw.TextAlign.right],
+          flex: const [2, 2],
+        ));
+      }
+
+    case ReportTab.arusKas:
+      final summary = await db.getCashFlowSummary(range.start, range.end);
+      final daily = await db.getCashFlowDaily(range.start, range.end);
+      final totalIn = summary.cashIn + summary.nonCashIn;
+      final net = totalIn - summary.cashOut;
+      body.add(_pdfKpiGrid([
+        ('Kas Masuk', _fmtRp.format(totalIn)),
+        ('Kas Keluar', _fmtRp.format(summary.cashOut)),
+        ('Arus Kas Bersih', _fmtRp.format(net)),
+      ]));
+      body.add(pw.SizedBox(height: 14));
+      body.add(_pdfSection('Rincian Kas Masuk'));
+      body.add(pw.SizedBox(height: 4));
+      final inEntries = summary.inByMethod.entries
+          .where((e) => e.key != 'tempo')
+          .toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+      body.add(_pdfTable(
+        ['Metode', 'Nominal'],
+        [
+          for (final e in inEntries)
+            [_cashMethodLabel(e.key), _fmtRp.format(e.value)]
+        ],
+        aligns: const [pw.TextAlign.left, pw.TextAlign.right],
+        flex: const [3, 2],
+      ));
+      body.add(pw.SizedBox(height: 14));
+      body.add(_pdfSection('Rincian Kas Keluar'));
+      body.add(pw.SizedBox(height: 4));
+      final outEntries = summary.outByType.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+      body.add(_pdfTable(
+        ['Jenis', 'Nominal'],
+        [
+          for (final e in outEntries)
+            [_expenseTypeLabel(e.key), _fmtRp.format(e.value)]
+        ],
+        aligns: const [pw.TextAlign.left, pw.TextAlign.right],
+        flex: const [3, 2],
+      ));
+      if (daily.isNotEmpty) {
+        body.add(pw.SizedBox(height: 14));
+        body.add(_pdfSection('Tren Harian'));
+        body.add(pw.SizedBox(height: 4));
+        body.add(_pdfTable(
+          ['Tanggal', 'Masuk', 'Keluar'],
+          [
+            for (final d in daily)
+              [
+                _fmtDate.format(d.date),
+                _fmtRp.format(d.cashIn),
+                _fmtRp.format(d.cashOut),
+              ]
+          ],
+          aligns: const [
+            pw.TextAlign.left,
+            pw.TextAlign.right,
+            pw.TextAlign.right,
+          ],
+          flex: const [2, 2, 2],
+        ));
+      }
   }
 
   doc.addPage(pw.MultiPage(
@@ -270,8 +537,12 @@ Future<Uint8List> _buildPdf(BuildContext context, AppDatabase db,
                 style: pw.TextStyle(
                     fontSize: 18, fontWeight: pw.FontWeight.bold)),
             pw.Text(
-              'Laporan ${_tabLabel(tab)} - ${_fmtDate.format(range.start)} s/d '
-              '${_fmtDate.format(range.end)}',
+              _isSnapshotTab(tab)
+                  ? 'Laporan ${_tabLabel(tab)} - per '
+                      '${_fmtDate.format(DateTime.now())}'
+                  : 'Laporan ${_tabLabel(tab)} - '
+                      '${_fmtDate.format(range.start)} s/d '
+                      '${_fmtDate.format(range.end)}',
               style: const pw.TextStyle(fontSize: 11),
             ),
           ],
@@ -302,6 +573,10 @@ Future<Uint8List> _buildXlsx(
           [TextCellValue('Jumlah Transaksi'), IntCellValue(d.txCount)]);
       sheet.appendRow([TextCellValue('HPP'), IntCellValue(d.cogs)]);
       sheet.appendRow([TextCellValue('Laba Kotor'), IntCellValue(d.profit)]);
+      sheet.appendRow(
+          [TextCellValue('Pengeluaran'), IntCellValue(d.expenses)]);
+      sheet.appendRow(
+          [TextCellValue('Laba Bersih'), IntCellValue(d.netProfit)]);
       sheet.appendRow([TextCellValue('')]);
       sheet.appendRow([
         TextCellValue('Metode Pembayaran'),
@@ -367,6 +642,100 @@ Future<Uint8List> _buildXlsx(
           IntCellValue(t.total),
           IntCellValue(t.paid),
           TextCellValue(_statusLabel(t.status)),
+        ]);
+      }
+
+    case ReportTab.hutang:
+      final debts = await db.getDebtBook();
+      sheet.appendRow([
+        TextCellValue('Pelanggan'),
+        TextCellValue('Menunggak (hari)'),
+        TextCellValue('Jumlah Nota'),
+        TextCellValue('Jumlah Hutang'),
+      ]);
+      const cap = 5000;
+      for (final e in debts.take(cap)) {
+        sheet.appendRow([
+          TextCellValue(e.name),
+          IntCellValue(e.daysOverdue),
+          IntCellValue(e.count),
+          IntCellValue(e.debt),
+        ]);
+      }
+
+    case ReportTab.stok:
+      final s = await _fetchStok(db);
+      sheet.appendRow([TextCellValue('Kategori'), TextCellValue('Nilai')]);
+      for (final c in s.perCategory) {
+        sheet.appendRow([TextCellValue(c.label), IntCellValue(c.value)]);
+      }
+      sheet.appendRow([TextCellValue('')]);
+      sheet.appendRow([TextCellValue('Total'), IntCellValue(s.grandTotal)]);
+      if (s.negativeStock.isNotEmpty) {
+        sheet.appendRow([TextCellValue('')]);
+        sheet.appendRow(
+            [TextCellValue('Stok Negatif'), TextCellValue('Stok')]);
+        for (final r in s.negativeStock) {
+          sheet.appendRow([TextCellValue(r.name), DoubleCellValue(r.stock)]);
+        }
+      }
+
+    case ReportTab.pengeluaran:
+      final byType = await db.getExpenseBreakdownByType(range.start, range.end);
+      final daily = await db.getExpenseDailyTotals(range.start, range.end);
+      sheet.appendRow([TextCellValue('Jenis'), TextCellValue('Nominal')]);
+      for (final e in byType.entries) {
+        sheet.appendRow(
+            [TextCellValue(_expenseTypeLabel(e.key)), IntCellValue(e.value)]);
+      }
+      sheet.appendRow([TextCellValue('')]);
+      sheet.appendRow([TextCellValue('Tanggal'), TextCellValue('Nominal')]);
+      for (final e in daily.entries.toList()
+        ..sort((a, b) => a.key.compareTo(b.key))) {
+        sheet.appendRow(
+            [TextCellValue(_fmtDate.format(e.key)), IntCellValue(e.value)]);
+      }
+
+    case ReportTab.arusKas:
+      final summary = await db.getCashFlowSummary(range.start, range.end);
+      final daily = await db.getCashFlowDaily(range.start, range.end);
+      sheet.appendRow([TextCellValue('Metrik'), TextCellValue('Nilai')]);
+      sheet.appendRow([
+        TextCellValue('Kas Masuk'),
+        IntCellValue(summary.cashIn + summary.nonCashIn),
+      ]);
+      sheet.appendRow(
+          [TextCellValue('Kas Keluar'), IntCellValue(summary.cashOut)]);
+      sheet.appendRow([
+        TextCellValue('Arus Kas Bersih'),
+        IntCellValue(
+            summary.cashIn + summary.nonCashIn - summary.cashOut),
+      ]);
+      sheet.appendRow([TextCellValue('')]);
+      sheet.appendRow(
+          [TextCellValue('Rincian Kas Masuk'), TextCellValue('')]);
+      for (final e in summary.inByMethod.entries) {
+        sheet.appendRow(
+            [TextCellValue(_cashMethodLabel(e.key)), IntCellValue(e.value)]);
+      }
+      sheet.appendRow([TextCellValue('')]);
+      sheet.appendRow(
+          [TextCellValue('Rincian Kas Keluar'), TextCellValue('')]);
+      for (final e in summary.outByType.entries) {
+        sheet.appendRow(
+            [TextCellValue(_expenseTypeLabel(e.key)), IntCellValue(e.value)]);
+      }
+      sheet.appendRow([TextCellValue('')]);
+      sheet.appendRow([
+        TextCellValue('Tanggal'),
+        TextCellValue('Masuk'),
+        TextCellValue('Keluar'),
+      ]);
+      for (final d in daily) {
+        sheet.appendRow([
+          TextCellValue(_fmtDate.format(d.date)),
+          IntCellValue(d.cashIn),
+          IntCellValue(d.cashOut),
         ]);
       }
   }
@@ -514,11 +883,23 @@ pw.Widget _pdfTable(
 
 class _RingkasanData {
   _RingkasanData(this.revenue, this.cogs, this.txCount, this.profit,
-      this.byMethod, this.daily);
+      this.expenses, this.netProfit, this.byMethod, this.daily);
   final int revenue;
   final int cogs;
   final int txCount;
+  /// Laba KOTOR (revenue - cogs) — BUKAN laba bersih, lihat [netProfit].
   final int profit;
+
+  /// Item 47 (PLAN.md) — total pengeluaran P&L (subset
+  /// `AppDatabase.netProfitExpenseTypes`), SAMA PERSIS sumbernya dgn kartu
+  /// "Pengeluaran" di `ringkasan_tab.dart` (`getNetProfitExpenseTotal`).
+  /// Sebelum ini, ekspor Ringkasan TIDAK PERNAH menyertakan field ini sama
+  /// sekali (beda dari tampilan on-screen yg sudah benar) — grid KPI PDF &
+  /// baris Excel cuma Omzet/Transaksi/HPP/Laba Kotor.
+  final int expenses;
+
+  /// Laba Bersih = Laba Kotor - [expenses], konsisten dgn on-screen.
+  final int netProfit;
   final Map<String, int> byMethod;
   final Map<DateTime, int> daily;
 }
@@ -551,8 +932,10 @@ Future<_RingkasanData> _fetchRingkasan(
     final parts = s.date.split('-').map(int.parse).toList();
     daily[DateTime(parts[0], parts[1], parts[2])] = s.omzet;
   }
-  return _RingkasanData(
-      revenue, cogs, txCount, revenue - cogs, byMethod, daily);
+  final profit = revenue - cogs;
+  final expenses = await db.getNetProfitExpenseTotal(range.start, range.end);
+  return _RingkasanData(revenue, cogs, txCount, profit, expenses,
+      profit - expenses, byMethod, daily);
 }
 
 /// Top 5 slice + sisa sebagai "Lainnya".
@@ -588,6 +971,88 @@ String _methodLabel(String m) => switch (m) {
       'lainnya' => 'Lainnya',
       _ => m,
     };
+
+// Label kategori pengeluaran (enum `Expenses.type`) — DUPLIKAT sengaja dari
+// `_expenseTypeLabels`/`pengaturan/expenses_screen.dart` (pola sama dgn
+// `_methodLabel` di atas, yang juga terduplikasi antar-file utk kebutuhan
+// map label kecil serupa).
+const _expenseTypeLabels = {
+  'daily_expense': 'Operasional',
+  'owner_withdrawal': 'Ambil Pribadi (Owner)',
+  'supplier_payment': 'Bayar Supplier',
+  'change_given': 'Uang Keluar Laci',
+};
+
+String _expenseTypeLabel(String t) => _expenseTypeLabels[t] ?? t;
+
+// Label metode arus kas — kunci di sini nilai MENTAH kolom
+// `transaction_payments.method` ('bank', bukan 'transfer'), beda dari
+// `_methodLabel` di atas (dipakai tab Ringkasan) — lihat dok `_methodLabels`
+// di `arus_kas_tab.dart` soal kenapa keduanya sengaja berbeda.
+const _cashMethodLabels = {
+  'tunai': 'Tunai',
+  'bank': 'Transfer',
+  'qris': 'QRIS',
+  'ewallet': 'E-Wallet',
+  'retur': 'Retur (kembalian)',
+  'edit': 'Koreksi item (kembalian)',
+};
+
+String _cashMethodLabel(String m) => _cashMethodLabels[m] ?? m;
+
+/// Satu baris nilai per-kategori tab Stok — DUPLIKAT ringan dari
+/// `_CategoryValue` privat di `stok_tab.dart` (tak bisa diimpor lintas file
+/// krn privat, dan tab itu sendiri tak perlu tahu soal ekspor).
+class _StokCategoryValue {
+  _StokCategoryValue(this.label);
+  final String label;
+  int value = 0;
+}
+
+/// Replikasi agregasi `_stokTabProvider` (`stok_tab.dart`) dari baris mentah
+/// `getInventoryRows()` — snapshot nilai inventori SEKARANG, bukan aktivitas
+/// dalam rentang tanggal (lihat `_isSnapshotTab`).
+Future<
+    ({
+      List<_StokCategoryValue> perCategory,
+      int grandTotal,
+      int missingCostCount,
+      List<InventoryRow> negativeStock,
+    })> _fetchStok(AppDatabase db) async {
+  final rows = await db.getInventoryRows();
+  final groups = await db.getAllProductGroups();
+  final groupNameById = {
+    for (final g in groups)
+      if (g.name != null) g.id: g.name!,
+  };
+
+  final perCategory = <int?, _StokCategoryValue>{};
+  var grandTotal = 0;
+  var missingCostCount = 0;
+  final negativeStock = <InventoryRow>[];
+
+  for (final r in rows) {
+    final value = (r.stock * r.costPrice).round();
+    grandTotal += value;
+    if (r.costPrice <= 0) missingCostCount++;
+    if (r.stock < 0) negativeStock.add(r);
+
+    final label = groupNameById[r.groupId] ?? 'Tanpa Kategori';
+    perCategory.putIfAbsent(r.groupId, () => _StokCategoryValue(label)).value +=
+        value;
+  }
+
+  final categoryList = perCategory.values.toList()
+    ..sort((a, b) => b.value.compareTo(a.value));
+  negativeStock.sort((a, b) => a.stock.compareTo(b.stock));
+
+  return (
+    perCategory: categoryList,
+    grandTotal: grandTotal,
+    missingCostCount: missingCostCount,
+    negativeStock: negativeStock,
+  );
+}
 
 Color _methodColor(String m, ColorScheme scheme) => switch (m) {
       'tunai' => scheme.primary,

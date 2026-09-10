@@ -48,10 +48,13 @@ B.1/C.2/P3 masih menggantung. **Item 42/43/44/45/46 SELESAI & di-commit**
 stepper angka qty berpindah sisi +/- (43), qty di kiri item keranjang
 (44), fix 2 satuan dasar aktif sekaligus (45), banner stok menipis di
 kasir pasca-checkout (46) — semua dgn test + revert-verify, lihat
-CHANGELOG. **Item 47/48 BELUM dieksekusi** (user bilang "sisanya
-biarkan"): Item 47 = pengeluaran tidak ikut ekspor PDF/Excel Laporan
-(root cause + fix jelas); Item 48 = warna avatar produk kasir jadi
-soft/pastel (root cause + fix jelas). **Item 3c/4/5 (migrasi data Griyo)
+CHANGELOG. **Item 47 SELESAI & di-commit** (10 September 2026, sekalian
+saat menambahkan ekspor PDF/Excel Hutang/Stok/Pengeluaran/Arus Kas):
+grid KPI PDF & baris Excel tab Ringkasan sekarang ikut "Pengeluaran" +
+"Laba Bersih" (`getNetProfitExpenseTotal`), konsisten dgn on-screen
+`ringkasan_tab.dart`. **Item 48 BELUM dieksekusi** (user bilang "sisanya
+biarkan"): warna avatar produk kasir jadi soft/pastel (root cause + fix
+jelas). **Item 3c/4/5 (migrasi data Griyo)
 DICORET user** (18 Juli, "coret: 4, 3c, 5") — dihapus dari plan.
 **Item 54 baru ditambahkan** (2 September 2026): opsi upgrade
 arsitektur masa depan (sync LAN otomatis + akses owner dari luar
@@ -59,32 +62,6 @@ toko) — murni didiskusikan, user pilih tetap sync manual utk
 sekarang, TIDAK ada rencana eksekusi._
 
 ---
-
-## Item 47 — Pengeluaran tidak ikut ke ekspor laporan PDF/Excel (18 Juli, BELUM dieksekusi — user setuju, siap eksekusi)
-
-**Root cause dikonfirmasi**: `report_export.dart` (ekspor PDF/Excel tab
-Ringkasan Laporan) TIDAK PERNAH memanggil `getNetProfitExpenseTotal()` —
-`_fetchRingkasan()` (~baris 526-553) cuma pakai `getDailySummaries()`
-(revenue/cogs/txCount/metode bayar/harian), `d.profit` di situ murni
-**Laba Kotor** (revenue−cogs). Grid KPI PDF (~baris 102-107) & baris
-Excel (~baris 304) cuma berisi Omzet/Transaksi/HPP/Laba Kotor — TIDAK
-ADA "Pengeluaran" maupun "Laba Bersih" sama sekali. Bandingkan dgn
-`ringkasan_tab.dart` (tampilan ON-SCREEN Laporan → Ringkasan) yang
-SUDAH benar: baris 16 manggil `getNetProfitExpenseTotal()`, baris 94
-render kartu "Pengeluaran". Jadi yang tampil di layar vs yang keluar di
-file ekspor **tidak konsisten** — bukan placeholder kosong, memang belum
-pernah diprogram di file exportnya sama sekali.
-
-**Fix (disetujui, siap eksekusi)**: tambahkan pemanggilan
-`db.getNetProfitExpenseTotal(range.start, range.end)` di
-`_fetchRingkasan()` (`report_export.dart`), alirkan field `expenses`
-(dan hitung `netProfit = profit - expenses` bila mau tambahkan "Laba
-Bersih" jg, konsisten dgn on-screen yg py keduanya) lewat
-`_RingkasanData`, tambahkan baris "Pengeluaran" (+ "Laba Bersih" bila
-disepakati) ke grid KPI PDF (~baris 102-107) dan baris Excel (~baris
-304). Test: bandingkan output `_fetchRingkasan()` vs data on-screen
-`ringkasan_tab.dart` utk skenario yg sama (ada expense `daily_expense`+
-`change_given`) — pastikan angka Pengeluaran identik antara keduanya.
 
 ## Item 48 — Kotak warna avatar produk di kasir dibuat soft/pastel (18 Juli, BELUM dieksekusi — user setuju, siap eksekusi)
 
