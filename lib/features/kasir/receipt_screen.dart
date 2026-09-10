@@ -118,10 +118,28 @@ int latestChangeGiven(List<TransactionPayment> payments) {
 /// diambil (checkbox pre-checkout sudah ditekan kasir sebelum layar struk
 /// ada) — beda dari [latestChangeGiven] yang BISA di-toggle "sudah
 /// diambil"-nya di layar ini.
+///
+/// Bug dilaporkan user: "ketika kembalian dari pre-paid sudah diambil,
+/// kemudian paid, dan ternyata tambah barang dan ada kembalian, total
+/// kembalian dihitung bahkan dari fase pre-paid (yang tentu uang itu sudah
+/// di pelanggan)." Begitu ada ronde Tambah Belanjaan berikutnya (ditandai
+/// [_hasLaterAddItemsRound]), potongan pre-checkout ronde ASLI sudah
+/// tuntas/historis (sudah diberikan ke pelanggan & sudah benar tampil di
+/// baris Riwayat Pembayaran-nya sendiri) — TIDAK boleh lagi ditambahkan ke
+/// ringkasan kembalian SAAT INI.
 int totalPrabayarChangeTakenBeforeCheckout(List<TransactionPayment> payments) {
+  if (_hasLaterAddItemsRound(payments)) return 0;
   return payments
       .where((p) => !p.voided)
       .fold<int>(0, (s, p) => s + (p.prabayarChangeTakenBeforeCheckout ?? 0));
+}
+
+/// True bila transaksi ini pernah melalui minimal satu ronde "Tambah
+/// Belanjaan" (`_confirmAddItems` di payment_screen.dart, ditandai
+/// `note == 'Tambah belanjaan'` pada baris pembayarannya) — artinya ronde
+/// checkout ASLI (dan potongan Pra-Bayar-nya) sudah TERTUTUP/historis.
+bool _hasLaterAddItemsRound(List<TransactionPayment> payments) {
+  return payments.any((p) => !p.voided && p.note == 'Tambah belanjaan');
 }
 
 /// Dibayar utk ringkasan SAAT [kembalian] > 0 (baris Kembalian ditampilkan)

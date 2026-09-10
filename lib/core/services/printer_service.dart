@@ -977,9 +977,22 @@ class PrinterService {
       // momen checkout) krn tiap baris Pra-Bayar potensial py potongan
       // sendiri-sendiri. Lihat `totalPrabayarChangeTakenBeforeCheckout` /
       // `_kembalianGabungan` di receipt_screen.dart utk fix analog.
-      final totalPrabayarChangeTaken = payments
-          .where((p) => !p.voided)
-          .fold<int>(0, (s, p) => s + (p.prabayarChangeTakenBeforeCheckout ?? 0));
+      //
+      // Bug lanjutan dilaporkan user: begitu ada ronde "Tambah Belanjaan"
+      // (`note == 'Tambah belanjaan'`) SETELAH ronde checkout asli, ronde
+      // asli (& potongan pre-checkout-nya) sudah TUNTAS/historis — sudah
+      // diberikan ke pelanggan & sudah benar tampil di baris Riwayat
+      // Pembayaran-nya sendiri. Jangan ikut dijumlahkan lagi ke ringkasan
+      // SAAT INI. Fix analog di `totalPrabayarChangeTakenBeforeCheckout`
+      // (receipt_screen.dart).
+      final hasLaterAddItemsRound =
+          payments.any((p) => !p.voided && p.note == 'Tambah belanjaan');
+      final totalPrabayarChangeTaken = hasLaterAddItemsRound
+          ? 0
+          : payments
+              .where((p) => !p.voided)
+              .fold<int>(
+                  0, (s, p) => s + (p.prabayarChangeTakenBeforeCheckout ?? 0));
       final kembalianGabungan =
           (latestWithChange?.changeGiven ?? 0) + totalPrabayarChangeTaken;
       // "Bayar" HARUS Total + Kembalian (bukan netPaid mentah) saat ada
@@ -1419,6 +1432,13 @@ class PrinterService {
     // & Ringkasan on-screen (`_kembalianGabungan` di receipt_screen.dart):
     // kembalian pre-checkout Pra-Bayar (`prabayarChangeTakenBeforeCheckout`)
     // SUM dari SEMUA nota dalam gabungan ini, TIDAK boleh diabaikan.
+    //
+    // Bug lanjutan dilaporkan user: per-nota, kalau nota itu SUDAH punya
+    // ronde "Tambah Belanjaan" (`note == 'Tambah belanjaan'`) setelah ronde
+    // checkout asli, ronde asli (& potongan pre-checkout-nya) sudah
+    // TUNTAS/historis — jangan ikut disumbangkan ke `grandPrabayarChangeTaken`.
+    // Fix analog di `totalPrabayarChangeTakenBeforeCheckout`
+    // (receipt_screen.dart).
     var grandPrabayarChangeTaken = 0;
     for (final tx in txs) {
       grandTotal += tx.total;
@@ -1426,9 +1446,14 @@ class PrinterService {
       final sumChangeGiven = pays
           .where((p) => !p.voided)
           .fold<int>(0, (s, p) => s + p.changeGiven);
-      grandPrabayarChangeTaken += pays
-          .where((p) => !p.voided)
-          .fold<int>(0, (s, p) => s + (p.prabayarChangeTakenBeforeCheckout ?? 0));
+      final txHasLaterAddItemsRound =
+          pays.any((p) => !p.voided && p.note == 'Tambah belanjaan');
+      if (!txHasLaterAddItemsRound) {
+        grandPrabayarChangeTaken += pays
+            .where((p) => !p.voided)
+            .fold<int>(
+                0, (s, p) => s + (p.prabayarChangeTakenBeforeCheckout ?? 0));
+      }
       // NET (dikurangi kembalian yg dipakai ulang sbg pembayaran) — bukan
       // `tx.paid` mentah, sama akar masalah dgn Item 23 di struk tunggal.
       final rawNetPaid = tx.paid - sumChangeGiven;
