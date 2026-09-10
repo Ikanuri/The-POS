@@ -7,6 +7,54 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-10 (sesi keempat puluh enam — ekspor PDF/Excel Hutang/Stok/Pengeluaran/Arus Kas + dropdown unduh laporan didesain ulang)
+
+- `fa8487e` — feat(laporan): `ReportTab` diperluas 4→8 (`hutang`, `stok`,
+  `pengeluaran`, `arusKas`) — 4 tab yang sebelumnya TIDAK bisa ekspor
+  sekarang punya builder PDF & XLSX sendiri di `report_export.dart`
+  (pola sama tab lama): Hutang (buku hutang diurut paling lama menunggak
+  + total, dibatasi 1000 baris PDF/5000 XLSX), Stok (snapshot nilai
+  inventori SEKARANG — bukan terikat rentang tanggal, judul PDF pakai
+  "per [tanggal ekspor]", termasuk daftar stok negatif & jumlah produk
+  tanpa harga pokok), Pengeluaran (total + rincian per jenis + tren
+  harian), Arus Kas (kas masuk/keluar/bersih + rincian per metode/jenis +
+  tren harian). `laporan_screen.dart`: `_canExportCurrentTab` & snackbar
+  penolakan "Tab Hutang tidak bisa diekspor" dihapus (semua 8 tab bisa
+  ekspor), `_tabName` dilengkapi ke-8 nama.
+- (commit sama) Dropdown unduh diganti dari `PopupMenuButton` teks polos
+  jadi custom chip (`showMenu` + `PopupMenuItem(enabled: false)` + row
+  custom dgn 2 `InkWell` independen): chip PDF (badge merah + ikon
+  `picture_as_pdf_rounded`) & chip Excel (badge hijau + ikon
+  `grid_on_rounded`), tiap chip py ikon share (`ios_share_rounded`)
+  terpisah di ujung kanan (dipisah garis vertikal tipis). Tap badan chip
+  = unduh ke HP (`FilePicker.saveFile`, perilaku lama via `exportReport`),
+  tap ikon share = bagikan langsung (`Share.shareXFiles` via file
+  sementara, TANPA nangkring ke storage lokal dulu, tanpa dialog
+  tambahan) via `shareReport()` baru. `exportReport()` dipecah: byte
+  building diekstrak ke `_buildReportBytes` dipakai bersama kedua jalur.
+- (commit sama) PLAN.md Item 47 sekalian dieksekusi (user sudah setuju
+  sebelumnya) & dihapus dari PLAN.md — ekspor tab Ringkasan (PDF & XLSX)
+  sebelumnya TIDAK PERNAH menyertakan "Pengeluaran"/"Laba Bersih"
+  (`getNetProfitExpenseTotal`), padahal tampilan on-screen
+  `ringkasan_tab.dart` sudah punya keduanya — sekarang konsisten.
+- (commit sama) Test baru: `test/report_export_new_tabs_test.dart` (Tier 1
+  — `AppDatabase(NativeDatabase.memory())` sungguhan, 4 tab baru +
+  kasus Item 47 Ringkasan, verifikasi byte PDF valid magic `%PDF` & XLSX
+  valid round-trip `Excel.decodeBytes`, angka numerik benar, semua
+  revert-verified — fix di-revert sementara, test terbukti gagal dgn
+  pesan masuk akal, lalu dikembalikan). `test/laporan_export_chip_
+  dropdown_test.dart` (Tier 2 widget test — dropdown custom tampil dgn
+  ikon format+share terpisah bukan `PopupMenuButton` teks polos lama, tap
+  badan chip vs ikon share memicu jalur kode BEDA — dibuktikan lewat
+  pesan error berbeda `FilePicker.saveFile` vs `Share.shareXFiles`/
+  `path_provider` yang tak diimplementasikan di lingkungan test,
+  revert-verified. TIDAK menunggu sampai tuntas hasil `Share.shareXFiles`
+  sungguhan — plugin native itu tak pernah resolve di lingkungan test ini
+  tanpa mock channel, pola sama `backup_share_option_test.dart`).
+- `<hash-docs>` — docs: catat hash commit `fa8487e` & bump versi
+  2.56.0+118 utk ekspor Hutang/Stok/Pengeluaran/Arus Kas + redesain
+  dropdown unduh laporan
+
 ## 2026-09-10 (sesi keempat puluh lima — ekspor CSV produk bisa dibagikan langsung)
 
 - `ae88a33` — feat(pengaturan): ekspor CSV produk (`_exportProductsCsv`,

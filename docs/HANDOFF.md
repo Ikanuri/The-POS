@@ -6,16 +6,76 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 10 September 2026 (sesi keempat puluh lima — ekspor CSV
-produk bisa dibagikan langsung, permintaan user "Buat ekspor csv produk
-bisa share juga (sama seperti file backup)"). Versi kerja **2.55.0+117**
-(MINOR — fitur baru terlihat pengguna). schemaVersion **43** (tidak
-berubah). CATATAN: sesi ini berjalan PARALEL dgn agen lain yang
-mengerjakan 2 task terpisah di `lib/features/laporan/`/`report_export.dart`
-pada branch yang sama — kalau ada perubahan HANDOFF ini yang belum
-tersinkron dari sesi itu, gabungkan (jangan timpa) saat baca ulang._
+_Update sesi 10 September 2026 (sesi keempat puluh enam — ekspor PDF/Excel
+Hutang/Stok/Pengeluaran/Arus Kas + dropdown unduh laporan didesain ulang
+jadi chip+share, PLAN.md Item 47 sekalian dieksekusi). Versi kerja
+**2.56.0+118** (MINOR — fitur baru terlihat pengguna, dibangun di atas
+2.55.0+117 sesi CSV-share paralel sebelumnya). schemaVersion **43** (tidak
+berubah). CATATAN: sesi ini berjalan PARALEL dgn agen lain yang mengerjakan
+ekspor CSV produk bisa dibagikan (`pengaturan_screen.dart`) pada branch
+yang sama — SUDAH digabung lewat `git rebase` bersih (tanpa konflik),
+kedua fitur sekarang hidup berdampingan. Kalau HANDOFF ini dibaca ulang &
+ada perubahan dari sesi lain yang belum tersinkron, gabungkan (jangan
+timpa)._
 
-## Sesi ini — ekspor CSV produk bisa dibagikan langsung SELESAI
+## Sesi ini — ekspor PDF/Excel Hutang/Stok/Pengeluaran/Arus Kas + redesain dropdown unduh SELESAI
+
+Permintaan user (persis, 2 hal terpisah tapi dikerjakan sekaligus):
+1. "Ada beberapa tab di laporan yang masih belum ada ekspor pdf dan .xlsx
+   nya. Tambahkan hal tersebut sesuai logika kategori laporan
+   masing-masing." — 4 tab (Hutang/Stok/Pengeluaran/Arus Kas, index 4-7)
+   sebelumnya digerbangi `_canExportCurrentTab` (index < 4). Sekarang
+   `ReportTab` diperluas 4→8, tiap tab dapat builder PDF+XLSX sendiri di
+   `report_export.dart` (pola persis tab lama). Hutang & Stok = snapshot
+   "sekarang" (bukan terikat rentang tanggal, SAMA spt kartu on-screen-nya
+   sendiri sudah dokumentasikan) — judul PDF pakai "per [tanggal ekspor]"
+   bukan rentang, `range` param tetap ada di signature (tak dipakai tab
+   ini, orkestrator `exportReport`/`shareReport` tidak direstrukturisasi).
+   Hutang dibatasi 1000 baris PDF/5000 XLSX (Stok/Pengeluaran/Arus Kas tak
+   perlu cap — agregat kecil).
+2. "Redesign tombol dropdown untuk download ringkasan pdf dan excel...
+   Berikan icon juga... icon share juga untuk tiap-tiap chip... jika tekan
+   biasa di badan chip, itu akan download ke internal, jika tekan share,
+   maka langsung share." — `PopupMenuButton` teks polos lama diganti
+   custom (`showMenu` + `PopupMenuItem(enabled:false)` + row 2 `InkWell`
+   independen): chip PDF (badge merah `picture_as_pdf_rounded`) & chip
+   Excel (badge hijau `grid_on_rounded`), tiap chip py ikon share
+   (`ios_share_rounded`) terpisah di ujung (garis vertikal tipis
+   memisahkan). Tap badan = unduh (`FilePicker.saveFile`, jalur lama, via
+   `exportReport()`). Tap ikon share = `shareReport()` BARU — tulis ke
+   temp file lalu `Share.shareXFiles`, TANPA singgah ke storage lokal,
+   TANPA dialog tambahan (beda dari `saveOrShareExport` yg dipakai backup/
+   CSV — di sini pemilihannya sudah lewat 2 zona tap terpisah, bukan
+   dialog). `_buildReportBytes` diekstrak supaya kedua jalur pakai builder
+   yg sama persis.
+
+**Sekalian**: PLAN.md Item 47 (disetujui user sebelumnya, "siap eksekusi")
+dieksekusi & dihapus dari PLAN.md — ekspor Ringkasan (PDF+XLSX) sebelumnya
+TIDAK PERNAH menyertakan "Pengeluaran"/"Laba Bersih" (beda dari tampilan
+on-screen `ringkasan_tab.dart` yg sudah py keduanya). `_RingkasanData`/
+`_fetchRingkasan` sekarang alirkan `getNetProfitExpenseTotal()`.
+
+**Test baru**: `test/report_export_new_tabs_test.dart` (Tier 1 —
+`AppDatabase(NativeDatabase.memory())` sungguhan, 4 tab baru + kasus Item
+47 Ringkasan, verifikasi byte PDF magic `%PDF` & XLSX round-trip
+`Excel.decodeBytes`, angka benar). `test/laporan_export_chip_dropdown_
+test.dart` (Tier 2 widget test — dropdown custom bukan `PopupMenuButton`
+lama, chip PDF/Excel + ikon share tampil, tap badan vs ikon share memicu
+JALUR KODE BEDA — dibuktikan via pesan error berbeda `FilePicker.
+saveFile`/"Gagal export" vs jalur share yg TIDAK pernah munculkan pesan
+itu sama sekali dalam window waktu yg sama). SEMUA revert-verified.
+`flutter analyze` 0 issue. Full suite: **1610 test lulus, 0 gagal**.
+
+**Keterbatasan test yang disadari**: `Share.shareXFiles`/`getTemporaryDirectory`
+sungguhan TIDAK PERNAH resolve di lingkungan `flutter test` ini (tak ada
+mock method channel utk `share_plus`/`path_provider`, sama sekali belum
+ada precedent-nya di codebase — dicek eksplisit, `backup_share_option_
+test.dart` juga sengaja berhenti sebelum titik itu) — test dropdown
+TIDAK menunggu sampai tuntas hasil share sungguhan, cukup buktikan
+tap-zone yg beda memicu pemanggilan fungsi yg beda (`_export` vs
+`_share`).
+
+## Sesi sebelumnya — ekspor CSV produk bisa dibagikan langsung SELESAI
 
 Permintaan user (persis): "Buat ekspor csv produk bisa share juga (sama
 seperti file backup)". `_exportProductsCsv` (`pengaturan_screen.dart`)
@@ -530,10 +590,9 @@ keranjang = belanja + SUM entri aktif. `DebtSettlementDetailLine`/
 
 Lihat [PLAN.md](../PLAN.md) langsung untuk detail teknis lengkap tiap
 item — ringkasan judul saja di sini (jangan diduplikasi, biar tidak
-basi): Item 47 (Pengeluaran belum ikut ekspor PDF/Excel Laporan — root
-cause+fix sudah jelas, siap eksekusi), Item 48 (warna avatar produk kasir
-dibuat soft/pastel — siap eksekusi), Item 41 sisa B.1/C.2/P3, Item 23
-sebagian (scope Buku Hutang/Tutup Kasir), Item 28 (lanjutkan pesanan
-lintas device, masih konsep), Item 54 (opsi sync LAN otomatis — murni
-didiskusikan, user pilih tetap manual utk sekarang, tidak ada rencana
-eksekusi).
+basi): Item 48 (warna avatar produk kasir dibuat soft/pastel — siap
+eksekusi), Item 41 sisa B.1/C.2/P3, Item 23 sebagian (scope Buku Hutang/
+Tutup Kasir), Item 28 (lanjutkan pesanan lintas device, masih konsep),
+Item 54 (opsi sync LAN otomatis — murni didiskusikan, user pilih tetap
+manual utk sekarang, tidak ada rencana eksekusi). Item 47 SUDAH SELESAI
+sesi ini (lihat atas) — dihapus dari daftar.

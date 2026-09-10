@@ -8,6 +8,24 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 10 September 2026 (sesi keempat puluh enam)
+
+### ✨ Fitur Baru
+- **Laporan sekarang bisa unduh PDF & Excel untuk tab Hutang, Stok,
+  Pengeluaran, dan Arus Kas** — sebelumnya hanya tab Ringkasan, Produk,
+  Pelanggan, dan Transaksi yang bisa diekspor.
+- **Tombol unduh laporan didesain ulang** — sekarang berupa 2 kartu kecil
+  (PDF & Excel) dengan ikonnya masing-masing, dan bisa langsung dibagikan
+  (WhatsApp/email/Google Drive/dll) tanpa perlu disimpan ke HP dulu:
+  ketuk badan kartu untuk unduh seperti biasa, atau ketuk ikon bagikan di
+  ujung kartu untuk langsung membagikan filenya.
+
+### 🐛 Perbaikan
+- **Laporan Ringkasan yang diekspor (PDF & Excel) sekarang ikut
+  menampilkan "Pengeluaran" dan "Laba Bersih"** — sebelumnya file yang
+  diunduh hanya berisi Omzet/Transaksi/HPP/Laba Kotor, padahal tampilan
+  di layar sudah menampilkan keduanya.
+
 ## 10 September 2026 (sesi keempat puluh lima)
 
 ### ✨ Fitur Baru
