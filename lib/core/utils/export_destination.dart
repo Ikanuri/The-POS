@@ -21,6 +21,7 @@ Future<bool> saveOrShareExport({
   required Uint8List bytes,
   required String fileName,
   String? shareText,
+  String title = 'Simpan Backup',
 }) async {
   // Dialog pilihan SENGAJA ditaruh di `content` (bukan `actions`) — 2 tombol
   // besar bersaing lebar dalam `Row` `actions` AlertDialog terbukti overflow
@@ -29,7 +30,7 @@ Future<bool> saveOrShareExport({
   final choice = await showDialog<String>(
     context: context,
     builder: (ctx) => AlertDialog(
-      title: const Text('Simpan Backup'),
+      title: Text(title),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,

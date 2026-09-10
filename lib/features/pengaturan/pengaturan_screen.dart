@@ -1,6 +1,6 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +10,7 @@ import 'package:intl/intl.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/providers/theme_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/export_destination.dart';
 import '../../core/utils/input_formatters.dart';
 import '../shell/sync_status_banner.dart';
 
@@ -631,11 +632,15 @@ Future<void> _exportProductsCsv(BuildContext context, WidgetRef ref) async {
 
     final bytes = utf8.encode(buf.toString());
     final date = DateFormat('yyyyMMdd').format(DateTime.now());
-    await FilePicker.platform.saveFile(
-      fileName: 'produk_$date.csv',
+    if (!context.mounted) return;
+    final done = await saveOrShareExport(
+      context: context,
       bytes: Uint8List.fromList(bytes),
-      type: FileType.any,
+      fileName: 'produk_$date.csv',
+      shareText: 'Data produk toko',
+      title: 'Simpan CSV',
     );
+    if (!done) return;
     messenger.showSnackBar(
       SnackBar(content: Text('${products.length} produk diekspor ke CSV')),
     );
