@@ -258,47 +258,57 @@ class TutupBukuService {
         '  (SELECT id FROM transactions '
         '   WHERE created_at >= $periodStartSec AND created_at < $periodEndExclusiveSec)'
         ')',
+        updates: {db.laciMejaEvents},
       );
       await db.customUpdate(
         'DELETE FROM left_behind_items WHERE transaction_id IN '
         '(SELECT id FROM transactions '
         ' WHERE created_at >= $periodStartSec AND created_at < $periodEndExclusiveSec)',
+        updates: {db.leftBehindItems},
       );
       await db.customUpdate(
         'DELETE FROM borrowed_items WHERE transaction_id IN '
         '(SELECT id FROM transactions '
         ' WHERE created_at >= $periodStartSec AND created_at < $periodEndExclusiveSec)',
+        updates: {db.borrowedItems},
       );
       await db.customUpdate(
         'DELETE FROM preorder_entries WHERE transaction_id IN '
         '(SELECT id FROM transactions '
         ' WHERE created_at >= $periodStartSec AND created_at < $periodEndExclusiveSec)',
+        updates: {db.preorderEntries},
       );
       await db.customUpdate(
         'DELETE FROM transaction_items WHERE transaction_id IN '
         '(SELECT id FROM transactions '
         ' WHERE created_at >= $periodStartSec AND created_at < $periodEndExclusiveSec)',
+        updates: {db.transactionItems},
       );
       await db.customUpdate(
         'DELETE FROM transaction_payments WHERE transaction_id IN '
         '(SELECT id FROM transactions '
         ' WHERE created_at >= $periodStartSec AND created_at < $periodEndExclusiveSec)',
+        updates: {db.transactionPayments},
       );
       await db.customUpdate(
         'DELETE FROM loyalty_point_ledger '
         'WHERE created_at >= $periodStartSec AND created_at < $periodEndExclusiveSec',
+        updates: {db.loyaltyPointLedger},
       );
       await db.customUpdate(
         'DELETE FROM stock_ledger '
         'WHERE created_at >= $periodStartSec AND created_at < $periodEndExclusiveSec',
+        updates: {db.stockLedger},
       );
       await db.customUpdate(
         'DELETE FROM expenses '
         'WHERE created_at >= $periodStartSec AND created_at < $periodEndExclusiveSec',
+        updates: {db.expenses},
       );
       await db.customUpdate(
         'DELETE FROM transactions '
         'WHERE created_at >= $periodStartSec AND created_at < $periodEndExclusiveSec',
+        updates: {db.transactions},
       );
 
       // Bawa kontribusi baris yang terhapus ke SATU baris penyeimbang per
@@ -323,6 +333,7 @@ class TutupBukuService {
             Variable.withString('Saldo dibawa dari tutup buku $year'),
             Variable.withInt(carryForwardSec),
           ],
+          updates: {db.stockLedger},
         );
       }
     });
