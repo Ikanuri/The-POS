@@ -169,12 +169,15 @@ class _PriceSyncScreenState extends ConsumerState<PriceSyncScreen>
       final now = DateTime.now();
       String p(int n) => n.toString().padLeft(2, '0');
       final date = '${now.year}${p(now.month)}${p(now.day)}';
-      await FilePicker.platform.saveFile(
-        fileName: 'katalog_harga_$date.csv',
-        bytes: Uint8List.fromList(utf8.encode(buf.toString())),
-        type: FileType.any,
-      );
       if (!mounted) return;
+      final done = await saveOrShareExport(
+        context: context,
+        bytes: Uint8List.fromList(utf8.encode(buf.toString())),
+        fileName: 'katalog_harga_$date.csv',
+        shareText: 'Katalog harga toko',
+        title: 'Simpan CSV',
+      );
+      if (!done || !mounted) return;
       showSuccess('${catalog.length} item katalog diekspor ke CSV');
     } catch (e) {
       if (!mounted) return;

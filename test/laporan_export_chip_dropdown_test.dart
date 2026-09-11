@@ -61,7 +61,7 @@ void main() {
             (w.image as AssetImage).assetName ==
                 'assets/icons/export_excel.png'),
         findsOneWidget);
-    expect(find.byIcon(Icons.ios_share_outlined), findsNWidgets(2),
+    expect(find.byIcon(Icons.share), findsNWidgets(2),
         reason: 'tiap baris (PDF & Excel) py ikon share sendiri-sendiri');
     // Badge warna & subtitle "Unduh ke HP" dari desain LAMA sudah dihapus.
     expect(find.byIcon(Icons.picture_as_pdf_rounded), findsNothing);
@@ -112,7 +112,7 @@ void main() {
     await tester.pumpAndSettle();
     // 2 ikon share (PDF & Excel) — ambil yang PERTAMA (chip PDF, urutan
     // deklarasi di `_ExportChipsPanel`).
-    await tester.tap(find.byIcon(Icons.ios_share_outlined).first);
+    await tester.tap(find.byIcon(Icons.share).first);
     // Bounded (BUKAN _pumpUntilSettled/pumpAndSettle) — panggilan
     // Share.shareXFiles sungguhan di jalur ini tak pernah resolve di
     // environment test, jadi jangan tunggu lama-lama sia-sia.
@@ -120,7 +120,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.byIcon(Icons.ios_share_outlined), findsNothing,
+    expect(find.byIcon(Icons.share), findsNothing,
         reason: 'menu harus tertutup setelah tap ikon share');
     // Pembeda utama dari test sebelumnya (tekan badan chip): jalur SHARE
     // TIDAK pernah menghasilkan pesan "Gagal export" (pesan spesifik jalur

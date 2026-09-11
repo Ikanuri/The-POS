@@ -338,7 +338,7 @@ class _ExportFormatChip extends StatelessWidget {
             onTap: () => Navigator.of(context).pop(('share', format)),
             child: Padding(
               padding: const EdgeInsets.all(10),
-              child: Icon(Icons.ios_share_outlined,
+              child: Icon(Icons.share,
                   size: 18, color: scheme.onSurfaceVariant),
             ),
           ),
