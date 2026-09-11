@@ -7,6 +7,10 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-11 (sesi keempat puluh sembilan — ikon share laporan + CSV katalog harga bisa dibagikan)
+
+`ab159a4` — feat(laporan,produk): ikon share laporan konsisten + CSV katalog harga bisa dibagikan
+
 ## 2026-09-11 (sesi keempat puluh delapan — fix reaktivitas stream pasca Tutup Buku)
 
 - `b890ee2` — fix(tutup-buku): tambah param `updates:` di raw SQL

@@ -6,11 +6,48 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 11 September 2026 (sesi keempat puluh delapan — fix
-reaktivitas stream pasca Tutup Buku: `updates:` yang hilang di raw SQL
-`TutupBukuService.execute()`). Versi kerja **2.57.1+120** (PATCH — murni
-bugfix, tanpa fitur baru, di atas 2.57.0+119 sesi kemarin). schemaVersion
-**43** (tidak berubah).
+_Update sesi 11 September 2026 (sesi keempat puluh sembilan — ikon share
+dropdown ekspor laporan diganti `Icons.share` + CSV ekspor katalog harga
+`price_sync_screen.dart` bisa dibagikan langsung via `saveOrShareExport`).
+Versi kerja **2.58.0+121** (MINOR — perubahan terlihat pengguna, direset
+dari PATCH 2.57.1+120 sesi kemarin). schemaVersion **43** (tidak berubah).
+
+**Sesi ini (2 fix kecil, `lib/features/laporan/laporan_screen.dart` +
+`lib/features/produk/price_sync_screen.dart`)**:
+1. `_ExportFormatChip` (laporan_screen.dart) — ikon share dropdown ekspor
+   `Icons.ios_share_outlined` -> `Icons.share` (ikon "cabang" klasik, sama
+   dgn tombol "Bagikan Gambar" di `cart_sheet.dart`/`receipt_screen.dart`)
+   sesuai konvensi share/share_outlined yang sudah didokumentasikan di
+   `cart_sheet.dart` (~baris 1132-1136): `Icons.share` utk tombol yang
+   men-trigger share LANGSUNG (bukan cuma buka sheet dulu) — dropdown
+   laporan ini memang direct-share (`Navigator.pop(('share', format))` ->
+   `shareReport()` -> `Share.shareXFiles` langsung), jadi `Icons.share`
+   adalah ikon yang benar. `test/laporan_export_chip_dropdown_test.dart`
+   diperbarui (3 assersi `Icons.ios_share_outlined` -> `Icons.share`).
+2. `_exportCsv()` (price_sync_screen.dart, ekspor CSV katalog harga tab
+   Sinkron Harga produk — BEDA dari "Export Produk CSV" di
+   `pengaturan_screen.dart` yang sudah diperbaiki sesi sebelumnya)
+   sebelumnya langsung `FilePicker.platform.saveFile` tanpa opsi share
+   sama sekali. Diganti pakai `saveOrShareExport` (helper yang sudah ada
+   di `export_destination.dart`, sudah dipakai `_exportPriceFile` di file
+   yang sama sbg referensi pola) — muncul dialog "Simpan CSV" dgn opsi
+   "Bagikan"/"Simpan ke Perangkat".
+
+**Test baru**: `test/price_sync_export_csv_share_test.dart` (widget test,
+pola PERSIS `test/pengaturan_export_csv_share_test.dart` — tap "Export ke
+CSV" -> dialog "Simpan CSV" dgn tombol Bagikan & Simpan ke Perangkat
+muncul, Batal menutup tanpa memanggil plugin apa pun). Revert-verified
+(gagal dgn `findsNothing` utk teks "Simpan CSV" sblm fix, hijau lagi
+setelah). `flutter analyze` 0 issue. Full suite: **1612 test lulus, 0
+gagal** (naik dari 1610 — +2 test file baru/dimodifikasi bersih, tanpa
+flake terlihat di run ini). Commit: `ab159a4`.
+
+**Catatan koordinasi**: sesi ini berjalan PARALEL dgn agent lain yang
+mengerjakan fix reaktivitas DB di `app_database.dart` (tidak disentuh sesi
+ini, scope dijaga ketat ke `laporan_screen.dart`/`price_sync_screen.dart`
+saja) — kalau ada bump versi/commit lain masuk duluan ke branch ini,
+versi sesi ini (`2.58.0+121`, MINOR di atas base apa pun yang ada) TETAP
+lebih tinggi krn MINOR selalu menang atas PATCH.
 
 **Temuan audit sesi lalu SUDAH DIEKSEKUSI**: `tutup_buku_service.dart`
 (fungsi `execute()`, ±baris 247-327) — 10 `customUpdate` (DELETE) + 1

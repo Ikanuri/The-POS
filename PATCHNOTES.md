@@ -8,6 +8,16 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 11 September 2026 (sesi keempat puluh sembilan)
+
+### ✨ Perubahan
+- **Ekspor CSV katalog harga (menu Sinkron Harga) sekarang bisa langsung
+  dibagikan**, tidak cuma disimpan ke HP — sama seperti ekspor file
+  backup/CSV produk lainnya.
+- **Ikon share di dropdown unduh laporan diganti** biar konsisten dengan
+  ikon share lain di aplikasi (mis. tombol "Bagikan Gambar" di keranjang
+  & struk).
+
 ## 11 September 2026 (sesi keempat puluh delapan)
 
 ### 🐛 Perbaikan
