@@ -6,19 +6,67 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 10 September 2026 (sesi keempat puluh enam — ekspor PDF/Excel
-Hutang/Stok/Pengeluaran/Arus Kas + dropdown unduh laporan didesain ulang
-jadi chip+share, PLAN.md Item 47 sekalian dieksekusi). Versi kerja
-**2.56.0+118** (MINOR — fitur baru terlihat pengguna, dibangun di atas
-2.55.0+117 sesi CSV-share paralel sebelumnya). schemaVersion **43** (tidak
-berubah). CATATAN: sesi ini berjalan PARALEL dgn agen lain yang mengerjakan
-ekspor CSV produk bisa dibagikan (`pengaturan_screen.dart`) pada branch
-yang sama — SUDAH digabung lewat `git rebase` bersih (tanpa konflik),
-kedua fitur sekarang hidup berdampingan. Kalau HANDOFF ini dibaca ulang &
-ada perubahan dari sesi lain yang belum tersinkron, gabungkan (jangan
-timpa)._
+_Update sesi 11 September 2026 (sesi keempat puluh tujuh — redesain KEDUA
+dropdown ekspor laporan: chip badge warna dari sesi kemarin diganti teks
+polos + ikon garis custom). Versi kerja **2.57.0+119** (MINOR — perubahan
+visual terlihat pengguna, di atas 2.56.0+118 sesi kemarin). schemaVersion
+**43** (tidak berubah).
 
-## Sesi ini — ekspor PDF/Excel Hutang/Stok/Pengeluaran/Arus Kas + redesain dropdown unduh SELESAI
+**PENTING — temuan audit BELUM dieksekusi, menunggu konfirmasi user**:
+audit eksternal menemukan `tutup_buku_service.dart` (fungsi `execute()`,
+±baris 247-327) — 10 `customUpdate` (DELETE) + 1 `customInsert` di dalam
+transaksi tutup buku (menyentuh `stock_ledger`, `transactions`,
+`expenses`, dll) — TIDAK SATUPUN menyertakan parameter `updates: {...}`.
+Sudah aku verifikasi SENDIRI langsung ke kode (bukan cuma percaya laporan
+audit): ini PERSIS kelas bug yang sudah didokumentasikan di CLAUDE.md
+("sudah kejadian 2x" di `applyProductProposals`/`deactivateProduct`) —
+`watchStockOverview()` (dipakai `ringkasan_screen.dart` via
+`StreamProvider` langsung) TIDAK akan auto-refresh pasca tutup buku
+walau data DB sudah benar, karena Drift tidak tahu tabel mana yang
+berubah tanpa param `updates:`. `tutup_buku_screen.dart` pasca `execute()`
+cuma `_load()` lokal, tidak ada invalidate provider global. User sudah
+diberi laporan konfirmasi ini di chat & DIMINTA KONFIRMASI dulu sebelum
+dieksekusi (instruksi eksplisit: "laporkan dulu sebelum dieksekusi") —
+KALAU SESI BERIKUTNYA BACA INI DAN USER BELUM MERESPON, JANGAN ASUMSI
+SUDAH DISETUJUI, tanya ulang. Fix-nya straightforward: tambah `updates:
+{stockLedger, transactions, expenses, ...}` (sesuai tabel yg disentuh
+tiap statement) di semua `customUpdate`/`customInsert` di file itu, +
+test `testWidgets` yang subscribe stream SEBELUM tutup buku dijalankan.
+
+## Sesi ini — redesain KEDUA dropdown ekspor laporan (bukan chip lagi) SELESAI
+
+User bilang desain chip badge warna (merah PDF/hijau Excel) dari sesi
+kemarin BELUM cocok: "design chip itu harusnya bukan chip, cukup teks
+biasa namun tidak default juga hurufnya... Icon juga, sebisa mungkin
+hanya garis, sementara backgroundnya transparan. Saya punya design
+iconnya." — user lampirkan 2 PNG (icon PDF & Excel, monokrom hitam murni
+di atas transparan, dikonfirmasi via Pillow: TIDAK ada warna sama sekali,
+cuma variasi alpha). Disimpan ke `assets/icons/export_pdf.png` &
+`export_excel.png` (didaftarkan di `pubspec.yaml` assets), dirender via
+`Image.asset(..., color: scheme.onSurface, colorBlendMode:
+BlendMode.srcIn)` supaya ikon hitam otomatis ikut warna teks tema
+terang/gelap. `_ExportFormatChip` (`laporan_screen.dart`) dirombak: HAPUS
+`Container` pembungkus (background/border/borderRadius) & badge kotak
+warna, ganti `Icon` Material jadi `Image.asset` custom, hapus subtitle
+"Unduh ke HP" (cukup label "PDF"/"Excel" teks biasa, `fontWeight.w500`
+bukan `w700` bold ala chip). 2 zona tap independen (badan baris = unduh,
+ikon share terpisah `ios_share_outlined` = share langsung) TETAP
+dipertahankan dari redesain pertama, cuma dipisah garis vertikal tipis
+tanpa card/border di sekelilingnya lagi.
+
+Test `test/laporan_export_chip_dropdown_test.dart` diperbarui mengikuti
+(cek `Image.asset` via `assetName`, bukan `Icons.picture_as_pdf_rounded`/
+`grid_on_rounded` lama; `Icons.ios_share_outlined` bukan `ios_share_rounded`;
+assert badge & subtitle lama SUDAH TIDAK ADA). Revert-verified (stash
+redesign, 2/3 test baru gagal sensibel thd desain lama sblm 8 Sep, restore,
+hijau lagi). `flutter analyze` 0 issue. Full suite hijau (1 gagal
+`backup_schema_version_guard_test.dart` di full-run tapi lulus 3/3 saat
+diisolasi — flake resource-contention environment, BUKAN regresi, sudah
+terjadi berulang kali sepanjang sesi ini akibat banyak worktree/agent
+paralel jalan bersamaan, tidak terkait file yang disentuh sesi ini sama
+sekali).
+
+## Sesi SEBELUMNYA (10 September) — ekspor PDF/Excel Hutang/Stok/Pengeluaran/Arus Kas + redesain PERTAMA dropdown unduh
 
 Permintaan user (persis, 2 hal terpisah tapi dikerjakan sekaligus):
 1. "Ada beberapa tab di laporan yang masih belum ada ekspor pdf dan .xlsx

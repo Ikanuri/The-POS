@@ -7,6 +7,20 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-11 (sesi keempat puluh tujuh — redesain kedua dropdown ekspor laporan)
+
+- `e2cc198` — redesign(laporan): dropdown ekspor `_ExportFormatChip`
+  diganti dari chip berbungkus badge warna (merah PDF/hijau Excel) jadi
+  teks polos tanpa background/border sama sekali + ikon garis custom
+  (`assets/icons/export_pdf.png`/`export_excel.png`, aset PNG monokrom
+  disediakan user, di-tint via `Image.asset(color:, colorBlendMode:
+  BlendMode.srcIn)` supaya otomatis ikut tema terang/gelap) menggantikan
+  `Icon` Material + badge kotak berwarna. Subtitle "Unduh ke HP"
+  dihapus. 2 zona tap independen (badan baris unduh / ikon share
+  terpisah bagikan langsung) tetap dipertahankan, dipisah garis vertikal
+  tipis tanpa card di sekelilingnya. `test/laporan_export_chip_dropdown_
+  test.dart` diperbarui mengikuti (revert-verified).
+
 ## 2026-09-10 (sesi keempat puluh enam — ekspor PDF/Excel Hutang/Stok/Pengeluaran/Arus Kas + dropdown unduh laporan didesain ulang)
 
 - `fa8487e` — feat(laporan): `ReportTab` diperluas 4→8 (`hutang`, `stok`,

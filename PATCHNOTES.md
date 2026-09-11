@@ -8,6 +8,15 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 11 September 2026 (sesi keempat puluh tujuh)
+
+### ✨ Fitur Baru
+- **Tampilan tombol unduh laporan disempurnakan** — kartu PDF/Excel yang
+  baru ditambahkan kemarin diganti jadi tampilan lebih ringkas: teks
+  polos dengan ikon PDF & Excel bergaya garis, tanpa kotak warna
+  pembungkus. Cara pakainya tetap sama (ketuk untuk unduh, ketuk ikon
+  bagikan untuk langsung membagikan).
+
 ## 10 September 2026 (sesi keempat puluh enam)
 
 ### ✨ Fitur Baru
