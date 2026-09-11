@@ -178,7 +178,7 @@ class _PriceSyncScreenState extends ConsumerState<PriceSyncScreen>
         title: 'Simpan CSV',
       );
       if (!done || !mounted) return;
-      showSuccess('${catalog.length} item katalog diekspor ke CSV');
+      showSuccess('Selesai');
     } catch (e) {
       if (!mounted) return;
       showError('Gagal ekspor: $e');
@@ -258,7 +258,7 @@ class _PriceSyncScreenState extends ConsumerState<PriceSyncScreen>
         shareText: 'Katalog harga toko',
       );
       if (!done || !mounted) return;
-      showSuccess('Katalog harga diekspor');
+      showSuccess('Selesai');
     } catch (e) {
       if (!mounted) return;
       showError('Gagal ekspor: $e');

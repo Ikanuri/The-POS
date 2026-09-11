@@ -194,7 +194,7 @@ class _ArchiveCardState extends ConsumerState<_ArchiveCard>
         );
         if (!done) return;
         if (!mounted) return;
-        showSuccess('Ekspor arsip ${widget.info.year} berhasil disimpan');
+        showSuccess('Selesai');
       } finally {
         await ArchiveService.close();
       }

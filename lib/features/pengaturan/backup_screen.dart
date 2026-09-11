@@ -108,7 +108,7 @@ class _BackupScreenState extends ConsumerState<BackupScreen>
       await BackupReminder.recordBackupNow(db); // Item 13: catat waktu backup
       ref.invalidate(_backupStatusProvider);
       if (!mounted) return;
-      showSuccess('Backup berhasil disimpan');
+      showSuccess('Selesai');
     } catch (e) {
       if (!mounted) return;
       showError('Gagal backup: $e');

@@ -107,7 +107,7 @@ class _AlihOwnerScreenState extends ConsumerState<AlihOwnerScreen>
       );
       if (!done) return;
       if (!mounted) return;
-      showSuccess('File alihan berhasil dibuat');
+      showSuccess('Selesai');
     } catch (e) {
       if (!mounted) return;
       showError('Gagal membuat file: $e');

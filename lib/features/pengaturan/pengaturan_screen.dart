@@ -641,7 +641,7 @@ Future<void> _exportProductsCsv(BuildContext context, WidgetRef ref) async {
     );
     if (!done) return;
     messenger.showSnackBar(
-      SnackBar(content: Text('${products.length} produk diekspor ke CSV')),
+      const SnackBar(content: Text('Selesai')),
     );
   } catch (e) {
     messenger.showSnackBar(

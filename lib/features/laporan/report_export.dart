@@ -118,8 +118,8 @@ Future<void> exportReport({
     );
     if (!context.mounted) return;
     if (path != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Laporan ${_tabLabel(tab)} ($ext) tersimpan')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Selesai')));
     }
   } catch (e) {
     if (!context.mounted) return;
@@ -159,8 +159,8 @@ Future<void> shareReport({
         text: 'Laporan ${_tabLabel(tab)}'
             '${storeName.isEmpty ? '' : ' - $storeName'}');
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Laporan ${_tabLabel(tab)} ($ext) dibagikan')));
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Selesai')));
   } catch (e) {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
