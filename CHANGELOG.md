@@ -7,6 +7,10 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-11 (sesi kelima puluh — pesan sukses ekspor/backup/share dinetralkan)
+
+`4dd9a2b` — fix(export): netralkan pesan sukses ekspor/backup/share jadi "Selesai"
+
 ## 2026-09-11 (sesi keempat puluh — ikon share laporan + CSV katalog harga bisa dibagikan)
 
 `ab159a4` — feat(laporan,produk): ikon share laporan konsisten + CSV katalog harga bisa dibagikan

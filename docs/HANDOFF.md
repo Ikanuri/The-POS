@@ -6,14 +6,50 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 11 September 2026 (dua sesi PARALEL: sesi keempat puluh —
-ikon share dropdown ekspor laporan diganti `Icons.share` + CSV ekspor
-katalog harga `price_sync_screen.dart` bisa dibagikan langsung via
-`saveOrShareExport`; sesi keempat puluh sembilan — fix reaktivitas
-stream pasca approve usulan kasir di `app_database.dart`, detail di
-bawah). Versi kerja **2.58.1+122** (PATCH di atas MINOR 2.58.0+121 sesi
-keempat puluh — bump PATCH sesi ini murni bugfix, tanpa fitur baru).
-schemaVersion **43** (tidak berubah).
+_Update sesi 11 September 2026, sesi kelima puluh — pesan sukses
+setelah ekspor/backup/share dinetralkan jadi "Selesai" (menghindari
+klaim palsu "berhasil dibagikan" saat user sebenarnya batal share).
+Versi kerja **2.59.0+123** (MINOR naik dari 2.58.1+122 — perubahan UX
+yg terlihat pengguna di 6 file, PATCH direset). schemaVersion **43**
+(tidak berubah)._
+
+## Sesi kelima puluh — pesan sukses ekspor/backup/share dinetralkan jadi "Selesai"
+
+**Masalah dilaporkan user** (kata-kata persis, diterjemahkan): di
+download/share laporan tidak perlu pesan eksplisit "sukses dibagikan"
+— cukup pesan netral, karena `Share.shareXFiles` (`share_plus`)
+resolve begitu OS share sheet DITUTUP, tak peduli user benar-benar
+pilih aplikasi tujuan share atau cuma batal/dismiss — app lama tetap
+klaim "berhasil dibagikan" walau user batal. Diminta berlaku juga di
+tab Sinkron Harga & Backup di Pengaturan, plus tempat lain dgn masalah
+sama.
+
+**Fix**: ganti pesan sukses jadi string netral **"Selesai"** (bukan
+kata Inggris "done" — UI WAJIB Bahasa Indonesia per CLAUDE.md) di
+SEMUA jalur download maupun share (bukan cuma share — user eksplisit
+minta "download atau share" dinetralkan sama-sama, demi konsistensi),
+di 8 titik pesan, 6 file: `report_export.dart` (`exportReport()` +
+`shareReport()`), `price_sync_screen.dart` (`_exportCsv()` +
+`_exportPriceFile()`), `backup_screen.dart`, `pengaturan_screen.dart`
+(Export Produk CSV), `alih_owner_screen.dart`, `arsip_screen.dart`.
+Semua 8 titik ini adalah pesan yg tampil PERSIS setelah pemanggilan
+helper bersama `saveOrShareExport()` (`export_destination.dart`) atau
+setara custom di `report_export.dart` — akar masalah identik di semua
+titik. Pesan ERROR (`showError`) & `showSuccess` lain yg TIDAK terkait
+download/share (mis. sukses restore backup, sukses alih owner) TIDAK
+disentuh — tetap deskriptif seperti semula, tidak ambigu.
+
+**Test**: TIDAK ada test lama yg meng-assert teks pesan sukses persis
+ini (dicek eksplisit — test widget yg ada utk fitur2 ini cuma
+memverifikasi dialog pilihan "Bagikan"/"Simpan ke Perangkat" muncul &
+Batal menutupnya, tidak pernah menunggu sampai pesan sukses akhir
+tampil, krn `share_plus`/`path_provider` tidak resolve sungguhan di
+`flutter_test` — lihat keterbatasan test yg sudah dicatat sesi-sesi
+sebelumnya). Jadi tidak ada test lama yg perlu diupdate; perubahan
+murni string constant tanpa logika baru, tidak butuh test regresi baru
+(perubahan deterministik, tidak ada cabang logika utk dibuktikan).
+`flutter analyze` 0 issue. Full suite: **1614 test lulus, 0 gagal**.
+Commit: `4dd9a2b`.
 
 ## Sesi keempat puluh — ikon share laporan + CSV katalog harga bisa dibagikan
 

@@ -8,6 +8,15 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 11 September 2026 (sesi kelima puluh)
+
+### ✨ Perubahan
+- **Pesan setelah unduh/bagikan laporan, backup, ekspor CSV, dll.
+  disederhanakan jadi "Selesai"** — sebelumnya bisa menyesatkan (mis.
+  tetap muncul "berhasil dibagikan" walau kamu batal share di menu
+  berbagi HP). Berlaku di ekspor laporan, Sinkron Harga, Backup &
+  Restore, Alihkan Owner, Ekspor Arsip Tahunan, dan Export Produk CSV.
+
 ## 11 September 2026 (sesi keempat puluh)
 
 ### ✨ Perubahan
