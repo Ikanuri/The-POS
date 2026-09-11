@@ -3398,9 +3398,17 @@ class AppDatabase extends _$AppDatabase {
         }
       }
       if (detail.isNotEmpty) {
+        // `dumpSince` (sync host->klien) filter transaksi dgn `WHERE
+        // created_at >= ? OR updated_at >= ?` (Item 62 — nota bukan
+        // append-only murni) — tanpa cap ulang `updatedAt` di sini,
+        // update debtSettlementDetail pada nota lama (created_at sudah
+        // lewat watermark device lain) tidak pernah lolos filter & tidak
+        // pernah terkirim ke perangkat lain (sama kelas bug dgn
+        // `applyProductProposals`/`deactivateProduct`, lihat CLAUDE.md).
         await (update(transactions)..where((t) => t.id.equals(tx.id.value)))
             .write(TransactionsCompanion(
           debtSettlementDetail: Value(jsonEncode(detail)),
+          updatedAt: Value(DateTime.now()),
         ));
       }
     });
@@ -6849,9 +6857,20 @@ class AppDatabase extends _$AppDatabase {
       'alt_prices',
       'product_barcodes',
     ];
+    // customInsert/customStatement raw SQL di bawah tidak memberi tahu Drift
+    // tabel mana yang berubah kecuali param `updates:` disertakan, jadi
+    // StreamProvider/.watch() (mis. watchProducts()) TIDAK auto-refresh
+    // walau data DB sudah benar setelah owner approve usulan kasir — sama
+    // akar masalah dgn bug yang sudah diperbaiki di `mergeRows`/
+    // `TutupBukuService.execute()`. Resolusi nama->TableInfo SEKALI di luar
+    // loop (bukan pola null-safety `mergeRows` yang menerima nama tabel dari
+    // luar device — 5 nama di `order` di atas adalah literal yang kita
+    // kontrol sendiri, dijamin valid).
+    final tablesByName = {for (final t in allTables) t.entityName: t};
     await transaction(() async {
       final approvedUnitIds = <String>{};
       for (final table in order) {
+        final tableInfo = tablesByName[table]!;
         final rows = proposals[table] ?? const [];
         // Replace PENUH baris anak per satuan yang di-approve: hapus tier
         // harga & harga-alternatif LAMA milik owner utk satuan itu SEBELUM
@@ -6867,9 +6886,12 @@ class AppDatabase extends _$AppDatabase {
         if ((table == 'price_tiers' || table == 'alt_prices') &&
             approvedUnitIds.isNotEmpty) {
           final ph = List.filled(approvedUnitIds.length, '?').join(', ');
-          await customStatement(
+          await customUpdate(
             'DELETE FROM "$table" WHERE product_unit_id IN ($ph)',
-            approvedUnitIds.toList(),
+            variables: approvedUnitIds
+                .map((id) => Variable<Object>(id))
+                .toList(),
+            updates: {tableInfo},
           );
         }
         if (rows.isEmpty) continue;
@@ -6929,6 +6951,7 @@ class AppDatabase extends _$AppDatabase {
           await customInsert(
             'INSERT OR REPLACE INTO "$table" ($cols) VALUES ($placeholders)',
             variables: _rowToVars(cleaned),
+            updates: {tableInfo},
           );
           count++;
         }
