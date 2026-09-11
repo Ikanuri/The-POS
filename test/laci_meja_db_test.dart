@@ -64,6 +64,24 @@ void main() {
       final list = await db.watchLeftBehindItems().first;
       expect(list.map((e) => e.id).toList(), ['l-lama', 'l-baru']);
     });
+
+    test(
+        'mode riwayat (includeCollected: true) diurut TERBARU dulu — '
+        'kebalikan dari mode aktif (FIFO)', () async {
+      final txId = await seedTransaction('tx1');
+      await db.addLeftBehindItem(
+          id: 'l-lama', transactionId: txId, itemName: 'Lama', jenis: 'titip');
+      await db.addLeftBehindItem(
+          id: 'l-baru', transactionId: txId, itemName: 'Baru', jenis: 'titip');
+      await (db.update(db.leftBehindItems)
+            ..where((t) => t.id.equals('l-baru')))
+          .write(LeftBehindItemsCompanion(
+              createdAt: Value(DateTime.now().add(const Duration(minutes: 5)))));
+
+      final list =
+          await db.watchLeftBehindItems(includeCollected: true).first;
+      expect(list.map((e) => e.id).toList(), ['l-baru', 'l-lama']);
+    });
   });
 
   group('Pinjaman Barang', () {
@@ -91,6 +109,24 @@ void main() {
 
       active = await db.watchBorrowedItems().first;
       expect(active, isEmpty, reason: 'sudah kembali penuh, hilang dari aktif');
+    });
+
+    test(
+        'mode riwayat (includeFullyReturned: true) diurut TERBARU dulu '
+        '(kartu disematkan tetap di atas)', () async {
+      final txId = await seedTransaction('tx1');
+      await db.addBorrowedItem(
+          id: 'b-lama', transactionId: txId, itemName: 'Lama', qty: 1);
+      await db.addBorrowedItem(
+          id: 'b-baru', transactionId: txId, itemName: 'Baru', qty: 1);
+      await (db.update(db.borrowedItems)
+            ..where((t) => t.id.equals('b-baru')))
+          .write(BorrowedItemsCompanion(
+              createdAt: Value(DateTime.now().add(const Duration(minutes: 5)))));
+
+      final list =
+          await db.watchBorrowedItems(includeFullyReturned: true).first;
+      expect(list.map((e) => e.id).toList(), ['b-baru', 'b-lama']);
     });
   });
 
@@ -149,6 +185,32 @@ void main() {
           .watchPreorderEntries(productId: 'prod1', includeClosed: true)
           .first;
       expect(all, hasLength(2));
+    });
+
+    test(
+        'mode riwayat (includeClosed: true) diurut TERBARU dulu — beda dari '
+        'mode aktif (FIFO), tidak terikat aturan Item 52', () async {
+      await db.addPreorderEntry(
+          id: 'p-lama',
+          productId: 'prod1',
+          productUnitId: 'unit1',
+          customerName: 'Lama',
+          qtyOrdered: 1);
+      await db.addPreorderEntry(
+          id: 'p-baru',
+          productId: 'prod1',
+          productUnitId: 'unit1',
+          customerName: 'Baru',
+          qtyOrdered: 1);
+      await (db.update(db.preorderEntries)
+            ..where((t) => t.id.equals('p-baru')))
+          .write(PreorderEntriesCompanion(
+              createdAt: Value(DateTime.now().add(const Duration(minutes: 5)))));
+
+      final list = await db
+          .watchPreorderEntries(productId: 'prod1', includeClosed: true)
+          .first;
+      expect(list.map((e) => e.id).toList(), ['p-baru', 'p-lama']);
     });
   });
 

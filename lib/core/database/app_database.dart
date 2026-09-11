@@ -7976,8 +7976,10 @@ class AppDatabase extends _$AppDatabase {
   Stream<List<LeftBehindItem>> watchLeftBehindItems(
       {bool includeCollected = false}) {
     if (includeCollected) {
+      // Mode riwayat (permintaan user) — terbaru dulu, beda dari mode
+      // default (FIFO asc) di bawah yang dipakai dashboard "masih terbuka".
       return (select(leftBehindItems)
-            ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+            ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
           .watch();
     }
     final q = select(leftBehindItems).join([
@@ -8050,10 +8052,13 @@ class AppDatabase extends _$AppDatabase {
   Stream<List<BorrowedItem>> watchBorrowedItems(
       {bool includeFullyReturned = false}) {
     if (includeFullyReturned) {
+      // Mode riwayat (permintaan user) — terbaru dulu (kartu disematkan
+      // tetap di atas), beda dari mode default (FIFO asc) di bawah yang
+      // dipakai dashboard "masih terbuka".
       return (select(borrowedItems)
             ..orderBy([
               (t) => OrderingTerm.desc(t.pinned),
-              (t) => OrderingTerm.asc(t.createdAt),
+              (t) => OrderingTerm.desc(t.createdAt),
             ]))
           .watch();
     }
@@ -8145,8 +8150,11 @@ class AppDatabase extends _$AppDatabase {
         transactionItemId: Value(transactionItemId),
       ));
 
-  /// FIFO MURNI berdasar `createdAt` — `paid` HANYA informatif, TIDAK PERNAH
-  /// ikut menentukan urutan (aturan bisnis Item 52, jangan diubah).
+  /// Mode default (`includeClosed: false`, dashboard "masih terbuka") — FIFO
+  /// MURNI berdasar `createdAt` ASC, `paid` HANYA informatif, TIDAK PERNAH
+  /// ikut menentukan urutan (aturan bisnis Item 52, jangan diubah). Mode
+  /// riwayat (`includeClosed: true`, permintaan user) — terbaru dulu (DESC),
+  /// tidak terikat aturan FIFO di atas karena bukan urutan pemenuhan.
   Stream<List<PreorderEntry>> watchPreorderEntries(
           {String? productId, bool includeClosed = false}) =>
       (select(preorderEntries)
@@ -8158,7 +8166,11 @@ class AppDatabase extends _$AppDatabase {
                   ? open
                   : open & t.productId.equals(productId);
             })
-            ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+            ..orderBy([
+              (t) => includeClosed
+                  ? OrderingTerm.desc(t.createdAt)
+                  : OrderingTerm.asc(t.createdAt),
+            ]))
           .watch();
 
   /// Penuhi SELURUH sisa sekaligus — pelengkap [fulfillPreorderQty] utk kasus
