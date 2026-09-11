@@ -230,8 +230,9 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
 }
 
 /// Panel dropdown ekspor custom (permintaan user: "bukan default template
-/// flutter") — dua chip berdampingan (PDF badge merah, Excel badge hijau),
-/// masing-masing punya 2 zona tap terpisah lihat `_ExportFormatChip`.
+/// flutter", TANPA bungkus chip — teks biasa + ikon garis di atas background
+/// transparan) — dua baris berdampingan (PDF, Excel), masing-masing punya 2
+/// zona tap terpisah lihat `_ExportFormatChip`.
 class _ExportChipsPanel extends StatelessWidget {
   const _ExportChipsPanel({required this.tabName});
   final String tabName;
@@ -255,18 +256,15 @@ class _ExportChipsPanel extends StatelessWidget {
                   color: scheme.onSurfaceVariant),
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           const _ExportFormatChip(
             format: 'pdf',
-            badgeColor: Color(0xFFDC3545),
-            icon: Icons.picture_as_pdf_rounded,
+            iconAsset: 'assets/icons/export_pdf.png',
             label: 'PDF',
           ),
-          const SizedBox(height: 8),
           const _ExportFormatChip(
             format: 'xlsx',
-            badgeColor: Color(0xFF1D6F42),
-            icon: Icons.grid_on_rounded,
+            iconAsset: 'assets/icons/export_excel.png',
             label: 'Excel',
           ),
         ],
@@ -275,93 +273,73 @@ class _ExportChipsPanel extends StatelessWidget {
   }
 }
 
-/// Satu chip format ekspor (PDF ATAU Excel) dgn 2 zona tap independen:
-/// - Badan chip (badge + label) → unduh ke penyimpanan HP (`FilePicker.
+/// Satu baris format ekspor (PDF ATAU Excel) dgn 2 zona tap independen:
+/// - Badan baris (ikon + label) → unduh ke penyimpanan HP (`FilePicker.
 ///   saveFile`, perilaku lama).
 /// - Ikon share (dipisah garis vertikal tipis) → bagikan langsung lewat
 ///   share sheet OS, TANPA nangkring di penyimpanan lokal dulu.
 ///
+/// Permintaan user (redesain kedua): BUKAN chip berbungkus badge warna —
+/// teks biasa (bukan default Flutter, tapi bukan bold ala label chip juga)
+/// + ikon garis custom di atas background transparan sepenuhnya. Ikon PDF/
+/// Excel adalah aset garis monokrom (`assets/icons/export_*.png`, hitam di
+/// atas transparan) yang di-tint ikut warna teks lewat `color`+`BlendMode.
+/// srcIn` supaya otomatis mengikuti tema terang/gelap.
+///
 /// Keduanya pop() menu dgn `(aksi, format)` — `LaporanScreen._showExportMenu`
-/// yang mengeksekusi aksi SETELAH menu tertutup, chip ini murni UI +
+/// yang mengeksekusi aksi SETELAH menu tertutup, baris ini murni UI +
 /// pemilihan aksi (mudah diuji tanpa menyentuh plugin native sungguhan).
 class _ExportFormatChip extends StatelessWidget {
   const _ExportFormatChip({
     required this.format,
-    required this.badgeColor,
-    required this.icon,
+    required this.iconAsset,
     required this.label,
   });
 
   final String format;
-  final Color badgeColor;
-  final IconData icon;
+  final String iconAsset;
   final String label;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Container(
-      width: 230,
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: scheme.outlineVariant),
-      ),
+    return SizedBox(
+      width: 200,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Expanded(
             child: InkWell(
-              borderRadius:
-                  const BorderRadius.horizontal(left: Radius.circular(12)),
               onTap: () =>
                   Navigator.of(context).pop(('download', format)),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
                 child: Row(
                   children: [
-                    Container(
-                      width: 30,
-                      height: 30,
-                      decoration: BoxDecoration(
-                        color: badgeColor,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Icon(icon, size: 17, color: Colors.white),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(label,
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.w700, fontSize: 13)),
-                          Text('Unduh ke HP',
-                              style: TextStyle(
-                                  fontSize: 10.5,
-                                  color: scheme.onSurfaceVariant)),
-                        ],
-                      ),
-                    ),
+                    Image.asset(iconAsset,
+                        width: 20,
+                        height: 20,
+                        color: scheme.onSurface,
+                        colorBlendMode: BlendMode.srcIn),
+                    const SizedBox(width: 12),
+                    Text(label,
+                        style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: scheme.onSurface)),
                   ],
                 ),
               ),
             ),
           ),
-          Container(width: 1, height: 34, color: scheme.outlineVariant),
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius:
-                  const BorderRadius.horizontal(right: Radius.circular(12)),
-              onTap: () => Navigator.of(context).pop(('share', format)),
-              child: Padding(
-                padding: const EdgeInsets.all(10),
-                child: Icon(Icons.ios_share_rounded,
-                    size: 18, color: scheme.primary),
-              ),
+          Container(width: 1, height: 22, color: scheme.outlineVariant),
+          InkWell(
+            onTap: () => Navigator.of(context).pop(('share', format)),
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: Icon(Icons.ios_share_outlined,
+                  size: 18, color: scheme.onSurfaceVariant),
             ),
           ),
         ],

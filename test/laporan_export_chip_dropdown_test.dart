@@ -18,9 +18,12 @@ Future<void> _pumpUntilSettled(WidgetTester tester) async {
 }
 
 /// Permintaan user: dropdown ekspor PDF/Excel didesain ulang jadi custom
-/// chip (bukan `PopupMenuButton` teks polos bawaan Flutter), tiap chip py
-/// ikon format (PDF/Excel) + ikon share TERPISAH — tekan badan chip = unduh
-/// ke HP, tekan ikon share = bagikan langsung (tanpa nangkring lokal).
+/// (bukan `PopupMenuButton` teks polos bawaan Flutter) — redesain KEDUA:
+/// BUKAN chip berbungkus badge warna, teks biasa + ikon garis custom
+/// (`assets/icons/export_pdf.png`/`export_excel.png`) di atas background
+/// transparan, tiap baris py ikon format + ikon share TERPISAH — tekan
+/// badan baris = unduh ke HP, tekan ikon share = bagikan langsung (tanpa
+/// nangkring lokal).
 void main() {
   late AppDatabase db;
   setUp(() => db = AppDatabase(NativeDatabase.memory()));
@@ -41,14 +44,29 @@ void main() {
     expect(find.textContaining('Export PDF'), findsNothing);
     expect(find.textContaining('Export Excel'), findsNothing);
 
-    // Chip baru: label "PDF"/"Excel" + ikon badge format + ikon share.
+    // Desain baru: label teks biasa "PDF"/"Excel" (bukan chip badge) + ikon
+    // garis custom (`Image.asset`) per format + ikon share.
     expect(find.text('PDF'), findsOneWidget);
     expect(find.text('Excel'), findsOneWidget);
-    expect(find.byIcon(Icons.picture_as_pdf_rounded), findsOneWidget);
-    expect(find.byIcon(Icons.grid_on_rounded), findsOneWidget);
-    expect(find.byIcon(Icons.ios_share_rounded), findsNWidgets(2),
-        reason: 'tiap chip (PDF & Excel) py ikon share sendiri-sendiri');
-    expect(find.textContaining('Unduh ke HP'), findsNWidgets(2));
+    expect(
+        find.byWidgetPredicate((w) =>
+            w is Image &&
+            w.image is AssetImage &&
+            (w.image as AssetImage).assetName == 'assets/icons/export_pdf.png'),
+        findsOneWidget);
+    expect(
+        find.byWidgetPredicate((w) =>
+            w is Image &&
+            w.image is AssetImage &&
+            (w.image as AssetImage).assetName ==
+                'assets/icons/export_excel.png'),
+        findsOneWidget);
+    expect(find.byIcon(Icons.ios_share_outlined), findsNWidgets(2),
+        reason: 'tiap baris (PDF & Excel) py ikon share sendiri-sendiri');
+    // Badge warna & subtitle "Unduh ke HP" dari desain LAMA sudah dihapus.
+    expect(find.byIcon(Icons.picture_as_pdf_rounded), findsNothing);
+    expect(find.byIcon(Icons.grid_on_rounded), findsNothing);
+    expect(find.textContaining('Unduh ke HP'), findsNothing);
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));
@@ -94,7 +112,7 @@ void main() {
     await tester.pumpAndSettle();
     // 2 ikon share (PDF & Excel) — ambil yang PERTAMA (chip PDF, urutan
     // deklarasi di `_ExportChipsPanel`).
-    await tester.tap(find.byIcon(Icons.ios_share_rounded).first);
+    await tester.tap(find.byIcon(Icons.ios_share_outlined).first);
     // Bounded (BUKAN _pumpUntilSettled/pumpAndSettle) — panggilan
     // Share.shareXFiles sungguhan di jalur ini tak pernah resolve di
     // environment test, jadi jangan tunggu lama-lama sia-sia.
@@ -102,7 +120,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.byIcon(Icons.ios_share_rounded), findsNothing,
+    expect(find.byIcon(Icons.ios_share_outlined), findsNothing,
         reason: 'menu harus tertutup setelah tap ikon share');
     // Pembeda utama dari test sebelumnya (tekan badan chip): jalur SHARE
     // TIDAK pernah menghasilkan pesan "Gagal export" (pesan spesifik jalur
