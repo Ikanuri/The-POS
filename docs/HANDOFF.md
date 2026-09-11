@@ -6,34 +6,27 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 11 September 2026 (sesi keempat puluh tujuh — redesain KEDUA
-dropdown ekspor laporan: chip badge warna dari sesi kemarin diganti teks
-polos + ikon garis custom). Versi kerja **2.57.0+119** (MINOR — perubahan
-visual terlihat pengguna, di atas 2.56.0+118 sesi kemarin). schemaVersion
+_Update sesi 11 September 2026 (sesi keempat puluh delapan — fix
+reaktivitas stream pasca Tutup Buku: `updates:` yang hilang di raw SQL
+`TutupBukuService.execute()`). Versi kerja **2.57.1+120** (PATCH — murni
+bugfix, tanpa fitur baru, di atas 2.57.0+119 sesi kemarin). schemaVersion
 **43** (tidak berubah).
 
-**PENTING — temuan audit BELUM dieksekusi, menunggu konfirmasi user**:
-audit eksternal menemukan `tutup_buku_service.dart` (fungsi `execute()`,
-±baris 247-327) — 10 `customUpdate` (DELETE) + 1 `customInsert` di dalam
-transaksi tutup buku (menyentuh `stock_ledger`, `transactions`,
-`expenses`, dll) — TIDAK SATUPUN menyertakan parameter `updates: {...}`.
-Sudah aku verifikasi SENDIRI langsung ke kode (bukan cuma percaya laporan
-audit): ini PERSIS kelas bug yang sudah didokumentasikan di CLAUDE.md
-("sudah kejadian 2x" di `applyProductProposals`/`deactivateProduct`) —
-`watchStockOverview()` (dipakai `ringkasan_screen.dart` via
-`StreamProvider` langsung) TIDAK akan auto-refresh pasca tutup buku
-walau data DB sudah benar, karena Drift tidak tahu tabel mana yang
-berubah tanpa param `updates:`. `tutup_buku_screen.dart` pasca `execute()`
-cuma `_load()` lokal, tidak ada invalidate provider global. User sudah
-diberi laporan konfirmasi ini di chat & DIMINTA KONFIRMASI dulu sebelum
-dieksekusi (instruksi eksplisit: "laporkan dulu sebelum dieksekusi") —
-KALAU SESI BERIKUTNYA BACA INI DAN USER BELUM MERESPON, JANGAN ASUMSI
-SUDAH DISETUJUI, tanya ulang. Fix-nya straightforward: tambah `updates:
-{stockLedger, transactions, expenses, ...}` (sesuai tabel yg disentuh
-tiap statement) di semua `customUpdate`/`customInsert` di file itu, +
-test `testWidgets` yang subscribe stream SEBELUM tutup buku dijalankan.
+**Temuan audit sesi lalu SUDAH DIEKSEKUSI**: `tutup_buku_service.dart`
+(fungsi `execute()`, ±baris 247-327) — 10 `customUpdate` (DELETE) + 1
+`customInsert` (carry-forward `stock_ledger`) di dalam transaksi tutup
+buku TIDAK SATUPUN menyertakan parameter `updates: {...}`, persis kelas
+bug yang sudah didokumentasikan di CLAUDE.md ("sudah kejadian 2x" di
+`applyProductProposals`/`deactivateProduct`). Sekarang semua 11 call
+sudah dikasih `updates:` sesuai tabel yang disentuh (`laciMejaEvents`,
+`leftBehindItems`, `borrowedItems`, `preorderEntries`,
+`transactionItems`, `transactionPayments`, `loyaltyPointLedger`,
+`stockLedger`, `expenses`, `transactions`). Dibuktikan dengan test
+`.listen()` live baru (`tutup_buku_stock_stream_reactive_test.dart`) —
+revert-verify sudah dilakukan (test gagal tanpa fix, hijau dengan fix).
+Commit: `b890ee2`.
 
-## Sesi ini — redesain KEDUA dropdown ekspor laporan (bukan chip lagi) SELESAI
+## Sesi lalu — redesain KEDUA dropdown ekspor laporan (bukan chip lagi)
 
 User bilang desain chip badge warna (merah PDF/hijau Excel) dari sesi
 kemarin BELUM cocok: "design chip itu harusnya bukan chip, cukup teks

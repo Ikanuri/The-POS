@@ -7,6 +7,17 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-11 (sesi keempat puluh delapan — fix reaktivitas stream pasca Tutup Buku)
+
+- `b890ee2` — fix(tutup-buku): tambah param `updates:` di raw SQL
+  `TutupBukuService.execute()` — 10 `customUpdate` (DELETE) + 1
+  `customInsert` (carry-forward `stock_ledger`) di dalam transaksi tutup
+  buku tidak menyertakan `updates:`, jadi `StreamProvider`/`.watch()`
+  (mis. `watchStockOverview()` di layar Ringkasan) tidak auto-refresh
+  pasca tutup buku walau data DB sudah benar, sampai app di-restart
+  manual. Ditambahkan test `tutup_buku_stock_stream_reactive_test.dart`
+  (`.listen()` live, bukan one-shot query).
+
 ## 2026-09-11 (sesi keempat puluh tujuh — redesain kedua dropdown ekspor laporan)
 
 - `e2cc198` — redesign(laporan): dropdown ekspor `_ExportFormatChip`

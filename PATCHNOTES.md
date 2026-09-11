@@ -8,6 +8,15 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 11 September 2026 (sesi keempat puluh delapan)
+
+### 🐛 Perbaikan
+- **Layar Ringkasan tidak lagi menampilkan angka stok yang belum
+  ter-update setelah Tutup Buku.** Sebelumnya, kalau layar Ringkasan
+  sedang terbuka saat Tutup Buku dijalankan, angka stok bisa tetap
+  menampilkan nilai lama sampai aplikasi di-restart manual (padahal
+  datanya sendiri sudah benar). Sekarang langsung ter-update otomatis.
+
 ## 11 September 2026 (sesi keempat puluh tujuh)
 
 ### ✨ Fitur Baru
