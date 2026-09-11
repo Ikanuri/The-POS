@@ -6,14 +6,18 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 11 September 2026 (sesi keempat puluh sembilan — ikon share
-dropdown ekspor laporan diganti `Icons.share` + CSV ekspor katalog harga
-`price_sync_screen.dart` bisa dibagikan langsung via `saveOrShareExport`).
-Versi kerja **2.58.0+121** (MINOR — perubahan terlihat pengguna, direset
-dari PATCH 2.57.1+120 sesi kemarin). schemaVersion **43** (tidak berubah).
+_Update sesi 11 September 2026 (dua sesi PARALEL: sesi keempat puluh —
+ikon share dropdown ekspor laporan diganti `Icons.share` + CSV ekspor
+katalog harga `price_sync_screen.dart` bisa dibagikan langsung via
+`saveOrShareExport`; sesi keempat puluh sembilan — fix reaktivitas
+stream pasca approve usulan kasir di `app_database.dart`, detail di
+bawah). Versi kerja **2.58.1+122** (PATCH di atas MINOR 2.58.0+121 sesi
+keempat puluh — bump PATCH sesi ini murni bugfix, tanpa fitur baru).
+schemaVersion **43** (tidak berubah).
 
-**Sesi ini (2 fix kecil, `lib/features/laporan/laporan_screen.dart` +
-`lib/features/produk/price_sync_screen.dart`)**:
+## Sesi keempat puluh — ikon share laporan + CSV katalog harga bisa dibagikan
+
+`lib/features/laporan/laporan_screen.dart` + `lib/features/produk/price_sync_screen.dart`.
 1. `_ExportFormatChip` (laporan_screen.dart) — ikon share dropdown ekspor
    `Icons.ios_share_outlined` -> `Icons.share` (ikon "cabang" klasik, sama
    dgn tombol "Bagikan Gambar" di `cart_sheet.dart`/`receipt_screen.dart`)
@@ -42,25 +46,42 @@ setelah). `flutter analyze` 0 issue. Full suite: **1612 test lulus, 0
 gagal** (naik dari 1610 — +2 test file baru/dimodifikasi bersih, tanpa
 flake terlihat di run ini). Commit: `ab159a4`.
 
-**Catatan koordinasi**: sesi ini berjalan PARALEL dgn agent lain yang
-mengerjakan fix reaktivitas DB di `app_database.dart` (tidak disentuh sesi
-ini, scope dijaga ketat ke `laporan_screen.dart`/`price_sync_screen.dart`
-saja) — kalau ada bump versi/commit lain masuk duluan ke branch ini,
-versi sesi ini (`2.58.0+121`, MINOR di atas base apa pun yang ada) TETAP
-lebih tinggi krn MINOR selalu menang atas PATCH.
+## Sesi keempat puluh sembilan — fix reaktivitas stream pasca approve usulan kasir
 
-**Temuan audit sesi lalu SUDAH DIEKSEKUSI**: `tutup_buku_service.dart`
-(fungsi `execute()`, ±baris 247-327) — 10 `customUpdate` (DELETE) + 1
-`customInsert` (carry-forward `stock_ledger`) di dalam transaksi tutup
-buku TIDAK SATUPUN menyertakan parameter `updates: {...}`, persis kelas
-bug yang sudah didokumentasikan di CLAUDE.md ("sudah kejadian 2x" di
-`applyProductProposals`/`deactivateProduct`). Sekarang semua 11 call
-sudah dikasih `updates:` sesuai tabel yang disentuh (`laciMejaEvents`,
-`leftBehindItems`, `borrowedItems`, `preorderEntries`,
-`transactionItems`, `transactionPayments`, `loyaltyPointLedger`,
-`stockLedger`, `expenses`, `transactions`). Dibuktikan dengan test
-`.listen()` live baru (`tutup_buku_stock_stream_reactive_test.dart`) —
-revert-verify sudah dilakukan (test gagal tanpa fix, hijau dengan fix).
+**Temuan audit eksternal (2 item, semua SUDAH DIEKSEKUSI sesi ini)**:
+1. `applyProductProposals` (`app_database.dart`, ±baris 6827-6955) — kelas
+   bug SAMA dgn `TutupBukuService`/`mergeRows`: DELETE `price_tiers`/
+   `alt_prices` lama per satuan pakai `customStatement` (TIDAK bisa
+   terima `updates:` sama sekali — diganti `customUpdate`) dan INSERT OR
+   REPLACE per baris (5 tabel: products/product_units/price_tiers/
+   alt_prices/product_barcodes) via `customInsert` tanpa `updates:`.
+   Fix: `tableInfo` diresolve SEKALI di luar loop dari nama tabel literal
+   `order` (bukan pola null-safety `mergeRows` yg menerima nama dari luar
+   device — 5 nama ini kita kontrol sendiri), dipasang ke KEDUA call site.
+   Test baru `.listen()` live: `apply_product_proposals_reactive_test.dart`
+   (subscribe `watchBaseUnitPrices()`, JOIN `product_units`+`price_tiers`
+   — kena kedua tabel yg diperbaiki).
+2. `saveTransactionWithDebtSettlements` (±baris 3400) — write
+   `debtSettlementDetail` ke nota TIDAK mencap ulang `updatedAt`, padahal
+   `dumpSince` filter transaksi `WHERE created_at >= ? OR updated_at >= ?`
+   (Item 62). Low severity (field ini murni tampilan struk, bukan
+   dipakai recalculation apa pun) tapi tetap real sync gap pada nota
+   LAMA. Fix: tambah `updatedAt: Value(DateTime.now())` ke
+   `TransactionsCompanion` yg sama. Test baru (Tier 1, one-shot cukup —
+   bukan bug reaktivitas stream): `debt_settlement_detail_updated_at_test.dart`.
+
+Kedua fix REVERT-VERIFIED (masing² di-revert sementara, test baru
+terbukti gagal dgn pesan jelas, dikembalikan, hijau lagi). `flutter
+analyze` 0 issue. Full suite: **1613 test lulus, 0 gagal** (tidak ada
+flake `backup_schema_version_guard_test.dart` di run ini). Commit:
+`af825c5`.
+
+**Sesi sebelumnya** — fix reaktivitas stream pasca Tutup Buku: kelas bug
+yang SAMA, di `tutup_buku_service.dart` (fungsi `execute()`, ±baris
+247-327) — 10 `customUpdate` (DELETE) + 1 `customInsert` (carry-forward
+`stock_ledger`) di dalam transaksi tutup buku TIDAK SATUPUN menyertakan
+parameter `updates: {...}`. Sudah dikasih `updates:` sesuai tabel yang
+disentuh. Test `.listen()` live: `tutup_buku_stock_stream_reactive_test.dart`.
 Commit: `b890ee2`.
 
 ## Sesi lalu — redesain KEDUA dropdown ekspor laporan (bukan chip lagi)

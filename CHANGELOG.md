@@ -7,9 +7,25 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
-## 2026-09-11 (sesi keempat puluh sembilan — ikon share laporan + CSV katalog harga bisa dibagikan)
+## 2026-09-11 (sesi keempat puluh — ikon share laporan + CSV katalog harga bisa dibagikan)
 
 `ab159a4` — feat(laporan,produk): ikon share laporan konsisten + CSV katalog harga bisa dibagikan
+
+## 2026-09-11 (sesi keempat puluh sembilan — fix reaktivitas stream pasca approve usulan kasir)
+
+- `af825c5` — fix(db): tambah `updates:` di `applyProductProposals` +
+  cap `updatedAt` `debtSettlementDetail` — kelas bug sama dgn
+  `TutupBukuService` (`b890ee2`): raw SQL (`customStatement`/
+  `customInsert`) menulis 5 tabel (products/product_units/price_tiers/
+  alt_prices/product_barcodes) saat owner approve usulan sync kasir
+  tanpa param `updates:`, jadi `StreamProvider`/`.watch()` (mis.
+  `watchBaseUnitPrices()`) tidak auto-refresh walau data DB sudah benar.
+  `customStatement` DELETE diganti `customUpdate` supaya bisa terima
+  `updates:`. Ditambahkan test `apply_product_proposals_reactive_test.dart`
+  (`.listen()` live). Fix kedua low-severity: `saveTransactionWithDebtSettlements`
+  sekarang mencap `updatedAt` saat menulis `debtSettlementDetail`, supaya
+  update pada nota lama tidak lolos dari filter watermark `dumpSince`.
+  Ditambahkan test `debt_settlement_detail_updated_at_test.dart`.
 
 ## 2026-09-11 (sesi keempat puluh delapan — fix reaktivitas stream pasca Tutup Buku)
 

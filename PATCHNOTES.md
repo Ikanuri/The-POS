@@ -8,7 +8,7 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
-## 11 September 2026 (sesi keempat puluh sembilan)
+## 11 September 2026 (sesi keempat puluh)
 
 ### ✨ Perubahan
 - **Ekspor CSV katalog harga (menu Sinkron Harga) sekarang bisa langsung
@@ -17,6 +17,16 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 - **Ikon share di dropdown unduh laporan diganti** biar konsisten dengan
   ikon share lain di aplikasi (mis. tombol "Bagikan Gambar" di keranjang
   & struk).
+
+## 11 September 2026 (sesi keempat puluh sembilan)
+
+### 🐛 Perbaikan
+- **Daftar produk/kasir yang sedang terbuka kini langsung ter-update
+  setelah owner approve usulan harga/produk dari kasir.** Sebelumnya,
+  kalau layar produk atau kasir sedang terbuka di perangkat owner saat
+  usulan kasir disetujui, harga/produk baru bisa tetap terlihat belum
+  berubah sampai aplikasi di-restart manual (padahal datanya sendiri
+  sudah benar di database).
 
 ## 11 September 2026 (sesi keempat puluh delapan)
 
