@@ -6,12 +6,43 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 11 September 2026, sesi kelima puluh — pesan sukses
-setelah ekspor/backup/share dinetralkan jadi "Selesai" (menghindari
-klaim palsu "berhasil dibagikan" saat user sebenarnya batal share).
-Versi kerja **2.59.0+123** (MINOR naik dari 2.58.1+122 — perubahan UX
-yg terlihat pengguna di 6 file, PATCH direset). schemaVersion **43**
-(tidak berubah)._
+_Update sesi 11 September 2026, sesi kelima puluh satu — layar "Riwayat
+Laci Meja" (3 kategori) diurut terbaru dulu (desc), bukan FIFO asc.
+Versi kerja **2.60.0+124** (MINOR naik dari 2.59.0+123 — perubahan UX
+terlihat pengguna, PATCH direset). schemaVersion **43** (tidak berubah)._
+
+## Sesi kelima puluh satu — riwayat Laci Meja diurut terbaru dulu (menurun)
+
+Permintaan user (persis): "Untuk riwayat laci meja, mungkin sort dari
+yang terbaru dulu, menurun ke yang terlama".
+
+**Penting — 2 mode berbeda di fungsi yang SAMA, jangan tertukar**:
+`watchLeftBehindItems`/`watchBorrowedItems`/`watchPreorderEntries`
+(`app_database.dart`) masing-masing punya mode DEFAULT (dashboard
+`LaciMejaDashboardScreen`, "masih terbuka", `includeX: false`) dan mode
+RIWAYAT (`RiwayatLaciMejaScreen`, arsip semua entri,
+`includeCollected`/`includeFullyReturned`/`includeClosed: true`). Mode
+default WAJIB tetap FIFO asc `createdAt` — ini ATURAN BISNIS (Item 52:
+urutan pemenuhan pre-order, `paid` tidak boleh ikut menentukan urutan;
+komentar kode eksplisit "TIDAK PERNAH, jangan diubah") — SALAH kalau
+diubah, karena FIFO di situ menentukan SIAPA YANG DILAYANI DULU, bukan
+cuma tampilan. Cuma mode RIWAYAT yang diubah ke desc `createdAt` — mode
+default tidak disentuh sama sekali. `watchPreorderEntries` sebelumnya
+berbagi SATU `orderBy` antara kedua mode (`includeClosed` cuma mengubah
+filter `WHERE`, bukan urutan) — ditambah percabangan
+`includeClosed ? desc : asc` di `orderBy` itu sendiri supaya riwayat
+bisa desc tanpa menyentuh FIFO mode default. `watchBorrowedItems` mode
+riwayat tetap mempertahankan `desc(pinned)` sbg sort primer (kartu
+disematkan tetap di atas), cuma sort SEKUNDER `createdAt` yang dibalik
+ke desc.
+
+**Test baru**: 1 test per kategori (Titip/Ketinggalan, Pinjaman,
+Pre-order) di `test/laci_meja_db_test.dart`, tiap test memanggil query
+mode riwayat & assert urutan id `['*-baru', '*-lama']`. Revert-verified
+(stash fix, ketiga test baru gagal dgn urutan kebalik, restore, hijau
+lagi). `flutter analyze` 0 issue. Full suite: **1617 test lulus, 0
+gagal** (naik dari 1614 — +3 test baru bersih, tanpa flake terlihat di
+run ini). Commit: `8e7d1c7`.
 
 ## Sesi kelima puluh — pesan sukses ekspor/backup/share dinetralkan jadi "Selesai"
 

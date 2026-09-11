@@ -8,6 +8,14 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 11 September 2026 (sesi kelima puluh satu)
+
+### ✨ Perubahan
+- **Layar "Riwayat Laci Meja" (Titip/Ketinggalan, Pinjaman, Pre-order)
+  sekarang diurut dari yang TERBARU dulu** — sebelumnya urut dari yang
+  paling lama, jadi entri baru harus di-scroll ke bawah dulu untuk
+  ditemukan.
+
 ## 11 September 2026 (sesi kelima puluh)
 
 ### ✨ Perubahan

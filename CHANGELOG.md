@@ -7,6 +7,18 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-11 (sesi kelima puluh satu — riwayat Laci Meja diurut terbaru dulu)
+
+- `8e7d1c7` — feat(laci-meja): `watchLeftBehindItems`/`watchBorrowedItems`/
+  `watchPreorderEntries` mode riwayat (`includeCollected`/
+  `includeFullyReturned`/`includeClosed: true`, dipakai
+  `RiwayatLaciMejaScreen`) diurut `createdAt` DESC (terbaru dulu) —
+  sebelumnya ikut FIFO asc yang sama dgn mode default (dashboard "masih
+  terbuka"). Mode default TIDAK diubah — aturan FIFO bisnis (Item 52,
+  urutan pemenuhan pre-order) tetap utuh, cuma perilaku 2 mode di fungsi
+  yang sama dipisah percabangan orderBy. Test baru per kategori di
+  `laci_meja_db_test.dart`, revert-verified.
+
 ## 2026-09-11 (sesi kelima puluh — pesan sukses ekspor/backup/share dinetralkan)
 
 `4dd9a2b` — fix(export): netralkan pesan sukses ekspor/backup/share jadi "Selesai"
