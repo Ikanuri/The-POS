@@ -61,7 +61,7 @@ void main() {
         reason: 'kolom name HARUS jadi nullable setelah migrasi v43');
 
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 43);
+    expect(ver.data.values.first, 44);
 
     await db.close();
     if (file.existsSync()) file.deleteSync();

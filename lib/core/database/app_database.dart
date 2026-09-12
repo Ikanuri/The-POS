@@ -291,7 +291,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 43;
+  int get schemaVersion => 44;
 
   /// Key `app_settings` yang BOLEH ikut sync host->klien.
   ///
@@ -892,6 +892,18 @@ class AppDatabase extends _$AppDatabase {
             if (hasPriceCategories) {
               await m.alterTable(TableMigration(priceCategories));
             }
+          }
+          if (from < 44) {
+            // Item 63 — `transaction_items` diperlakukan append-only murni
+            // oleh `dumpSince`/`mergeRows` (persis bug Item 62, tapi di
+            // level baris item, bukan nota) — koreksi post-insert (retur,
+            // edit item, DP pre-order, dll) tidak pernah tersinkron ke
+            // device lain. Tambah `updated_at` supaya bisa difilter/last-
+            // write-wins juga (lihat `dumpSince`/`mergeRows` case khusus
+            // 'transaction_items'). Aditif & nullable, baris lama tetap
+            // valid apa adanya (null = belum pernah dikoreksi ulang).
+            await _addColumnIfMissing('transaction_items', 'updated_at',
+                transactionItems, transactionItems.updatedAt, m);
           }
         },
         beforeOpen: (details) async {
@@ -4380,6 +4392,7 @@ class AppDatabase extends _$AppDatabase {
               .write(TransactionItemsCompanion(
             qty: Value(newQty),
             subtotal: Value(newSubtotal),
+            updatedAt: Value(now),
           ));
         }
       }
@@ -4504,6 +4517,7 @@ class AppDatabase extends _$AppDatabase {
           priceAtSale: Value(newPrice),
           subtotal: Value(newSubtotal),
           itemNote: Value(newNote?.isEmpty ?? true ? null : newNote),
+          updatedAt: Value(now),
         ));
       }
 
@@ -4807,6 +4821,7 @@ class AppDatabase extends _$AppDatabase {
           priceAtSale: Value(newPrice),
           subtotal: Value(newSubtotal),
           itemNote: Value(newNote?.isEmpty ?? true ? null : newNote),
+          updatedAt: Value(now),
         ));
       }
 
@@ -5205,16 +5220,17 @@ class AppDatabase extends _$AppDatabase {
           final item = await (select(transactionItems)
                 ..where((t) => t.id.equals(entry.transactionItemId!)))
               .getSingleOrNull();
+          final now = DateTime.now();
           if (item != null) {
             await (update(transactionItems)
                   ..where((t) => t.id.equals(item.id)))
-                .write(const TransactionItemsCompanion(
-              priceAtSale: Value(0),
-              subtotal: Value(0),
+                .write(TransactionItemsCompanion(
+              priceAtSale: const Value(0),
+              subtotal: const Value(0),
+              updatedAt: Value(now),
             ));
             await _reconcileTransactionTotals(pay.transactionId);
           }
-          final now = DateTime.now();
           await (update(preorderEntries)..where((t) => t.id.equals(entry.id)))
               .write(PreorderEntriesCompanion(
             paid: const Value(false),
@@ -6692,6 +6708,13 @@ class AppDatabase extends _$AppDatabase {
         case 'transaction_items':
           // Item susulan (fitur tambah belanjaan) bisa menempel pada transaksi
           // lama — ikutkan juga berdasarkan added_at agar tidak tertinggal.
+          // Item 63 — baris JUGA bisa dikoreksi setelah insert awal (retur,
+          // edit item, DP pre-order, dll) TANPA parent nota-nya ikut
+          // "created_at baru" ataupun baris ini "added_at baru" (keduanya
+          // murni utk kasus lain) — tanpa OR updated_at ini, koreksi itu
+          // tidak pernah ke-dump lagi begitu watermark device lain sudah
+          // lewat dari created_at nota & added_at baris ini (persis kelas
+          // bug Item 62, level baris item).
           sql = 'SELECT * FROM "transaction_items" WHERE transaction_id IN '
               '(SELECT id FROM "transactions" WHERE created_at >= ?) '
               'OR added_at >= ?';
@@ -8528,10 +8551,12 @@ class AppDatabase extends _$AppDatabase {
       final owed = newSubtotal - item.subtotal;
       if (owed <= 0) return null;
 
+      final now = DateTime.now();
       await (update(transactionItems)..where((t) => t.id.equals(item.id)))
           .write(TransactionItemsCompanion(
         priceAtSale: Value(item.originalPrice),
         subtotal: Value(newSubtotal),
+        updatedAt: Value(now),
       ));
       await _reconcileTransactionTotals(txId);
       await addPaymentToTransaction(
@@ -8543,7 +8568,6 @@ class AppDatabase extends _$AppDatabase {
         note: _kPreorderDepositNote,
       );
 
-      final now = DateTime.now();
       await (update(preorderEntries)
             ..where((t) => t.id.equals(preorderEntryId)))
           .write(PreorderEntriesCompanion(

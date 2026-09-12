@@ -119,6 +119,20 @@ class TransactionItems extends Table {
   /// `addedAt`/"Tambahan".
   DateTimeColumn get returnedAt => dateTime().nullable()();
 
+  /// Item 63 — bug sync serius: baris ini diperlakukan append-only murni
+  /// oleh `dumpSince`/`mergeRows` (INSERT OR IGNORE begitu `id` sudah ada
+  /// di sisi penerima), padahal 5 fungsi genuinely meng-UPDATE baris yang
+  /// SUDAH ada setelah insert pertamanya (retur, edit item nota belum
+  /// lunas, `editPaidTransactionItem`, void pembayaran DP pre-order,
+  /// `collectPreorderDeposit`) — koreksi itu tidak pernah ke-dump lagi
+  /// begitu `transactions.created_at`/`transaction_items.added_at` sudah
+  /// lewat watermark device lain (persis kelas bug Item 62, tapi di level
+  /// baris item, bukan nota). null = baris belum pernah dikoreksi setelah
+  /// insert awal (dumpSince/mergeRows lama, aman utk baris lama). Terisi =
+  /// last-write-wins by kolom ini di `mergeRows` (lihat case khusus
+  /// `transaction_items`, pola sama persis dgn `transactions`/Item 62).
+  DateTimeColumn get updatedAt => dateTime().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
