@@ -6,17 +6,69 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 12 September 2026, sesi kelima puluh empat — cegah tap
-dobel tombol cetak struk memicu 2 write bersamaan ke printer thermal
-(`receipt_screen.dart`/`merged_receipt_screen.dart` + defense-in-depth
-native `MainActivity.kt`, lihat di bawah). Versi kerja **2.60.3+127**
-(PATCH naik dari 2.60.2+126 — murni bugfix, tanpa fitur baru).
-schemaVersion **43** (tidak berubah). Catatan: sesi lain mungkin masih
-bekerja PARALEL di branch `claude/kategori-produk-qty-harga-mqjh21`
-yang sama — kalau nomor versi/commit di sini sudah tidak sinkron dgn
-`pubspec.yaml`/`git log` aktual, itu WAJAR (rebase pending dari sesi
-lain), jangan dianggap korupsi data — cek `git log` langsung utk state
-terkini._
+_Update sesi 12 September 2026, sesi kelima puluh lima — tombol
+"Penuhi" pre-order langsung di kartu nota (`receipt_screen.dart`, lihat
+di bawah). Versi kerja **2.61.0+128** (MINOR naik dari 2.60.3+127 —
+fitur baru terlihat pengguna, PATCH reset ke 0). schemaVersion **43**
+(tidak berubah, tanpa migrasi). Catatan: sesi lain (agen paralel) sedang
+mengerjakan fitur search-highlight di `kasir_screen.dart` di branch
+`claude/kategori-produk-qty-harga-mqjh21` yang sama — kalau nomor
+versi/commit di sini sudah tidak sinkron dgn `pubspec.yaml`/`git log`
+aktual, itu WAJAR (rebase pending dari sesi lain), jangan dianggap
+korupsi data — cek `git log` langsung utk state terkini.
+
+**Follow-up yang DIDISKUSIKAN tapi SENGAJA BELUM dibangun** (bukan lupa
+— keputusan eksplisit user "jangan dulu"): melunasi pre-order DP-Rp0
+sbg baris keranjang bersamaan belanja lain di hari yang sama (analog
+pelunasan hutang) — fitur TERPISAH & lebih besar dari tombol "Penuhi"
+sesi ini, belum dijadwalkan. Kalau sesi depan perlu ini, mulai dari nol
+(belum ada kode/desain tersimpan di mana pun)._
+
+## Sesi kelima puluh lima — tombol Penuhi pre-order langsung di kartu nota
+
+Permintaan user (persis): "malas buka laci meja misal, jadi langsung
+tap keterangan yang ada di cart bar, lalu penuhi di card in app
+struknya" — kartu Pre-order di `receipt_screen.dart` sebelumnya cuma
+status read-only, kasir harus buka Laci Meja dashboard dulu utk
+memenuhi pesanan.
+
+**Implementasi**: `_laciMejaEntryBlock` (dipakai 3 kartu: Pinjaman,
+Titip/Ketinggalan, Pre-order) dapat parameter baru `Widget? fulfillButton`
+— dirender di Row headline yang sama dgn ikon edit pensil (`[headline
+Expanded, ikon edit?, SizedBox(4), fulfillButton?]`), default `null` jadi
+2 caller lain (Pinjaman/Titip) TIDAK berubah sama sekali. Hanya
+`_buildPreorderCard()` yang mengisinya, digerbangi PERSIS kondisi status
+yang sudah ada (`p.cancelledAt == null && p.fulfilledAt == null` — sama
+dgn cabang "Sisa X belum dipenuhi", bukan "Dibatalkan"/"Selesai").
+
+Logic tombol (`_fulfillPreorderFromReceipt`) meniru PERSIS alur
+"Penuhi" di `laci_meja_dashboard_screen.dart`: dialog qty (`_showQtyDialog`,
+duplikat privat kecil — fungsi asalnya `static`/private di file lain,
+tidak diekspor, tidak layak diekstrak jadi shared widget utk dialog
+sesederhana ini) kalau sisa > 1 (boleh dipenuhi bertahap), langsung
+`fulfillPreorderEntry` kalau sisa <= 1, lalu tawarkan
+`showDebtPaymentSheet` kalau `getPreorderDepositOwed` masih > 0 (DP/
+jaminan Rp0 yang dikunci saat checkout). Ditutup `await _load()` supaya
+kartu langsung refresh (screen ini one-shot fetch, bukan `StreamProvider`
+— tidak ada auto-refresh reaktif utk data ini).
+
+**Test baru** (`test/receipt_preorder_fulfill_button_test.dart`, 6 test):
+sisa > 1 → dialog muncul, konfirmasi parsial → `fulfillPreorderQty`
+jumlah benar & kartu refresh; sisa <= 1 → langsung `fulfillPreorderEntry`
+tanpa dialog; entri berDP tertunda → sheet DP/jaminan ditawarkan setelah
+dipenuhi; entri Dibatalkan/Selesai → tombol tidak muncul sama sekali;
+kartu Pinjaman/Titip (2 caller lain) TIDAK terpengaruh. Revert-verified
+(fix di-stash sementara, 3 test yg butuh tombol gagal sensibel dgn
+"could not find Penuhi", 3 test gating tetap hijau krn memang cuma
+menegaskan ketiadaan tombol; restore, hijau lagi).
+
+`flutter analyze` 0 issue. Full suite: **1627 test lulus, 2 gagal**
+(`proposal_unchanged_end_to_end_test.dart`, TIDAK terkait file yang
+disentuh sesi ini — lulus bersih 2/2 saat diisolasi, flake
+resource-contention environment krn sesi lain jalan paralel di branch
+yang sama, pola sudah berulang kali didokumentasikan sesi-sesi
+sebelumnya). Commits: `9fe57f1` (plumbing parameter), `3242222` (logic
+tombol + test).
 
 ## Sesi kelima puluh empat — cegah tap dobel tombol cetak struk
 

@@ -8,6 +8,15 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 12 September 2026 (sesi kelima puluh lima)
+
+### ✨ Fitur Baru
+- **Kartu Pre-order di struk in-app sekarang punya tombol "Penuhi"
+  langsung, tidak perlu buka layar Laci Meja dulu.** Kalau pesanan
+  masih tersisa banyak, muncul dialog kecil utk mengisi jumlah yang
+  datang (boleh sebagian dulu). Kalau ada DP/jaminan yang belum
+  dibayar, langsung ditawarkan sekalian.
+
 ## 12 September 2026 (sesi kelima puluh empat)
 
 ### 🐛 Perbaikan

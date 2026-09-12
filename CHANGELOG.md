@@ -7,6 +7,12 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-12 (sesi kelima puluh lima — tombol Penuhi pre-order langsung di kartu nota)
+
+- `3242222` — feat(kasir): tombol Penuhi pre-order langsung di kartu nota
+- `9fe57f1` — feat(kasir): tambah parameter fulfillButton opsional ke
+  _laciMejaEntryBlock
+
 ## 2026-09-12 (sesi kelima puluh empat — cegah tap dobel tombol cetak struk)
 
 - `807d2b1` — fix(android): serialize native printer write via synchronized
