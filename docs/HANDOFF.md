@@ -6,19 +6,101 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 12 September 2026, sesi kelima puluh tujuh — fitur
-"Pelunasi Pre-order" via keranjang (lihat di bawah, task #17). Versi
-kerja **2.63.0+130** (MINOR naik dari 2.62.0+129 — fitur baru terlihat
-pengguna, PATCH reset ke 0). schemaVersion **43** (tidak berubah, TANPA
-migrasi — fitur ini reuse kolom `transactions.debtSettlementDetail`
-yang sudah ada, cuma ditambah field diskriminator `type` di JSON-nya).
-Ini rebase TERBARU di atas sesi kelima puluh enam (select-all teks
-cari lama, `kasir_screen.dart`, agen paralel — sudah digabung bersih,
-tidak ada konflik).
+_Update sesi 12 September 2026, sesi kelima puluh delapan — fix bug
+sync Item 63 (lihat di bawah, task #20). Versi kerja **2.63.1+131**
+(PATCH naik dari 2.63.0+130 — murni bugfix internal, TANPA fitur baru
+terlihat pengguna; #17/#18 di sesi 55/57 belum sampai rilis nyata ke
+lapangan sejauh dokumentasi ini bisa pastikan, jadi tidak ada entri
+PATCHNOTES.md utk fix ini). schemaVersion **44** (naik dari 43 —
+`transaction_items` dapat kolom nullable `updated_at`, migrasi aditif
+murni).
 
-Follow-up dari sesi 55/56 ("melunasi pre-order DP-Rp0 sbg baris
-keranjang bersamaan belanja lain di hari yang sama, analog pelunasan
-hutang") SUDAH DIBANGUN sesi ini — bukan lagi item menggantung._
+Bug yang diperbaiki: `transaction_items` (qty/priceAtSale/subtotal)
+diperlakukan append-only murni oleh `dumpSince`/`mergeRows` — koreksi
+SETELAH insert awal (retur, edit item, void/kumpul DP pre-order) tidak
+pernah tersinkron ke device lain (kelas bug SAMA dgn Item 62/
+`transactions`, tapi di level baris item). Terbongkar nyata lewat 2
+fitur sesi 55/57 (tombol "Penuhi" di struk & "Pelunasi Pre-order" via
+keranjang) yang sama² lewat `collectPreorderDeposit` (fungsi lama,
+LOGIKANYA TIDAK diubah sesi ini) — device lain yang sudah pernah sync
+nota itu berakhir `paid > total` (kembalian/lebih-bayar hantu) & harga
+item basi permanen di laporannya sendiri. Fix: kolom `updated_at` baru
+(migrasi v44) + stamp di 5 fungsi mutasi + `dumpSince` tambah `OR
+updated_at >= ?` + `mergeRows` special-case last-write-wins persis pola
+`transactions` (Item 62) — lihat komentar "Item 63" di `app_database.dart`.
+
+Ini rebase TERBARU di atas sesi kelima puluh tujuh (Pelunasi Pre-order
+via keranjang, task #17) — sudah digabung bersih, tidak ada konflik.
+
+## Sesi kelima puluh delapan — fix sync transaction_items pasca-insert (Item 63, task #20)
+
+**Root cause** (dikonfirmasi baca kode langsung, bukan cuma laporan):
+1. `dumpSince` case `transaction_items` cuma filter
+   `transaction_id IN (SELECT id FROM transactions WHERE created_at >=
+   ?) OR added_at >= ?` — TIDAK ada cek per-baris utk koreksi
+   post-insert. Nota LAMA yang salah satu itemnya dikoreksi belakangan
+   (parent `created_at` sudah lewat watermark, `added_at` baris itu
+   sendiri null krn bukan item "tambah belanjaan") tidak pernah lolos
+   filter.
+2. `mergeRows` memperlakukan `transaction_items` sbg `isAppendOnly` →
+   `INSERT OR IGNORE` — begitu PK sudah ada di sisi penerima, baris
+   di-skip TOTAL, walaupun baris itu BERHASIL ikut dump.
+
+5 titik mutasi (semua `app_database.dart`, semua UPDATE baris
+`transaction_items` yang SUDAH ada): retur (nota belum lunas), edit
+item (nota belum lunas), `editPaidTransactionItem`, `voidPayment`
+(reversal DP pre-order), `collectPreorderDeposit`. **Logika bisnis
+kelima fungsi ini TIDAK diubah sama sekali** — murni tambah
+`updatedAt: Value(now)` (semua sudah py `now` di scope, 2 titik
+`voidPayment`/`collectPreorderDeposit` perlu declare `now` sedikit
+lebih awal drpd sebelumnya supaya bisa dipakai di companion yang sama).
+
+**Fix sync** (mirror PERSIS pola "Item 62" yang sudah ada utk
+`transactions` — lihat komentarnya di `app_database.dart`):
+- `dumpSince`: tambah `OR updated_at >= ?` (varCount 3).
+- `mergeRows`: di dalam cabang `isAppendOnly` "PK sudah ada", tambah
+  special case `tableName == 'transaction_items'` — last-write-wins by
+  `updated_at`, `customUpdate` HANYA menimpa
+  `qty`/`price_at_sale`/`subtotal`/`item_note` (+`updated_at`), kolom
+  lain (`added_at`, `returned_at`, `product_id`, `product_unit_id`,
+  `transaction_id`, `original_price`, `cost_at_sale`,
+  `price_overridden`) TIDAK disentuh. `updates: {transactionItems}`
+  disertakan (gotcha raw-SQL StreamProvider di CLAUDE.md).
+
+**Test baru**:
+- `test/migration_v44_test.dart` — fixture v43 raw sqlite3 (tabel
+  minimal `transaction_items` tanpa `updated_at`), buka via
+  `AppDatabase` utk memicu `onUpgrade` SUNGGUHAN sampai v44, assert
+  kolom fisik ada & NULL utk baris lama.
+- `test/transaction_items_updated_at_sync_test.dart` — end-to-end host→
+  klien: seed nota pre-order (pola `preorder_deposit_payment_test.dart`,
+  `createdAt` SENGAJA dibackdate 3 hari spy join parent `created_at`
+  tidak kebetulan ikut lolos), sync pertama (klien dapat copy Rp0),
+  `collectPreorderDeposit` di HOST, sync kedua dari watermark antara
+  keduanya → assert baris ikut dump (bukti fix dumpSince) → assert
+  `mergeRows` benar² menerapkan koreksi ke klien (bukti fix mergeRows)
+  → jalankan `reconcileTransactionsByIds` sungguhan di klien → assert
+  `paid <= total` (bukti ghost-overpay dicegah). **Revert-verified 2x
+  TERPISAH** (dumpSince sendiri via `false && ...`/reset varCount, lalu
+  mergeRows sendiri via `false && ...`) — masing² gagal dgn pesan yang
+  tepat menunjuk defect yang benar, restore, hijau lagi.
+- 22 test migrasi lama (`migration_v7_test.dart` s/d
+  `migration_v43_test.dart`) diupdate 1 baris tiap file: assersi
+  `PRAGMA user_version` akhir dari `43` → `44` (masing² meng-assert
+  schemaVersion TERKINI global, bukan versi migrasi spesifiknya —
+  konvensi lama di file-file ini, komentar "schemaVersion terkini").
+  Ini BUKAN perubahan perilaku, murni mengikuti kenaikan schemaVersion.
+
+`flutter analyze` 0 issue. Full suite: **1650 test lulus** (naik dari
+1629 baseline sebelum sesi ini — +2 file baru `migration_v44_test.dart`
+& `transaction_items_updated_at_sync_test.dart`, minus... tidak ada test
+dihapus, cuma 22 diupdate assersinya). Full-run pertama sempat
+menunjukkan 1 gagal (`proposal_unchanged_end_to_end_test.dart`) — lulus
+bersih 2/2 saat diisolasi, flake resource-contention environment yang
+sudah berulang kali didokumentasikan sesi-sesi sebelumnya, TIDAK terkait
+perubahan sesi ini. Full-run kedua (setelah fix 22 file migrasi): 0
+gagal sama sekali (flake tidak muncul lagi di run itu). Commits:
+`f2633b4` (schema+stamping), `2b6132b` (sync fix dumpSince/mergeRows).
 
 ## Sesi kelima puluh tujuh — fitur "Pelunasi Pre-order" via keranjang (task #17)
 

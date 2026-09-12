@@ -7,6 +7,13 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-12 (sesi kelima puluh delapan — fix sync transaction_items, Item 63)
+
+- `2b6132b` — fix(sync): transaction_items — koreksi post-insert
+  (retur/edit/DP pre-order) ikut tersinkron
+- `f2633b4` — feat(db): schema v44 — transaction_items.updated_at +
+  stamp di 5 titik koreksi
+
 ## 2026-09-12 (sesi kelima puluh tujuh — fitur Pelunasi Pre-order via keranjang)
 
 - `da0e9f4` — feat(kasir): wiring checkout Pelunasi Pre-order di payment_screen
