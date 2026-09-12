@@ -6,10 +6,60 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 11 September 2026, sesi kelima puluh satu — layar "Riwayat
-Laci Meja" (3 kategori) diurut terbaru dulu (desc), bukan FIFO asc.
-Versi kerja **2.60.0+124** (MINOR naik dari 2.59.0+123 — perubahan UX
-terlihat pengguna, PATCH direset). schemaVersion **43** (tidak berubah)._
+_Update sesi 12 September 2026, sesi kelima puluh dua — fix
+`OrderParserService.parse()` harga bertingkat baris dobel transfer
+handoff (lihat di bawah). Versi kerja **2.60.1+125** (PATCH naik dari
+2.60.0+124 — murni bugfix, tanpa fitur baru). schemaVersion **43**
+(tidak berubah). Catatan: 2 sesi lain sedang bekerja PARALEL di branch
+`claude/kategori-produk-qty-harga-mqjh21` yang sama (fix race held-order
+`kasir_screen.dart`/`cart_sheet.dart`, fix print-race guard
+`receipt_screen.dart`/native Android) — kalau nomor versi/commit di sini
+sudah tidak sinkron dgn `pubspec.yaml`/`git log` aktual, itu WAJAR (rebase
+pending dari sesi lain), jangan dianggap korupsi data — cek `git log`
+langsung utk state terkini._
+
+## Sesi kelima puluh dua — fix harga bertingkat baris dobel transfer handoff
+
+**Bug** (ditemukan audit eksternal, bukan laporan user): `parse()`
+(`order_parser_service.dart`, cabang merge unitId dobel ~baris 194-224)
+menghitung ulang harga tingkat utk qty gabungan lewat `reResolved.price`
+(BENAR), tapi lalu buang hasilnya via `price ?? reResolved.price` —
+`price` (dari flag `p=`, HANYA ada di transfer handoff QR antar-device
+toko sendiri via `encodeHandoff`, SELALU ada di jalur itu) selalu menang,
+membekukan harga tingkat LAMA (qty tunggal) ke qty BARU gabungan. Salah
+utk toko berharga bertingkat (harga berubah di ambang qty) — TIDAK
+mempengaruhi jalur katalog HTML pelanggan (flag kosong di situ,
+`price ?? reResolved.price` sudah otomatis jatuh ke `reResolved.price`).
+
+**Fix**: `priceOverridden` (flag `v=1`, sudah ada, artinya "harga sender
+adalah override MANUAL, bukan hasil resolve tingkat normal") dipakai
+sbg gerbang: `false` → WAJIB `reResolved.price` fresh (harga sender basi
+utk qty baru); `true` → tetap percaya `price` sender (override manual
+sengaja, berlaku brp pun qty gabungannya). `originalPrice` diberi
+percabangan sama (semula ikut fallback chain `price` yg sama, sekarang
+konsisten dgn expresi `price`-nya).
+
+Ekspresi final (persis, merge branch SAJA — cabang non-merge ~baris 225
+ke bawah TIDAK disentuh):
+```dart
+price: priceOverridden ? (price ?? reResolved.price) : reResolved.price,
+originalPrice: priceOverridden
+    ? (originalPrice ?? price ?? reResolved.price)
+    : reResolved.price,
+```
+
+**Test baru** (`test/order_parser_service_test.dart`): 2 test — (1) tier
+qty 1-4 @ Rp13000, qty 5+ @ Rp11000, kirim qty 3 `priceOverridden=false`
+lalu tempel dobel (gabung ke qty 6, lintas ambang) → `price` HARUS 11000,
+BUKAN 13000 lama; (2) companion `priceOverridden=true` (override manual
+Rp12500) dgn skenario sama → `price` TETAP 12500, TIDAK dihitung ulang.
+Revert-verified: fix di-revert sementara, test (1) gagal `Expected:
+<11000> Actual: <13000>` (persis prediksi bug), fix dikembalikan, hijau
+lagi. Test lama ~baris 777-813 (flat pricing, cuma assert
+`priceTrustedFromSender`/`currentResolvedPrice`, bukan `.price`) TETAP
+LULUS tanpa perubahan assersi (memang tidak menyentuh nilai `.price`).
+`flutter analyze` 0 issue. Full suite: **1619 test lulus, 0 gagal**
+(naik dari sebelumnya — +2 test baru bersih). Commit: `433e2b4`.
 
 ## Sesi kelima puluh satu — riwayat Laci Meja diurut terbaru dulu (menurun)
 

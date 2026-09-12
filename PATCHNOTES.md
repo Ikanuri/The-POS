@@ -8,6 +8,14 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 12 September 2026 (sesi kelima puluh dua)
+
+### 🐛 Perbaikan
+- **Perbaikan harga bertingkat saat transfer keranjang antar-perangkat
+  ditempel dua kali secara tidak sengaja** — sebelumnya harga qty lama
+  ikut terbawa ke qty gabungan yang baru walau seharusnya sudah masuk
+  tingkat harga berbeda.
+
 ## 11 September 2026 (sesi kelima puluh satu)
 
 ### ✨ Perubahan

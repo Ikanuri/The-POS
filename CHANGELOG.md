@@ -7,6 +7,11 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-12 (sesi kelima puluh dua — fix harga bertingkat baris dobel transfer handoff)
+
+- `433e2b4` — fix(order-parser): harga bertingkat tidak dihitung ulang saat
+  baris transfer handoff tertempel dobel
+
 ## 2026-09-11 (sesi kelima puluh satu — riwayat Laci Meja diurut terbaru dulu)
 
 - `8e7d1c7` — feat(laci-meja): `watchLeftBehindItems`/`watchBorrowedItems`/
