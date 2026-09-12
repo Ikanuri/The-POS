@@ -850,6 +850,21 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
     }
   }
 
+  /// Dipanggil SETELAH tap "+"/"-" (stepper) di kartu/tile/varian produk
+  /// selesai diproses — bila field cari sedang expanded (fokus) & masih
+  /// berisi teks sisa pencarian sebelumnya, select-all teksnya supaya kasir
+  /// bisa langsung ketik ulang produk berikutnya tanpa hapus manual. Field
+  /// sudah fokus (bukan baru dapat fokus), jadi TIDAK perlu
+  /// `addPostFrameCallback` seperti `_onFocusChange` di `_KasirTopbarState`
+  /// (yang menunggu cursor default Flutter dulu baru menimpa). Kalau field
+  /// tidak fokus/kosong, tidak melakukan apa-apa sama sekali.
+  void _highlightSearchIfActive() {
+    if (_searchFocus.hasFocus && _searchCtrl.text.isNotEmpty) {
+      final len = _searchCtrl.text.length;
+      _searchCtrl.selection = TextSelection(baseOffset: 0, extentOffset: len);
+    }
+  }
+
   bool _scannerOpen = false;
   MobileScannerController? _scannerCtrl;
   final _scanPulseController = ScanPulseController();
@@ -2156,6 +2171,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
                                   onQuickAdd: _quickAdd,
                                   onOpenEntry: () => _openEntry(prods[i]),
                                   onBeforeTap: _markSkipSearchCollapse,
+                                  onAfterQtyChange: _highlightSearchIfActive,
                                 ),
                               );
                             }
@@ -2173,6 +2189,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
                                 onQuickAdd: _quickAdd,
                                 onOpenEntry: () => _openEntry(prods[i]),
                                 onBeforeTap: _markSkipSearchCollapse,
+                                onAfterQtyChange: _highlightSearchIfActive,
                               ),
                             );
                           },
@@ -2859,6 +2876,7 @@ class _ProductCard extends ConsumerWidget {
     required this.onQuickAdd,
     required this.onOpenEntry,
     this.onBeforeTap,
+    this.onAfterQtyChange,
   });
 
   final Product product;
@@ -2871,6 +2889,11 @@ class _ProductCard extends ConsumerWidget {
   /// dipakai layar kasir untuk menahan field cari agar tidak mengecil bila
   /// sedang expanded & berisi teks. Lihat `_markSkipSearchCollapse`.
   final VoidCallback? onBeforeTap;
+
+  /// Dipanggil SETELAH tap "+"/"-" (stepper) selesai memproses qty — dipakai
+  /// layar kasir untuk select-all teks pencarian lama bila field cari sedang
+  /// expanded & berisi teks. Lihat `_highlightSearchIfActive`.
+  final VoidCallback? onAfterQtyChange;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -2976,10 +2999,14 @@ class _ProductCard extends ConsumerWidget {
                           } else {
                             onQuickAdd(product, d);
                           }
+                          onAfterQtyChange?.call();
                         },
                         onMinus: qty > 0
-                            ? () => _decrementProduct(
-                                context, cart, notifier, product.id)
+                            ? () {
+                                _decrementProduct(
+                                    context, cart, notifier, product.id);
+                                onAfterQtyChange?.call();
+                              }
                             : null,
                       ),
                       orElse: () => const SizedBox(width: 46, height: 46),
@@ -3018,6 +3045,7 @@ class _ProductListTile extends ConsumerStatefulWidget {
     required this.onQuickAdd,
     required this.onOpenEntry,
     this.onBeforeTap,
+    this.onAfterQtyChange,
   });
 
   final Product product;
@@ -3030,6 +3058,12 @@ class _ProductListTile extends ConsumerStatefulWidget {
   /// di dropdown inline) diproses — dipakai layar kasir untuk menahan field
   /// cari agar tidak mengecil bila sedang expanded & berisi teks.
   final VoidCallback? onBeforeTap;
+
+  /// Dipanggil SETELAH tap "+"/"-" (stepper item ATAU baris varian di
+  /// dropdown inline) selesai memproses qty — dipakai layar kasir untuk
+  /// select-all teks pencarian lama bila field cari sedang expanded &
+  /// berisi teks. Lihat `_highlightSearchIfActive`.
+  final VoidCallback? onAfterQtyChange;
 
   @override
   ConsumerState<_ProductListTile> createState() => _ProductListTileState();
@@ -3183,10 +3217,14 @@ class _ProductListTileState extends ConsumerState<_ProductListTile> {
                         } else {
                           widget.onQuickAdd(product, d);
                         }
+                        widget.onAfterQtyChange?.call();
                       },
                       onMinus: qty > 0
-                          ? () => _decrementProduct(
-                              context, cart, notifier, product.id)
+                          ? () {
+                              _decrementProduct(
+                                  context, cart, notifier, product.id);
+                              widget.onAfterQtyChange?.call();
+                            }
                           : null,
                     ),
                     orElse: () => const SizedBox(width: 48, height: 48),
@@ -3201,6 +3239,7 @@ class _ProductListTileState extends ConsumerState<_ProductListTile> {
               parent: product,
               parentDetail: detailAsync.asData?.value,
               cartId: widget.cartId,
+              onAfterQtyChange: widget.onAfterQtyChange,
             ),
         ],
       ),
@@ -3215,11 +3254,17 @@ class _VariantDropdown extends ConsumerWidget {
     required this.parent,
     required this.parentDetail,
     required this.cartId,
+    this.onAfterQtyChange,
   });
 
   final Product parent;
   final CatalogDetail? parentDetail;
   final String cartId;
+
+  /// Dipanggil SETELAH tap "+"/"-" baris varian selesai memproses qty —
+  /// dipakai layar kasir untuk select-all teks pencarian lama bila field
+  /// cari sedang expanded & berisi teks. Lihat `_highlightSearchIfActive`.
+  final VoidCallback? onAfterQtyChange;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -3295,10 +3340,14 @@ class _VariantDropdown extends ConsumerWidget {
                               parentDetail: d,
                               v: v,
                             );
+                            onAfterQtyChange?.call();
                           },
                           onMinus: vQty > 0
-                              ? () => _decrementVariant(
-                                  notifier: notifier, cart: cart, v: v)
+                              ? () {
+                                  _decrementVariant(
+                                      notifier: notifier, cart: cart, v: v);
+                                  onAfterQtyChange?.call();
+                                }
                               : null,
                         );
                       }),
