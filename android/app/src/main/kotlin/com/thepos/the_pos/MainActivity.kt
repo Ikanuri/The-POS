@@ -23,6 +23,17 @@ class MainActivity : FlutterActivity() {
 
     private var btSocket: BluetoothSocket? = null
 
+    // Defense-in-depth (Dart-side guard `_isPrinting` di `receipt_screen.dart`/
+    // `merged_receipt_screen.dart` adalah baris pertahanan utama) — `doWrite`
+    // SPAWN THREAD BARU tiap panggilan MethodChannel `write`, TANPA
+    // sinkronisasi apa pun sebelumnya; kalau 2 panggilan `write` SEMPAT lolos
+    // bersamaan dari sisi Dart (bug lain yang belum ketahuan, race, dsb),
+    // 2 thread menulis ke `OutputStream` SOCKET YANG SAMA bisa
+    // ke-interleave/rusak byte stream ESC/POS. Lock ini murni MENAMBAH mutual
+    // exclusion di level thread native — tidak mengubah perilaku panggilan
+    // tunggal sama sekali.
+    private val writeLock = Any()
+
     // Jaring pengaman native — cakupan LEBIH LUAS dari `runZonedGuarded` di
     // sisi Dart (main.dart): menangkap exception Java/Kotlin tak tertangani
     // (mis. UnsatisfiedLinkError saat gagal memuat native library) SEBELUM
@@ -178,21 +189,23 @@ class MainActivity : FlutterActivity() {
             result.success(reply); return
         }
         Thread {
-            try {
-                Log.d(TAG, "Menulis ${bytes.size} bytes …")
-                s.outputStream.write(bytes)
-                s.outputStream.flush()
-                Log.d(TAG, "Write berhasil")
-                reply["ok"] = true
-                reply["err"] = null
-            } catch (e: IOException) {
-                Log.e(TAG, "write IOException: ${e.message}")
-                reply["ok"] = false
-                reply["err"] = "IOException: ${e.message}"
-            } catch (e: Exception) {
-                Log.e(TAG, "write Exception: ${e.message}")
-                reply["ok"] = false
-                reply["err"] = "${e.javaClass.simpleName}: ${e.message}"
+            synchronized(writeLock) {
+                try {
+                    Log.d(TAG, "Menulis ${bytes.size} bytes …")
+                    s.outputStream.write(bytes)
+                    s.outputStream.flush()
+                    Log.d(TAG, "Write berhasil")
+                    reply["ok"] = true
+                    reply["err"] = null
+                } catch (e: IOException) {
+                    Log.e(TAG, "write IOException: ${e.message}")
+                    reply["ok"] = false
+                    reply["err"] = "IOException: ${e.message}"
+                } catch (e: Exception) {
+                    Log.e(TAG, "write Exception: ${e.message}")
+                    reply["ok"] = false
+                    reply["err"] = "${e.javaClass.simpleName}: ${e.message}"
+                }
             }
             result.success(reply)
         }.start()
