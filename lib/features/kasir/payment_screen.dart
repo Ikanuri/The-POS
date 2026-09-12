@@ -18,6 +18,7 @@ import '../../core/utils/input_formatters.dart';
 import '../laci_meja/laci_meja_reminder.dart';
 import 'cart_debt_settlement_provider.dart';
 import 'cart_meta_provider.dart';
+import 'cart_preorder_settlement_provider.dart';
 import 'cart_price_category_provider.dart';
 import 'cart_prabayar_provider.dart';
 import 'cart_provider.dart';
@@ -622,13 +623,26 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   int get _debtSettlementTotal =>
       _debtSettlementEntries.fold<int>(0, (s, e) => s + e.amount);
 
+  /// Fitur "Pelunasi Pre-order" — arsitektur IDENTIK dgn
+  /// [_debtSettlementEntries] di atas (baca dok di sana), sumber datanya
+  /// `cartPreorderSettlementProvider` — TIDAK relevan di mode Tambah
+  /// Belanjaan, sama persis.
+  List<PreorderSettlementEntry> get _preorderSettlementEntries => _isAddMode
+      ? const []
+      : ref.read(cartPreorderSettlementProvider(_cartId));
+
+  int get _preorderSettlementTotal =>
+      _preorderSettlementEntries.fold<int>(0, (s, e) => s + e.amount);
+
   /// Total keseluruhan yang perlu DITERIMA kasir dari pelanggan: total
-  /// belanja baru ([_total]) + seluruh nominal Lunasi Hutang. BUKAN nilai
-  /// yang tersimpan sbg `transactions.total` nota baru (itu tetap [_total]
-  /// murni, exclude pelunasan hutang — lihat dok `saveTransactionWithDebtSettlements`)
+  /// belanja baru ([_total]) + seluruh nominal Lunasi Hutang + seluruh
+  /// nominal Pelunasi Pre-order. BUKAN nilai yang tersimpan sbg
+  /// `transactions.total` nota baru (itu tetap [_total] murni, exclude
+  /// pelunasan hutang/pre-order — lihat dok `saveTransactionWithDebtSettlements`)
   /// — murni figur tampilan supaya kasir tahu berapa total uang fisik yang
   /// harus diterima sekali jalan.
-  int get _grandTotal => _total + _debtSettlementTotal;
+  int get _grandTotal =>
+      _total + _debtSettlementTotal + _preorderSettlementTotal;
 
   Future<void> _editTotal() async {
     final prefs = await SharedPreferences.getInstance();
@@ -934,12 +948,31 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
               ))
           .toList();
 
+      // Fitur "Pelunasi Pre-order" — arsitektur IDENTIK dgn `debtSettlements`
+      // di atas, termasuk aturan fallback "tempo -> tunai" yg SAMA
+      // (`debtSettlementMethod`/`debtSettlementMethodName` — pelunasan
+      // pre-order LAMA juga butuh uang sungguhan sekarang, kontradiktif
+      // dgn 'tempo' utk nota BARU).
+      final preorderSettlements = _preorderSettlementEntries
+          .map((e) => (
+                preorderEntryId: e.preorderEntryId,
+                invoiceId: e.invoiceId,
+                invoiceLocalId: e.invoiceLocalId,
+                invoiceDate: e.invoiceDate,
+                customerName: e.customerName,
+                amount: e.amount,
+                method: debtSettlementMethod,
+                methodName: debtSettlementMethodName,
+              ))
+          .toList();
+
       await db.saveTransactionWithDebtSettlements(
         tx: txCompanion,
         items: itemCompanions,
         payments: paymentCompanions,
         stockItems: stockItems,
         debtSettlements: debtSettlements,
+        preorderSettlements: preorderSettlements,
         kasirId: device.deviceCode,
         now: now,
         loyaltyEntry: loyaltyEntry,
@@ -991,6 +1024,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       ref.read(cartMetaProvider(_cartId).notifier).clear();
       ref.read(cartPrabayarProvider(_cartId).notifier).clear();
       ref.read(cartDebtSettlementProvider(_cartId).notifier).clear();
+      ref.read(cartPreorderSettlementProvider(_cartId).notifier).clear();
       // Bug fix: toggle kategori harga header (`kMainCartId` singleton, TIDAK
       // per-transaksi) nempel ke transaksi BERIKUTNYA kalau tidak direset di
       // sini — kasir aktifkan kategori, checkout, lalu transaksi baru diam-
@@ -1443,12 +1477,90 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                                 ],
                               ),
                             ),
+                          // Baris "Total Diterima" HANYA di sini kalau tidak
+                          // ada entri Pelunasi Pre-order — kalau ADA, baris
+                          // gabungan (Belanja + Hutang + Pre-order) dirender
+                          // SEKALI SAJA di kartu Pre-order di bawah (urutan
+                          // render: Hutang dulu, baru Pre-order) supaya tidak
+                          // dobel & tetap akurat menjumlahkan KEDUA jenis
+                          // pelunasan sekaligus.
+                          if (_preorderSettlementEntries.isEmpty) ...[
+                            const Divider(height: 12),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text('Total Diterima (Belanja + Hutang)',
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.w700)),
+                                Text(formatRupiah(_grandTotal),
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        color: scheme.tertiary)),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+                // Fitur "Pelunasi Pre-order" — arsitektur & gaya visual
+                // IDENTIK dgn kartu "Turut Lunasi Hutang" di atas (lihat dok
+                // di sana), sumber datanya `_preorderSettlementEntries`.
+                // Label baris ini menampilkan nama produk pre-order (bukan
+                // nomor nota) — beda dari hutang, karena pre-order selalu
+                // satu produk spesifik per DP.
+                if (_preorderSettlementEntries.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Card(
+                    color: scheme.tertiaryContainer.withOpacity(0.35),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.inventory_2_outlined,
+                                  size: 16, color: scheme.tertiary),
+                              const SizedBox(width: 6),
+                              Text('Turut Pelunasi Pre-order',
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      color: scheme.tertiary)),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          for (final p in _preorderSettlementEntries)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 2),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      '${p.customerName} · ${p.productName}',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(fontSize: 12),
+                                    ),
+                                  ),
+                                  Text(formatRupiah(p.amount),
+                                      style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600)),
+                                ],
+                              ),
+                            ),
                           const Divider(height: 12),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const Text('Total Diterima (Belanja + Hutang)',
-                                  style: TextStyle(
+                              Text(
+                                  'Total Diterima (Belanja'
+                                  '${_debtSettlementEntries.isNotEmpty ? ' + Hutang' : ''}'
+                                  ' + Pre-order)',
+                                  style: const TextStyle(
                                       fontWeight: FontWeight.w700)),
                               Text(formatRupiah(_grandTotal),
                                   style: TextStyle(
