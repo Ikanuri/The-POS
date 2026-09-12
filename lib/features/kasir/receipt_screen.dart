@@ -4366,6 +4366,131 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     );
   }
 
+  /// Tombol "Penuhi" langsung di kartu Pre-order nota (permintaan user:
+  /// "malas buka laci meja misal, jadi langsung tap ... penuhi di card in
+  /// app struknya") — meniru PERSIS alur `laci_meja_dashboard_screen.dart`
+  /// (dialog qty kalau sisa > 1, langsung penuhi kalau sisa <= 1, lalu
+  /// tawarkan kumpulkan DP/jaminan yang masih Rp 0). Duplikasi kecil
+  /// `_showQtyDialog` di bawah SENGAJA (fungsi privat di file lain, bukan
+  /// diekspos) — tidak layak diekstrak jadi widget bersama utk satu dialog
+  /// sesederhana ini.
+  Widget _preorderFulfillButton(PreorderEntry p, String productName, double sisa) {
+    return TextButton(
+      style: TextButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        minimumSize: Size.zero,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.compact,
+        textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+      ),
+      onPressed: () => _fulfillPreorderFromReceipt(p, productName, sisa),
+      child: const Text('Penuhi'),
+    );
+  }
+
+  Future<void> _fulfillPreorderFromReceipt(
+      PreorderEntry p, String productName, double sisa) async {
+    final db = ref.read(databaseProvider);
+    final locallyModified = ref.read(laciMejaLocallyModifiedProvider);
+    final deviceCode = ref.read(deviceProvider).deviceCode;
+    // Pre-order boleh dipenuhi bertahap (mis. antri 5 LPG, datang 3 dulu) —
+    // sama dgn Laci Meja dashboard.
+    if (sisa > 1) {
+      final qty = await _showQtyDialog(
+        context,
+        title: 'Penuhi — $productName',
+        sisaLabel: 'Sisa belum dipenuhi: ${_fmtQtyShort(sisa)} dari '
+            '${_fmtQtyShort(p.qtyOrdered)}',
+        sisa: sisa,
+        actionLabel: 'Penuhi',
+      );
+      if (qty == null || qty <= 0) return;
+      await db.fulfillPreorderQty(p.id, qty,
+          locallyModified: locallyModified, deviceCode: deviceCode);
+    } else {
+      await db.fulfillPreorderEntry(p.id,
+          locallyModified: locallyModified, deviceCode: deviceCode);
+    }
+    // Susulan — begitu pre-order dipenuhi, tawarkan langsung kumpulkan
+    // DP/jaminan yang tadinya dikunci Rp 0 saat checkout (identik dgn
+    // dashboard Laci Meja).
+    final owed = await db.getPreorderDepositOwed(p.id);
+    if (owed != null && mounted) {
+      final result = await showDebtPaymentSheet(
+        context,
+        db,
+        remaining: owed,
+        title: 'DP/Jaminan — $productName',
+      );
+      if (result != null) {
+        await db.collectPreorderDeposit(
+          preorderEntryId: p.id,
+          amount: result.amount,
+          method: result.method,
+          methodName: result.methodName,
+          kasirId: deviceCode,
+        );
+      }
+    }
+    await _load();
+  }
+
+  /// Duplikasi privat dari `laci_meja_dashboard_screen.dart` (fungsi asalnya
+  /// `static`/private di sana, tidak bisa diimpor) — dialog qty utk
+  /// pemenuhan sebagian. Prefill SELURUH sisa, tinggal dikurangi kalau cuma
+  /// sebagian yang datang. Hanya DUA tombol dalam satu baris (gotcha
+  /// CLAUDE.md: `AlertDialog.content` dibungkus `IntrinsicWidth`, 3 tombol
+  /// custom bisa sama sekali tidak muat).
+  static Future<double?> _showQtyDialog(
+    BuildContext context, {
+    required String title,
+    required String sisaLabel,
+    required double sisa,
+    required String actionLabel,
+  }) async {
+    final controller = TextEditingController(
+        text: sisa % 1 == 0 ? sisa.toInt().toString() : '$sisa');
+    return showDialog<double>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(sisaLabel,
+                style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
+            const SizedBox(height: 10),
+            TextField(
+              controller: controller,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(labelText: 'Jumlah'),
+              autofocus: true,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
+          FilledButton(
+            onPressed: () {
+              final v =
+                  double.tryParse(controller.text.trim().replaceAll(',', '.'));
+              if (v == null || v <= 0) return Navigator.pop(ctx);
+              // Tidak boleh melebihi sisa — kelebihan input diam-diam
+              // dipotong, bukan bikin sisa jadi negatif.
+              Navigator.pop(ctx, v > sisa ? sisa : v);
+            },
+            child: Text(actionLabel),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// PLAN.md Item 54 poin 2 — kartu Pre-order di layar nota. Kategori ini
   /// dulu SATU-SATUNYA yang tidak punya kartu sendiri di sini (cuma penanda
   /// inline "· Titip n" di baris produk), jadi riwayat pemenuhannya tidak
@@ -4402,6 +4527,11 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                 final jaminan = p.depositQty > 0
                     ? ' · ${_fmtQtyShort(p.depositQty)} jaminan'
                     : '';
+                final sisa = (p.qtyOrdered - terpenuhi).clamp(0.0, p.qtyOrdered);
+                // Tombol "Penuhi" cuma masuk akal utk entri yang MASIH
+                // terbuka — sama persis gerbang status di bawah (bukan
+                // Dibatalkan/Selesai).
+                final canFulfill = p.cancelledAt == null && p.fulfilledAt == null;
                 return _laciMejaEntryBlock(
                   fg: fg,
                   headline: '${_fmtQtyShort(p.qtyOrdered)} $nama$jaminan',
@@ -4410,6 +4540,9 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                   events: events,
                   lastEditedAt: p.lastEditedAt,
                   onEdit: () => _editPreorderEntry(p, nama),
+                  fulfillButton: canFulfill
+                      ? _preorderFulfillButton(p, nama, sisa)
+                      : null,
                   status: p.cancelledAt != null
                       ? (text: 'Dibatalkan', done: true)
                       : p.fulfilledAt != null
