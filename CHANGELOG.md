@@ -7,6 +7,13 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-12 (sesi kelima puluh empat — cegah tap dobel tombol cetak struk)
+
+- `807d2b1` — fix(android): serialize native printer write via synchronized
+  lock (defense-in-depth)
+- `7e0286f` — fix(kasir): cegah tap dobel tombol cetak struk picu 2 write
+  printer bersamaan
+
 ## 2026-09-12 (sesi kelima puluh tiga — fix race resume/tahan pesanan ditahan)
 
 - `f45ba47` — fix(kasir): cegah race resume/tahan pesanan ditahan bikin data

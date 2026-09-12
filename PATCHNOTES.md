@@ -8,6 +8,12 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 12 September 2026 (sesi kelima puluh empat)
+
+### 🐛 Perbaikan
+- **Tombol cetak struk sekarang dinonaktifkan sementara saat sedang
+  mencetak**, mencegah struk dobel/rusak akibat tap dua kali cepat.
+
 ## 12 September 2026 (sesi kelima puluh tiga)
 
 ### 🐛 Perbaikan

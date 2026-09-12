@@ -6,17 +6,72 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 12 September 2026, sesi kelima puluh tiga — fix race
-kondisi kasir bisa bikin pesanan ditahan lenyap total (insiden produksi,
-uang sudah diterima), `kasir_screen.dart`/`cart_sheet.dart` (lihat di
-bawah). Versi kerja **2.60.2+126** (PATCH naik dari 2.60.1+125 — murni
-bugfix, tanpa fitur baru). schemaVersion **43** (tidak berubah). Catatan:
-sesi lain (fix print-race guard `receipt_screen.dart`/native Android)
-mungkin masih bekerja PARALEL di branch
-`claude/kategori-produk-qty-harga-mqjh21` yang sama — kalau nomor
-versi/commit di sini sudah tidak sinkron dgn `pubspec.yaml`/`git log`
-aktual, itu WAJAR (rebase pending dari sesi lain), jangan dianggap
-korupsi data — cek `git log` langsung utk state terkini._
+_Update sesi 12 September 2026, sesi kelima puluh empat — cegah tap
+dobel tombol cetak struk memicu 2 write bersamaan ke printer thermal
+(`receipt_screen.dart`/`merged_receipt_screen.dart` + defense-in-depth
+native `MainActivity.kt`, lihat di bawah). Versi kerja **2.60.3+127**
+(PATCH naik dari 2.60.2+126 — murni bugfix, tanpa fitur baru).
+schemaVersion **43** (tidak berubah). Catatan: sesi lain mungkin masih
+bekerja PARALEL di branch `claude/kategori-produk-qty-harga-mqjh21`
+yang sama — kalau nomor versi/commit di sini sudah tidak sinkron dgn
+`pubspec.yaml`/`git log` aktual, itu WAJAR (rebase pending dari sesi
+lain), jangan dianggap korupsi data — cek `git log` langsung utk state
+terkini._
+
+## Sesi kelima puluh empat — cegah tap dobel tombol cetak struk
+
+**Bug ditemukan lewat audit kode langsung** (bukan laporan user, medium
+priority): `_printReceipt` (`receipt_screen.dart`) & `_print`
+(`merged_receipt_screen.dart`) tidak punya guard `_isPrinting` — tombol
+`Icons.print_outlined` cuma di-disable saat `_tx == null`, tetap
+tertekan penuh selama rangkaian async (getSavedMac -> ensurePermissions
+-> PrinterService.printReceipt/printMergedReceipt -> connect -> write)
+berjalan. Diverifikasi native Android (`MainActivity.kt`, `doWrite`,
+~baris 172): tiap panggilan MethodChannel `write` SPAWN THREAD BARU,
+TANPA sinkronisasi apa pun terhadap `OutputStream` socket Bluetooth yang
+SAMA — 2 tap cepat bisa membuat 2 write nyata bersamaan meng-interleave/
+merusak byte stream ESC/POS (struk dobel/garbled, bukan cuma "tercetak
+2x" yang jinak).
+
+**Fix (2 bagian, keduanya dikerjakan)**:
+1. **Dart** (`receipt_screen.dart` & `merged_receipt_screen.dart`) —
+   flag `bool _isPrinting`, seluruh body `_printReceipt`/`_print`
+   dibungkus `try/finally` SEJAK AWAL fungsi (bukan cuma setelah
+   early-return izin/konfigurasi) supaya guard SELALU terlepas lewat
+   jalur keluar manapun (early-return "printer belum dikonfigurasi",
+   "izin ditolak", exception tak terduga di tengah, maupun sukses
+   normal). `if (_isPrinting) return;` di awal, sebelum `setState`.
+   Tombol print `onPressed` digabung kondisi `(_tx == null ||
+   _isPrinting) ? null : ...`.
+2. **Android native** (`MainActivity.kt`) — defense-in-depth murni
+   tambahan: `private val writeLock = Any()`, operasi
+   `s.outputStream.write/flush` di `doWrite` dibungkus
+   `synchronized(writeLock) { ... }` — serialisasi di level thread
+   native kalau 2 panggilan `write` SEMPAT lolos bersamaan dari sisi
+   Dart lewat jalur manapun. **TIDAK bisa diuji di device/emulator
+   Android sungguhan di lingkungan sesi ini** (tidak ada toolchain
+   Android/Gradle) — perubahan sengaja sekecil & sekonservatif mungkin
+   (murni tambah mutual exclusion, tidak mengubah logika lain).
+
+**Test baru**: `test/receipt_print_button_guard_test.dart` — mock
+channel `com.thepos/bt_print` (channel custom app ini) + channel
+`permission_handler`, tap tombol cetak 2x SANGAT CEPAT (tanpa `pump` di
+antaranya), assert channel `write` cuma terpanggil TEPAT 1x. Catatan
+teknis penting yg ditemukan selama membangun test ini: `tester.
+pump(duration)` di `testWidgets` TIDAK bisa memajukan `Future.delayed`
+nyata di dalam `PrinterService.connect()` (jeda stabilisasi koneksi
+600ms) — harus pakai `tester.runAsync()` diselingi `pump()` (lihat
+komentar di file test). Revert-verified: fix Dart di-stash sementara,
+test gagal nyata (`write` terpanggil 2x, bukti persis bug), fix
+dikembalikan, hijau lagi.
+
+`flutter analyze` 0 issue. Full suite: **1618 test lulus, 1 gagal**
+(`proposal_unchanged_end_to_end_test.dart`, TIDAK terkait file yang
+disentuh sesi ini — lulus bersih 3/3 saat diisolasi, flake
+resource-contention environment akibat sesi lain jalan paralel di
+branch yang sama, sudah didokumentasikan berulang kali di sesi-sesi
+sebelumnya). Commits: `7e0286f` (Dart), `807d2b1` (native Kotlin,
+untested-on-device).
 
 ## Sesi kelima puluh tiga — fix race resume/tahan pesanan ditahan (insiden produksi)
 
