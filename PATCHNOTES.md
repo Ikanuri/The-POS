@@ -8,6 +8,16 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 12 September 2026 (sesi kelima puluh tiga)
+
+### 🐛 Perbaikan
+- **Pesanan pra-bayar yang ditahan bisa hilang kalau kasir berpindah
+  pesanan terlalu cepat berturut-turut — sekarang dicegah.** Sebelumnya,
+  menyentuh kartu antrian pesanan lalu langsung menekan tombol "Tahan"
+  (atau sebaliknya) hampir bersamaan bisa membuat satu pesanan yang
+  ditahan lenyap sepenuhnya, padahal uangnya sudah diterima. Sekarang
+  tombol/kartu terkait otomatis nonaktif sesaat selama proses berjalan.
+
 ## 12 September 2026 (sesi kelima puluh dua)
 
 ### 🐛 Perbaikan

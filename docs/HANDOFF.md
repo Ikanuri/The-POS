@@ -6,17 +6,72 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 12 September 2026, sesi kelima puluh dua — fix
-`OrderParserService.parse()` harga bertingkat baris dobel transfer
-handoff (lihat di bawah). Versi kerja **2.60.1+125** (PATCH naik dari
-2.60.0+124 — murni bugfix, tanpa fitur baru). schemaVersion **43**
-(tidak berubah). Catatan: 2 sesi lain sedang bekerja PARALEL di branch
-`claude/kategori-produk-qty-harga-mqjh21` yang sama (fix race held-order
-`kasir_screen.dart`/`cart_sheet.dart`, fix print-race guard
-`receipt_screen.dart`/native Android) — kalau nomor versi/commit di sini
-sudah tidak sinkron dgn `pubspec.yaml`/`git log` aktual, itu WAJAR (rebase
-pending dari sesi lain), jangan dianggap korupsi data — cek `git log`
-langsung utk state terkini._
+_Update sesi 12 September 2026, sesi kelima puluh tiga — fix race
+kondisi kasir bisa bikin pesanan ditahan lenyap total (insiden produksi,
+uang sudah diterima), `kasir_screen.dart`/`cart_sheet.dart` (lihat di
+bawah). Versi kerja **2.60.2+126** (PATCH naik dari 2.60.1+125 — murni
+bugfix, tanpa fitur baru). schemaVersion **43** (tidak berubah). Catatan:
+sesi lain (fix print-race guard `receipt_screen.dart`/native Android)
+mungkin masih bekerja PARALEL di branch
+`claude/kategori-produk-qty-harga-mqjh21` yang sama — kalau nomor
+versi/commit di sini sudah tidak sinkron dgn `pubspec.yaml`/`git log`
+aktual, itu WAJAR (rebase pending dari sesi lain), jangan dianggap
+korupsi data — cek `git log` langsung utk state terkini._
+
+## Sesi kelima puluh tiga — fix race resume/tahan pesanan ditahan (insiden produksi)
+
+**Bug dilaporkan user** (insiden produksi nyata, uang pelanggan sudah
+diterima): pesanan pra-bayar yang ditahan lenyap total — tidak ada di
+daftar antrian, tidak ada di keranjang aktif.
+
+**Akar masalah**: `kasir_screen.dart` — `_resumeHeld` (tap kartu antrian)
+& `_holdCurrent` (tombol "Tahan" di `_CartMetaTab`) sama-sama baca
+provider cart aktif, `await` ke DB (`holdOrder`/`deleteHeldOrder`), BARU
+memutasi provider cart — TANPA kunci apa pun. Panel antrian dirender
+INLINE (bukan `showModalBottomSheet`), jadi toolbar "Tahan" tetap
+tertekan selagi panel terbuka → kasir yang menyentuh tap kartu antrian +
+tombol "Tahan" nyaris bersamaan bisa membuat operasi kedua meng-clobber
+provider yang baru saja diisi operasi pertama sebelum sempat dibaca —
+satu pesanan (uangnya sudah diterima) lenyap dari held-orders TABLE
+maupun cart SEKALIGUS.
+
+**Fix**:
+1. `kasir_screen.dart` — flag `bool _isSwitchingHeld` (state
+   `_KasirScreenState`) dicek di AWAL `_resumeHeld` DAN `_holdCurrent`
+   (re-entrant call jadi no-op diam-diam), diset `true` sebelum kerja,
+   dilepas via `try/finally` (`if (mounted) setState(() =>
+   _isSwitchingHeld = false)`) — WAJIB finally supaya exception di tengah
+   tidak mengunci fitur tahan/resume selamanya. UI ikut mencerminkan:
+   `onHold` di `_CartMetaTab` jadi `VoidCallback?` (null saat terkunci →
+   tombol "Tahan" meredup & non-tap), `_HeldInlinePanel` dapat param
+   `busy` (opacity 0.5 + `onTap: null` di tiap `_HeldCard` saat terkunci).
+2. `cart_sheet.dart` — guard LEBIH RINGAN & TERPISAH (state beda kelas,
+   `_CartSheetState._isHolding`): sheet ini modal sungguhan
+   (`showModalBottomSheet`, barrier menahan panel/toolbar di belakangnya),
+   jadi satu-satunya celah adalah double-tap ke tombol "Tahan Pesanan"nya
+   SENDIRI — dicegah pola sama (cek awal + `try/finally`), tombol ikut
+   dinonaktifkan (`onPressed: null`) selama proses.
+
+**Test baru**: `test/kasir_held_order_race_test.dart` (2 test) + 1 test
+tambahan di `test/cart_sheet_hold_button_test.dart`. Kunci teknis:
+`WidgetTester.tap` TIDAK BISA dipanggil dua kali tanpa `await` di
+antaranya (guard `TestAsyncUtils` framework test menolak pemanggilan
+bertumpuk) — race disimulasikan dgn memanggil `onTap`/`onPressed`
+(`VoidCallback` yang sama dipasang widget sungguhan) LANGSUNG dua kali
+berturut-turut TANPA pump di antaranya, deterministik krn murni kontrol
+sinkron Dart (baris kedua jalan sebelum baris pertama lewat `await`
+pertamanya). Revert-verified (guard dinonaktifkan sementara via `false
+&& flag`): test race kasir_screen gagal dgn productId salah satu
+pesanan LENYAP TOTAL dari kedua tempat (bukti persis bug asli, bukan
+cuma "assert gagal"); test double-tap cart_sheet gagal dgn 2 held order
+(bukti duplikat) — 8 test lain di file yang sama tetap hijau (regression
+guard, tidak terpengaruh). Guard dikembalikan → hijau lagi.
+
+`flutter analyze` 0 issue. Full suite (setelah rebase di atas
+`433e2b4`/sesi 52): **1620 test lulus, 0 gagal** (naik dari 1617 baseline
+sebelum sesi 51 — +3 test baru bersih: 2 di file race baru, 1 tambahan
+di `cart_sheet_hold_button_test.dart`). Commits: `f45ba47` (kasir_screen.
+dart), `8437c25` (cart_sheet.dart).
 
 ## Sesi kelima puluh dua — fix harga bertingkat baris dobel transfer handoff
 
