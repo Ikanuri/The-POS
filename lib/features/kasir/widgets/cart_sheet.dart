@@ -80,6 +80,14 @@ class _CartSheetState extends ConsumerState<CartSheet> {
   bool _needsInitialScroll = false;
   bool _scrollRestoreAttached = false;
 
+  // Guard tap ganda-cepat pada tombol "Tahan Pesanan" di header sheet ini —
+  // sheet ini sendiri sudah modal (`showModalBottomSheet`, barrier menahan
+  // panel/toolbar kasir_screen.dart di belakangnya), jadi satu-satunya celah
+  // race adalah double-tap ke tombolnya sendiri sebelum `holdOrder` selesai
+  // → insert `held_order` duplikat (bukan kehilangan data seperti di
+  // kasir_screen.dart, tapi tetap wajib dicegah).
+  bool _isHolding = false;
+
   @override
   void initState() {
     super.initState();
@@ -216,6 +224,9 @@ class _CartSheetState extends ConsumerState<CartSheet> {
   /// label) — payload `held_order` jadi bawa `customerId` sungguhan,
   /// bukan cuma nama, konsisten dgn nota yang checkout normal.
   Future<void> _holdCurrent(BuildContext ctx, WidgetRef ref) async {
+    // Guard re-entrancy — lihat dok `_isHolding`. Double-tap cepat pada
+    // tombol yang sama sebelum `holdOrder` selesai diabaikan diam-diam.
+    if (_isHolding) return;
     final cart = ref.read(cartProvider(widget.cartId));
     if (cart.isEmpty) return;
     var meta = ref.read(cartMetaProvider(widget.cartId));
@@ -239,38 +250,47 @@ class _CartSheetState extends ConsumerState<CartSheet> {
         label = (manual == null || manual.isEmpty) ? 'Pesanan' : manual;
       }
     }
-
-    final db = ref.read(databaseProvider);
-    final prabayarNotifier =
-        ref.read(cartPrabayarProvider(widget.cartId).notifier);
-    final prabayar = ref.read(cartPrabayarProvider(widget.cartId));
-    final priceCategoryId = ref.read(cartPriceCategoryProvider(widget.cartId));
-    final debtSettlement =
-        ref.read(cartDebtSettlementProvider(widget.cartId));
-    final payload = jsonEncode({
-      'items': cart.map((c) => c.toJson()).toList(),
-      'meta': meta.toJson(),
-      'prabayar': prabayar.map((e) => e.toJson()).toList(),
-      // Fitur "kembalian sudah diambil" — ikut ditahan/dipulihkan sama
-      // persis siklus hidup entri Pra-Bayar sendiri (lihat dok
-      // `CartPrabayarNotifier.replaceAll`).
-      'prabayarChangeTaken': prabayarNotifier.changeTakenTotal,
-      'priceCategory': priceCategoryId,
-      // Fitur "Lunasi Hutang" — ikut ditahan/dipulihkan sama persis siklus
-      // hidup entri Pra-Bayar.
-      'debtSettlement': debtSettlement.map((e) => e.toJson()).toList(),
-    });
-    await db.holdOrder(id: const Uuid().v4(), label: label, cartJson: payload);
-    ref.read(cartProvider(widget.cartId).notifier).clear();
-    ref.read(cartMetaProvider(widget.cartId).notifier).clear();
-    ref.read(cartPrabayarProvider(widget.cartId).notifier).clear();
-    ref.read(cartPriceCategoryProvider(widget.cartId).notifier).clear();
-    ref.read(cartDebtSettlementProvider(widget.cartId).notifier).clear();
-    if (!ctx.mounted) return;
-    ScaffoldMessenger.of(ctx).showSnackBar(
-      SnackBar(content: Text('Pesanan "$label" ditahan')),
-    );
-    Navigator.of(ctx).pop();
+    if (_isHolding) return; // dialog picker di atas juga modal, tapi jaga2.
+    setState(() => _isHolding = true);
+    try {
+      final db = ref.read(databaseProvider);
+      final prabayarNotifier =
+          ref.read(cartPrabayarProvider(widget.cartId).notifier);
+      final prabayar = ref.read(cartPrabayarProvider(widget.cartId));
+      final priceCategoryId =
+          ref.read(cartPriceCategoryProvider(widget.cartId));
+      final debtSettlement =
+          ref.read(cartDebtSettlementProvider(widget.cartId));
+      final payload = jsonEncode({
+        'items': cart.map((c) => c.toJson()).toList(),
+        'meta': meta.toJson(),
+        'prabayar': prabayar.map((e) => e.toJson()).toList(),
+        // Fitur "kembalian sudah diambil" — ikut ditahan/dipulihkan sama
+        // persis siklus hidup entri Pra-Bayar sendiri (lihat dok
+        // `CartPrabayarNotifier.replaceAll`).
+        'prabayarChangeTaken': prabayarNotifier.changeTakenTotal,
+        'priceCategory': priceCategoryId,
+        // Fitur "Lunasi Hutang" — ikut ditahan/dipulihkan sama persis siklus
+        // hidup entri Pra-Bayar.
+        'debtSettlement': debtSettlement.map((e) => e.toJson()).toList(),
+      });
+      await db.holdOrder(
+          id: const Uuid().v4(), label: label, cartJson: payload);
+      ref.read(cartProvider(widget.cartId).notifier).clear();
+      ref.read(cartMetaProvider(widget.cartId).notifier).clear();
+      ref.read(cartPrabayarProvider(widget.cartId).notifier).clear();
+      ref.read(cartPriceCategoryProvider(widget.cartId).notifier).clear();
+      ref.read(cartDebtSettlementProvider(widget.cartId).notifier).clear();
+      if (!ctx.mounted) return;
+      ScaffoldMessenger.of(ctx).showSnackBar(
+        SnackBar(content: Text('Pesanan "$label" ditahan')),
+      );
+      Navigator.of(ctx).pop();
+    } finally {
+      // WAJIB try/finally — exception di tengah tidak boleh mengunci tombol
+      // ini selamanya.
+      if (mounted) setState(() => _isHolding = false);
+    }
   }
 
   /// Fase C "Kategori Harga" — tap chip toggle (termasuk chip "Normal" =
@@ -1086,8 +1106,9 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                     if (widget.cartId == kMainCartId)
                       IconButton(
                         tooltip: 'Tahan Pesanan',
-                        onPressed:
-                            cart.isEmpty ? null : () => _holdCurrent(ctx, ref),
+                        onPressed: (cart.isEmpty || _isHolding)
+                            ? null
+                            : () => _holdCurrent(ctx, ref),
                         icon: const Icon(Icons.pause_circle_outline),
                       ),
                     // Susulan (revisi desain user): tombol "Pra-Bayar" pindah

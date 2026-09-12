@@ -265,4 +265,34 @@ void main() {
     // tapi cara paling langsung: cek payload JSON held_order.
     expect(held.single.cartJson, contains('"customerId":"c1"'));
   });
+
+  testWidgets(
+      'tombol "Tahan Pesanan" ditap dua kali cepat berturut-turut (TANPA '
+      'pump di antaranya) -> hanya SATU held order baru yang tercipta, '
+      'tidak duplikat (guard `_isHolding`)', (tester) async {
+    final (db, container) = await pumpCartSheetOpen(tester);
+    addTearDown(() async => db.close());
+    // Pelanggan sudah dipilih -> `_holdCurrent` langsung tahan tanpa dialog
+    // picker (jalur tercepat, paling rawan double-tap).
+    container
+        .read(cartMetaProvider(kMainCartId).notifier)
+        .setCustomer('c1', 'Bu Sari');
+
+    // `WidgetTester.tap` tidak bisa dipakai dua kali berturut-turut tanpa
+    // `await` di antaranya (guard `TestAsyncUtils` menolak pemanggilan
+    // bertumpuk) — panggil langsung `onPressed` (VoidCallback yang sama
+    // dipasang di `IconButton` sungguhan) supaya urutan sinkron murni Dart
+    // ini deterministik: panggilan kedua terjadi SEBELUM panggilan pertama
+    // sempat melewati `await` pertamanya di dalam `_holdCurrent`.
+    final button = tester.widget<IconButton>(
+        find.widgetWithIcon(IconButton, Icons.pause_circle_outline));
+    button.onPressed!();
+    button.onPressed!();
+    await tester.pumpAndSettle();
+
+    final held = await db.select(db.heldOrders).get();
+    expect(held, hasLength(1),
+        reason: 'tap ganda-cepat pada tombol Tahan Pesanan di cart sheet '
+            'tidak boleh membuat held order duplikat');
+  });
 }
