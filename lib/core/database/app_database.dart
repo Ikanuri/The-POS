@@ -6715,10 +6715,17 @@ class AppDatabase extends _$AppDatabase {
           // tidak pernah ke-dump lagi begitu watermark device lain sudah
           // lewat dari created_at nota & added_at baris ini (persis kelas
           // bug Item 62, level baris item).
+          // Item 63 — baris JUGA bisa dikoreksi setelah insert awal (retur,
+          // edit item, DP pre-order, dll) TANPA parent nota-nya ikut
+          // "created_at baru" ataupun baris ini "added_at baru" (keduanya
+          // murni utk kasus lain) — tanpa OR updated_at ini, koreksi itu
+          // tidak pernah ke-dump lagi begitu watermark device lain sudah
+          // lewat dari created_at nota & added_at baris ini (persis kelas
+          // bug Item 62, level baris item).
           sql = 'SELECT * FROM "transaction_items" WHERE transaction_id IN '
               '(SELECT id FROM "transactions" WHERE created_at >= ?) '
-              'OR added_at >= ?';
-          varCount = 2;
+              'OR added_at >= ? OR updated_at >= ?';
+          varCount = 3;
         case 'transaction_payments':
           sql = 'SELECT * FROM "transaction_payments" WHERE paid_at >= ?';
         case 'expenses':
@@ -7475,6 +7482,46 @@ class AppDatabase extends _$AppDatabase {
                         Variable<Object>(pkVal),
                       ],
                       updates: {transactions},
+                      updateKind: UpdateKind.update,
+                    );
+                  }
+                }
+              }
+              // Item 63 — `transaction_items` KHUSUS: baris yang sudah ada
+              // (`INSERT OR IGNORE` di bawah akan no-op) masih bisa punya
+              // `qty`/`price_at_sale`/`subtotal`/`item_note` yang genuinely
+              // berubah setelah tersinkron pertama kali (retur, edit item,
+              // void/kumpul DP pre-order — lihat dok kolom `updatedAt`) —
+              // sama pola persis dgn `transactions` (Item 62) di atas,
+              // last-write-wins by `updated_at`. Kolom lain (`added_at`,
+              // `returned_at`, `product_id`, `product_unit_id`,
+              // `transaction_id`, `original_price`, `cost_at_sale`,
+              // `price_overridden`) SENGAJA tidak ikut — bukan field yang
+              // legitimately berubah pasca-insert di fungsi manapun.
+              if (tableName == 'transaction_items') {
+                final incomingUpdatedAt = row['updated_at'];
+                if (incomingUpdatedAt is int) {
+                  final existingFull = await customSelect(
+                    'SELECT updated_at FROM "transaction_items" WHERE id = ?',
+                    variables: [Variable<Object>(pkVal)],
+                  ).getSingleOrNull();
+                  final existingUpdatedAt =
+                      existingFull?.data['updated_at'] as int?;
+                  if (existingUpdatedAt == null ||
+                      incomingUpdatedAt > existingUpdatedAt) {
+                    await customUpdate(
+                      'UPDATE transaction_items SET qty = ?, '
+                      'price_at_sale = ?, subtotal = ?, item_note = ?, '
+                      'updated_at = ? WHERE id = ?',
+                      variables: [
+                        Variable<Object>(row['qty'] ?? 0),
+                        Variable<Object>(row['price_at_sale'] ?? 0),
+                        Variable<Object>(row['subtotal'] ?? 0),
+                        Variable<Object>(row['item_note']),
+                        Variable<Object>(incomingUpdatedAt),
+                        Variable<Object>(pkVal),
+                      ],
+                      updates: {transactionItems},
                       updateKind: UpdateKind.update,
                     );
                   }
