@@ -911,6 +911,18 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
   bool _heldPanelOpen = false;
   final _heldPanelKey = GlobalKey();
 
+  // Kunci re-entrancy antara "Tahan" (_holdCurrent) & resume kartu antrian
+  // (_resumeHeld) — keduanya baca provider cart aktif, lakukan DB round-trip
+  // async (holdOrder/deleteHeldOrder), BARU mutasi provider cart. Tanpa
+  // kunci ini, tap "Tahan" + tap kartu antrian yang nyaris bersamaan (bisa
+  // terjadi karena panel antrian inline, BUKAN modal — toolbar tetap
+  // tertekan) bisa membuat satu operasi meng-clobber provider yang baru saja
+  // diisi operasi lain sebelum sempat dibaca kasir — pesanan (yang uangnya
+  // sudah diterima) lenyap dari held-orders TABLE maupun cart sekaligus.
+  // WAJIB dilepas via try/finally (lihat _holdCurrent/_resumeHeld) supaya
+  // exception di tengah alur tidak mengunci fitur ganti pesanan selamanya.
+  bool _isSwitchingHeld = false;
+
   // Sheet keranjang sedang terbuka? Dipakai agar scan eksternal berturut-turut
   // tetap diproses saat sheet terbuka, dan agar tidak membuka sheet ganda.
   bool _cartSheetOpen = false;
@@ -1620,6 +1632,9 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
   /// Tahan keranjang aktif. Bila pelanggan sudah dipilih, langsung pakai
   /// namanya sebagai label (tanpa dialog). Bila belum, minta penanda.
   Future<void> _holdCurrent() async {
+    // Guard re-entrancy — lihat dok `_isSwitchingHeld`. Tap kedua (mis. kartu
+    // antrian ditap nyaris bersamaan) diabaikan diam-diam, bukan diantrikan.
+    if (_isSwitchingHeld) return;
     final cart = ref.read(cartProvider(_cartId));
     if (cart.isEmpty) return;
     final meta = ref.read(cartMetaProvider(_cartId));
@@ -1632,33 +1647,44 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
       if (entered == null) return; // dibatalkan
       label = entered;
     }
-
-    final db = ref.read(databaseProvider);
-    final prabayarNotifier = ref.read(cartPrabayarProvider(_cartId).notifier);
-    final prabayar = ref.read(cartPrabayarProvider(_cartId));
-    final priceCategoryId = ref.read(cartPriceCategoryProvider(_cartId));
-    final debtSettlement = ref.read(cartDebtSettlementProvider(_cartId));
-    final payload = jsonEncode({
-      'items': cart.map((c) => c.toJson()).toList(),
-      'meta': meta.toJson(),
-      'prabayar': prabayar.map((e) => e.toJson()).toList(),
-      // Fitur "kembalian sudah diambil" — ikut ditahan/dipulihkan sama
-      // persis siklus hidup entri Pra-Bayar sendiri.
-      'prabayarChangeTaken': prabayarNotifier.changeTakenTotal,
-      'priceCategory': priceCategoryId,
-      // Fitur "Lunasi Hutang" — ikut ditahan/dipulihkan sama persis siklus
-      // hidup entri Pra-Bayar (lihat dok `CartDebtSettlementNotifier`).
-      'debtSettlement': debtSettlement.map((e) => e.toJson()).toList(),
-    });
-    await db.holdOrder(id: _kasirUuid.v4(), label: label, cartJson: payload);
-    ref.read(cartProvider(_cartId).notifier).clear();
-    ref.read(cartMetaProvider(_cartId).notifier).clear();
-    ref.read(cartPrabayarProvider(_cartId).notifier).clear();
-    ref.read(cartPriceCategoryProvider(_cartId).notifier).clear();
-    ref.read(cartDebtSettlementProvider(_cartId).notifier).clear();
-    if (mounted) {
-      setState(() => _heldPanelOpen = false);
-      _showBanner('Pesanan "$label" ditahan', InlineBannerType.success);
+    // Dialog `_askHoldLabel` modal (barrier) sudah menahan resume held-order
+    // selama terbuka — kunci baru perlu dipasang dari sini, tepat sebelum
+    // urutan baca-provider → DB round-trip → mutasi-provider yang rawan.
+    if (_isSwitchingHeld) return;
+    if (mounted) setState(() => _isSwitchingHeld = true);
+    try {
+      final db = ref.read(databaseProvider);
+      final prabayarNotifier =
+          ref.read(cartPrabayarProvider(_cartId).notifier);
+      final prabayar = ref.read(cartPrabayarProvider(_cartId));
+      final priceCategoryId = ref.read(cartPriceCategoryProvider(_cartId));
+      final debtSettlement = ref.read(cartDebtSettlementProvider(_cartId));
+      final payload = jsonEncode({
+        'items': cart.map((c) => c.toJson()).toList(),
+        'meta': meta.toJson(),
+        'prabayar': prabayar.map((e) => e.toJson()).toList(),
+        // Fitur "kembalian sudah diambil" — ikut ditahan/dipulihkan sama
+        // persis siklus hidup entri Pra-Bayar sendiri.
+        'prabayarChangeTaken': prabayarNotifier.changeTakenTotal,
+        'priceCategory': priceCategoryId,
+        // Fitur "Lunasi Hutang" — ikut ditahan/dipulihkan sama persis siklus
+        // hidup entri Pra-Bayar (lihat dok `CartDebtSettlementNotifier`).
+        'debtSettlement': debtSettlement.map((e) => e.toJson()).toList(),
+      });
+      await db.holdOrder(id: _kasirUuid.v4(), label: label, cartJson: payload);
+      ref.read(cartProvider(_cartId).notifier).clear();
+      ref.read(cartMetaProvider(_cartId).notifier).clear();
+      ref.read(cartPrabayarProvider(_cartId).notifier).clear();
+      ref.read(cartPriceCategoryProvider(_cartId).notifier).clear();
+      ref.read(cartDebtSettlementProvider(_cartId).notifier).clear();
+      if (mounted) {
+        setState(() => _heldPanelOpen = false);
+        _showBanner('Pesanan "$label" ditahan', InlineBannerType.success);
+      }
+    } finally {
+      // WAJIB try/finally — exception di tengah (mis. DB gagal) tidak boleh
+      // mengunci fitur tahan/resume selamanya.
+      if (mounted) setState(() => _isSwitchingHeld = false);
     }
   }
 
@@ -1702,35 +1728,46 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
   void _onHeldCardTap(HeldOrder order) => _resumeHeld(order);
 
   Future<void> _resumeHeld(HeldOrder order) async {
-    final parsed = _parseHeldPayload(order.cartJson);
-    if (parsed.items.isEmpty) {
-      _showBanner('Data pesanan rusak — tidak ada item yang bisa dipulihkan');
-      return;
-    }
-    // Item 18: keranjang aktif TIDAK dibuang saat beralih — otomatis ditahan
-    // balik (tanpa dialog, tanpa kehilangan) supaya kasir bisa lompat antar
-    // pesanan cepat di jam sibuk.
-    final autoHeldLabel = await _autoHoldCurrentIfAny();
-    if (!mounted) return;
-    await ref.read(databaseProvider).deleteHeldOrder(order.id);
-    ref.read(cartProvider(_cartId).notifier).replaceAll(parsed.items);
-    ref.read(cartMetaProvider(_cartId).notifier).replaceAll(parsed.meta);
-    ref.read(cartPrabayarProvider(_cartId).notifier).replaceAll(
-        parsed.prabayar,
-        changeTakenTotal: parsed.prabayarChangeTaken);
-    ref
-        .read(cartPriceCategoryProvider(_cartId).notifier)
-        .setCategory(parsed.priceCategoryId);
-    ref
-        .read(cartDebtSettlementProvider(_cartId).notifier)
-        .replaceAll(parsed.debtSettlement);
-    if (mounted) {
-      setState(() => _heldPanelOpen = false);
-      _showBanner(
-          autoHeldLabel != null
-              ? 'Pesanan "$autoHeldLabel" ditahan · lanjut: ${order.label}'
-              : 'Melanjutkan pesanan: ${order.label}',
-          InlineBannerType.success);
+    // Guard re-entrancy — lihat dok `_isSwitchingHeld`. Menutup celah tap
+    // ganda-cepat pada kartu antrian, maupun tap kartu antrian + tombol
+    // "Tahan" nyaris bersamaan (dua fungsi berbagi flag yang sama).
+    if (_isSwitchingHeld) return;
+    setState(() => _isSwitchingHeld = true);
+    try {
+      final parsed = _parseHeldPayload(order.cartJson);
+      if (parsed.items.isEmpty) {
+        _showBanner('Data pesanan rusak — tidak ada item yang bisa dipulihkan');
+        return;
+      }
+      // Item 18: keranjang aktif TIDAK dibuang saat beralih — otomatis
+      // ditahan balik (tanpa dialog, tanpa kehilangan) supaya kasir bisa
+      // lompat antar pesanan cepat di jam sibuk.
+      final autoHeldLabel = await _autoHoldCurrentIfAny();
+      if (!mounted) return;
+      await ref.read(databaseProvider).deleteHeldOrder(order.id);
+      ref.read(cartProvider(_cartId).notifier).replaceAll(parsed.items);
+      ref.read(cartMetaProvider(_cartId).notifier).replaceAll(parsed.meta);
+      ref.read(cartPrabayarProvider(_cartId).notifier).replaceAll(
+          parsed.prabayar,
+          changeTakenTotal: parsed.prabayarChangeTaken);
+      ref
+          .read(cartPriceCategoryProvider(_cartId).notifier)
+          .setCategory(parsed.priceCategoryId);
+      ref
+          .read(cartDebtSettlementProvider(_cartId).notifier)
+          .replaceAll(parsed.debtSettlement);
+      if (mounted) {
+        setState(() => _heldPanelOpen = false);
+        _showBanner(
+            autoHeldLabel != null
+                ? 'Pesanan "$autoHeldLabel" ditahan · lanjut: ${order.label}'
+                : 'Melanjutkan pesanan: ${order.label}',
+            InlineBannerType.success);
+      }
+    } finally {
+      // WAJIB try/finally — exception di tengah (mis. DB gagal) tidak boleh
+      // mengunci fitur tahan/resume selamanya.
+      if (mounted) setState(() => _isSwitchingHeld = false);
     }
   }
 
@@ -2059,6 +2096,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
                           ? _HeldInlinePanel(
                               key: _heldPanelKey,
                               onResume: _onHeldCardTap,
+                              busy: _isSwitchingHeld,
                               onClose: () =>
                                   setState(() => _heldPanelOpen = false),
                             )
@@ -2171,7 +2209,11 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
                         alignment: Alignment.centerLeft,
                         child: _CartMetaTab(
                           cartId: _cartId,
-                          onHold: _holdCurrent,
+                          // null saat kunci `_isSwitchingHeld` aktif — tombol
+                          // "Tahan" jadi non-tappable & meredup (lihat build
+                          // di bawah), menutup celah tap ganda-cepat dgn tap
+                          // kartu antrian yang sedang diproses.
+                          onHold: _isSwitchingHeld ? null : _holdCurrent,
                           // `_isAddMode` sudah dipastikan false oleh guard
                           // `if (!_isAddMode)` di atas — rute bayar SELALU
                           // `/kasir/bayar` di sini (mode tambah belanjaan
@@ -3725,7 +3767,9 @@ class _CartMetaTab extends ConsumerWidget {
       {required this.cartId, required this.onHold, required this.onBayar});
 
   final String cartId;
-  final VoidCallback onHold;
+  // Nullable — null berarti sedang dikunci (lihat `_isSwitchingHeld` di
+  // parent), segmen "Tahan" jadi non-tappable & meredup.
+  final VoidCallback? onHold;
   final VoidCallback onBayar;
 
   /// Item 55 — reserve nomor nota SEKALI begitu tab ini pertama kali
@@ -3852,13 +3896,18 @@ class _CartMetaTab extends ConsumerWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(Icons.pause_circle_outline,
-                          size: 16, color: cs.primary),
+                          size: 16,
+                          color: onHold != null
+                              ? cs.primary
+                              : cs.onSurfaceVariant.withOpacity(0.4)),
                       const SizedBox(width: 3),
                       Text('Tahan',
                           style: TextStyle(
                               fontSize: 12.5,
                               fontWeight: FontWeight.w600,
-                              color: cs.primary)),
+                              color: onHold != null
+                                  ? cs.primary
+                                  : cs.onSurfaceVariant.withOpacity(0.4))),
                     ],
                   ),
                 ),
@@ -3989,10 +4038,17 @@ class _MetaChip extends StatelessWidget {
 
 class _HeldInlinePanel extends ConsumerWidget {
   const _HeldInlinePanel(
-      {super.key, required this.onResume, required this.onClose});
+      {super.key,
+      required this.onResume,
+      required this.onClose,
+      this.busy = false});
 
   final void Function(HeldOrder) onResume;
   final VoidCallback onClose;
+  // true saat `_isSwitchingHeld` di parent aktif — kartu antrian jadi
+  // non-tappable & meredup, mencegah tap kartu lain selagi satu resume/tahan
+  // masih diproses (lihat dok `_isSwitchingHeld` di `_KasirScreenState`).
+  final bool busy;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -4056,8 +4112,13 @@ class _HeldInlinePanel extends ConsumerWidget {
                   scrollDirection: Axis.horizontal,
                   itemCount: held.length,
                   separatorBuilder: (_, __) => const SizedBox(width: 9),
-                  itemBuilder: (_, i) =>
-                      _HeldCard(order: held[i], onTap: () => onResume(held[i])),
+                  itemBuilder: (_, i) => Opacity(
+                    opacity: busy ? 0.5 : 1.0,
+                    child: _HeldCard(
+                      order: held[i],
+                      onTap: busy ? null : () => onResume(held[i]),
+                    ),
+                  ),
                 ),
               );
             },
@@ -4091,7 +4152,9 @@ class _HeldCard extends StatelessWidget {
   const _HeldCard({required this.order, required this.onTap});
 
   final HeldOrder order;
-  final VoidCallback onTap;
+  // Nullable — null (via `busy` di `_HeldInlinePanel`) menonaktifkan tap
+  // selama `_isSwitchingHeld` aktif.
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
