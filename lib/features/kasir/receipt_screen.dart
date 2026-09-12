@@ -3872,6 +3872,11 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     required ({String text, bool done}) status,
     DateTime? lastEditedAt,
     VoidCallback? onEdit,
+    // Susulan (permintaan user) — "malas buka Laci Meja" utk sekadar
+    // memenuhi pre-order, jadi tombol "Penuhi" bisa langsung ditekan dari
+    // kartu nota ini. Hanya kartu Pre-order (`_buildPreorderCard`) yang
+    // mengisi parameter ini — kartu Pinjaman/Titip tetap null spt semula.
+    Widget? fulfillButton,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
@@ -3897,6 +3902,10 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                   icon: Icon(Icons.edit_outlined, size: 15, color: fg),
                   onPressed: onEdit,
                 ),
+              if (fulfillButton != null) ...[
+                const SizedBox(width: 4),
+                fulfillButton,
+              ],
             ],
           ),
           Text('$createdLabel ${_formatDateTime(createdAt)}',
