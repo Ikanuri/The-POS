@@ -15,8 +15,10 @@ import 'core/router/app_router.dart';
 import 'core/services/crash_log_service.dart';
 import 'core/services/temp_share_cleanup.dart';
 import 'core/theme/app_theme.dart';
+import 'features/kasir/cart_debt_settlement_provider.dart';
 import 'features/kasir/cart_meta_provider.dart';
 import 'features/kasir/cart_prabayar_provider.dart';
+import 'features/kasir/cart_preorder_settlement_provider.dart';
 import 'features/kasir/cart_provider.dart';
 
 void main() {
@@ -97,6 +99,13 @@ Future<void> _runStartupMaintenance(ProviderContainer container) async {
   await CartMetaNotifier.cleanupOrphanMeta();
   // Entri Pra-Bayar yatim mengikuti pembersihan keranjang di atas juga.
   await CartPrabayarNotifier.cleanupOrphanPrabayar();
+  // Entri "Lunasi Hutang"/"Pelunasi Pre-order" yatim — pemanggilannya
+  // sebelumnya TERLEWAT utk yang pertama (fungsinya sudah lama ada, cuma
+  // tidak pernah dipanggil dari mana pun) — dibenerin sekaligus di sini,
+  // bareng fitur "Pelunasi Pre-order" baru (arsitektur identik, mengikuti
+  // pola pembersihan keranjang di atas juga).
+  await CartDebtSettlementNotifier.cleanupOrphanDebtSettlements();
+  await CartPreorderSettlementNotifier.cleanupOrphanPreorderSettlements();
   // Item 8 — file gambar/HTML sementara hasil "Bagikan" yang tidak pernah
   // dihapus sebelumnya (menumpuk di temp dir).
   await TempShareCleanup.run();

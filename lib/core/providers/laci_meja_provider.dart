@@ -57,6 +57,18 @@ final cartCustomerDebtProvider = FutureProvider.autoDispose
   return ref.watch(databaseProvider).getCustomerOutstandingDebt(customerId);
 });
 
+/// DP/jaminan pre-order akumulatif pelanggan keranjang aktif yang MASIH
+/// terhutang — pelengkap [cartCustomerDebtProvider] utk fitur "Pelunasi
+/// Pre-order" DI KERANJANG (gerbang chip pengingat di `cart_sheet.dart`,
+/// pola & alasan `.autoDispose` SAMA PERSIS provider itu).
+final cartCustomerPreorderDepositProvider = FutureProvider.autoDispose
+    .family<(int total, int count), String?>((ref, customerId) async {
+  if (customerId == null || customerId.isEmpty) return (0, 0);
+  return ref
+      .watch(databaseProvider)
+      .getCustomerOutstandingPreorderDeposit(customerId);
+});
+
 /// Item 52 susulan (permintaan user) — qty+satuan per baris nota yang
 /// ditandai titip/ketinggalan, dipakai dashboard Laci Meja. Ikut ter-refresh
 /// mengikuti `leftBehindItemsProvider` (bukan `.autoDispose` — dashboard

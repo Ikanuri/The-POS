@@ -3324,15 +3324,22 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 
-  /// [saveTransaction] + fitur "Lunasi Hutang" — SATU proses atomik: nota
-  /// baru tersimpan normal (item keranjang, TIDAK termasuk nominal
-  /// pelunasan — itu bukan baris produk), lalu utk SETIAP entri di
-  /// [debtSettlements], nominal itu dialokasikan FIFO ke nota LAMA
-  /// pelanggan terkait via [settleMergedDebt] (cap otomatis ke sisa hutang
-  /// aktual — kelebihan, kalau ada, jadi kembalian di nota lama itu, BUKAN
-  /// overpay). Ringkasan (nota mana & berapa yg ikut dilunasi, per grup
-  /// pelanggan) ditulis ke `transactions.debtSettlementDetail` nota BARU
-  /// (JSON, murni utk tampilan struk — lihat dok kolom itu).
+  /// [saveTransaction] + fitur "Lunasi Hutang" + "Pelunasi Pre-order" — SATU
+  /// proses atomik: nota baru tersimpan normal (item keranjang, TIDAK
+  /// termasuk nominal pelunasan — itu bukan baris produk), lalu:
+  ///  - utk SETIAP entri di [debtSettlements], nominal itu dialokasikan FIFO
+  ///    ke nota LAMA pelanggan terkait via [settleMergedDebt] (cap otomatis
+  ///    ke sisa hutang aktual — kelebihan, kalau ada, jadi kembalian di nota
+  ///    lama itu, BUKAN overpay);
+  ///  - utk SETIAP entri di [preorderSettlements] (susulan, fitur "Pelunasi
+  ///    Pre-order" DI KERANJANG — permintaan user, arsitektur IDENTIK dgn
+  ///    hutang di atas), DP/jaminan itu dikumpulkan ke baris nota pre-order
+  ///    SUMBER via [collectPreorderDeposit] — uangnya masuk ke nota LAMA itu
+  ///    (menaikkan baris Rp 0-nya), BUKAN jadi omzet nota baru ini.
+  /// Ringkasan gabungan KEDUA jenis (nota/pre-order mana & berapa yg ikut
+  /// dilunasi) ditulis ke SATU kolom `transactions.debtSettlementDetail`
+  /// nota BARU (JSON, murni utk tampilan struk — field `type` membedakan
+  /// baris hutang vs pre-order, lihat dok `DebtSettlementDetailLine`).
   ///
   /// [targets] tiap entri debtSettlements — REDESAIN KEDUA (permintaan
   /// user): satu [DebtSettlementEntry] (`cart_debt_settlement_provider.
@@ -3342,6 +3349,18 @@ class AppDatabase extends _$AppDatabase {
   /// TIDAK dihitung ulang di sini (hanya `settleMergedDebt` yg benar² menulis
   /// alokasi FINAL ke nota lama, boleh beda tipis dari nominal beku kalau
   /// sisa nota berubah di antaranya).
+  ///
+  /// [preorderSettlements] tiap entri = SATU [PreorderSettlementEntry]
+  /// (`cart_preorder_settlement_provider.dart`) yg dicentang kasir lewat
+  /// sheet "Pelunasi Pre-order" (`preorder_settlement_sheet.dart`). Sama pola
+  /// dgn hutang: nominal beku dipakai APA ADANYA sbg breakdown struk, TIDAK
+  /// dihitung ulang di sini — [collectPreorderDeposit] yg benar² menulis
+  /// alokasi FINAL (owed SAAT dipanggil, bukan nominal beku, kalau sempat
+  /// beda tipis). Kalau [collectPreorderDeposit] balikin null (DP entri itu
+  /// SUDAH terkumpul lewat jalur lain di antaranya — mis. dua device
+  /// nyaris bersamaan) entri itu di-SKIP diam-diam (tidak ditulis ke
+  /// `detail`, tidak melempar) — bukan kasus yg harus menggagalkan seluruh
+  /// checkout nota baru yg justru sudah pasti valid.
   Future<void> saveTransactionWithDebtSettlements({
     required TransactionsCompanion tx,
     required List<TransactionItemsCompanion> items,
@@ -3361,6 +3380,17 @@ class AppDatabase extends _$AppDatabase {
           String method,
           String? methodName,
         })> debtSettlements,
+    List<
+        ({
+          String preorderEntryId,
+          String invoiceId,
+          String invoiceLocalId,
+          DateTime invoiceDate,
+          String customerName,
+          int amount,
+          String method,
+          String? methodName,
+        })> preorderSettlements = const [],
     required String kasirId,
     DateTime? now,
     LoyaltyPointLedgerCompanion? loyaltyEntry,
@@ -3375,7 +3405,7 @@ class AppDatabase extends _$AppDatabase {
         now: ts,
         loyaltyEntry: loyaltyEntry,
       );
-      if (debtSettlements.isEmpty) return;
+      if (debtSettlements.isEmpty && preorderSettlements.isEmpty) return;
       final detail = <Map<String, dynamic>>[];
       for (final ds in debtSettlements) {
         if (ds.targets.isEmpty || ds.amount <= 0) continue;
@@ -3394,8 +3424,32 @@ class AppDatabase extends _$AppDatabase {
             'invoiceDate': t.invoiceDate.millisecondsSinceEpoch,
             'amount': t.amount,
             'customerName': ds.customerName,
+            'type': 'debt',
           });
         }
+      }
+      for (final ps in preorderSettlements) {
+        if (ps.amount <= 0) continue;
+        final owed = await collectPreorderDeposit(
+          preorderEntryId: ps.preorderEntryId,
+          amount: ps.amount,
+          method: ps.method,
+          methodName: ps.methodName,
+          kasirId: kasirId,
+        );
+        // null = tidak ada apa pun yg perlu dikumpulkan LAGI utk entri ini
+        // (sudah terkumpul lewat jalur lain di antara pilih & bayar) —
+        // skip diam-diam, lihat dok fungsi ini.
+        if (owed == null) continue;
+        detail.add({
+          'invoiceId': ps.invoiceId,
+          'invoiceLocalId': ps.invoiceLocalId,
+          'invoiceDate': ps.invoiceDate.millisecondsSinceEpoch,
+          'amount': ps.amount,
+          'customerName': ps.customerName,
+          'type': 'preorder',
+          'preorderEntryId': ps.preorderEntryId,
+        });
       }
       if (detail.isNotEmpty) {
         // `dumpSince` (sync host->klien) filter transaksi dgn `WHERE
@@ -4899,6 +4953,29 @@ class AppDatabase extends _$AppDatabase {
       readsFrom: {transactions, transactionPayments},
     ).getSingleOrNull();
     final total = (row?.data['total'] as int?) ?? 0;
+    final cnt = (row?.data['cnt'] as int?) ?? 0;
+    return (total, cnt);
+  }
+
+  /// Total DP/jaminan pre-order akumulatif pelanggan yang MASIH terhutang +
+  /// jumlah entri — pelengkap [getCustomerOutstandingDebt] utk fitur
+  /// "Pelunasi Pre-order" DI KERANJANG (gerbang murah "apa perlu tampilkan
+  /// chip pengingat", pola sama persis `cartCustomerDebtProvider`). Query
+  /// agregat SQL langsung (bukan iterasi [getPreorderSettlementCandidates]
+  /// di Dart) — cukup angka total, tidak perlu detail per-baris di sini.
+  Future<(int total, int count)> getCustomerOutstandingPreorderDeposit(
+      String customerId) async {
+    final row = await customSelect(
+      'SELECT COALESCE(SUM(MAX(ti.original_price * ti.qty - ti.subtotal, 0)), 0) '
+      '  AS total, COUNT(*) AS cnt '
+      'FROM preorder_entries po '
+      'INNER JOIN transaction_items ti ON ti.id = po.transaction_item_id '
+      'WHERE po.customer_id = ? AND po.paid = 0 '
+      '  AND (ti.original_price * ti.qty - ti.subtotal) > 0',
+      variables: [Variable.withString(customerId)],
+      readsFrom: {preorderEntries, transactionItems},
+    ).getSingleOrNull();
+    final total = (row?.data['total'] as num?)?.toInt() ?? 0;
     final cnt = (row?.data['cnt'] as int?) ?? 0;
     return (total, cnt);
   }
@@ -8592,6 +8669,56 @@ class AppDatabase extends _$AppDatabase {
             ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
           .get();
 
+  /// Kandidat pre-order utk fitur "Pelunasi Pre-order" DI KERANJANG
+  /// (`preorder_settlement_sheet.dart`) — pre-order pelanggan [customerId]
+  /// yang MASIH ada DP/jaminan terhutang (`paid = false` DAN owed > 0, sama
+  /// perhitungan persis [getPreorderDepositOwed], cuma di sini dihitung
+  /// SEKALIGUS lewat JOIN — bukan N+1 dgn memanggil fungsi itu per entri,
+  /// lihat dok CLAUDE.md §"Query DB: agregat/JOIN, hindari N+1").
+  ///
+  /// `INNER JOIN` ke `transactionItems`/`transactions` otomatis
+  /// mengecualikan pre-order yang tidak tertaut baris nota (titip wadah
+  /// tanpa beli apa pun, atau entri lama sebelum `transactionItemId` ada) —
+  /// tidak ada apa pun yg bisa "dilunasi" via keranjang utk kasus itu, sama
+  /// seperti [getPreorderDepositOwed] balikin null utk kasus yg sama.
+  Future<List<PreorderSettlementCandidate>> getPreorderSettlementCandidates(
+      String customerId) async {
+    final rows = await (select(preorderEntries).join([
+      innerJoin(transactionItems,
+          transactionItems.id.equalsExp(preorderEntries.transactionItemId)),
+      innerJoin(
+          transactions, transactions.id.equalsExp(preorderEntries.transactionId)),
+      innerJoin(
+          productUnits, productUnits.id.equalsExp(preorderEntries.productUnitId)),
+      innerJoin(products, products.id.equalsExp(productUnits.productId)),
+      leftOuterJoin(unitTypes, unitTypes.id.equalsExp(productUnits.unitTypeId)),
+    ])
+          ..where(preorderEntries.customerId.equals(customerId) &
+              preorderEntries.paid.equals(false)))
+        .get();
+    final out = <PreorderSettlementCandidate>[];
+    for (final row in rows) {
+      final entry = row.readTable(preorderEntries);
+      final item = row.readTable(transactionItems);
+      final tx = row.readTable(transactions);
+      final product = row.readTable(products);
+      final unit = row.readTableOrNull(unitTypes);
+      final owed = (item.originalPrice * item.qty).round() - item.subtotal;
+      if (owed <= 0) continue;
+      out.add(PreorderSettlementCandidate(
+        preorderEntryId: entry.id,
+        invoiceId: tx.id,
+        invoiceLocalId: tx.localId,
+        invoiceDate: tx.createdAt,
+        productName: product.name,
+        unitName: unit?.name ?? '',
+        amount: owed,
+      ));
+    }
+    out.sort((a, b) => a.invoiceDate.compareTo(b.invoiceDate));
+    return out;
+  }
+
   /// Log gabungan ketiga kategori utk layar "Riwayat" Laci Meja — sudah
   /// diperkaya nama barang & nama pelanggan supaya layar tidak perlu N+1.
   ///
@@ -9290,13 +9417,24 @@ class DebtBookEntry {
   int get daysOverdue => DateTime.now().difference(oldest).inDays;
 }
 
-/// Satu baris ringkasan "Lunasi Hutang" (fitur checkout dari keranjang) —
-/// parsed dari `transactions.debtSettlementDetail`. Dipakai ketiga jenis
-/// struk (in-app `receipt_screen.dart`, share, cetak `printer_service.dart`)
-/// — dirender MENYATU LANGSUNG ke list item produk (baris terakhir setelah
-/// item, sebelum Total), BUKAN section terpisah "Turut melunasi hutang:"
-/// (dihapus, redesain ketiga) — supaya satu tarikan Total menjumlahkan
-/// semuanya sekaligus, sama pola dgn keranjang kasir (`cart_sheet.dart`).
+/// Satu baris ringkasan "Lunasi Hutang" / "Pelunasi Pre-order" (kedua fitur
+/// checkout-dari-keranjang, lihat dok `AppDatabase.
+/// saveTransactionWithDebtSettlements`) — parsed dari `transactions.
+/// debtSettlementDetail`. Dipakai ketiga jenis struk (in-app
+/// `receipt_screen.dart`, share, cetak `printer_service.dart`) — dirender
+/// MENYATU LANGSUNG ke list item produk (baris terakhir setelah item,
+/// sebelum Total), BUKAN section terpisah "Turut melunasi hutang:" (dihapus,
+/// redesain ketiga) — supaya satu tarikan Total menjumlahkan semuanya
+/// sekaligus, sama pola dgn keranjang kasir (`cart_sheet.dart`).
+///
+/// [type] SATU kolom `debtSettlementDetail` yang SAMA menampung KEDUA jenis
+/// baris (TIDAK ada kolom/migrasi baru) — dibedakan lewat field diskriminator
+/// ini: `'debt'` (default, JUGA fallback utk JSON LAMA sebelum field ini ada
+/// — semua baris lama memang selalu hutang) atau `'preorder'` (fitur baru
+/// "Pelunasi Pre-order"). [preorderEntryId] HANYA terisi utk `type ==
+/// 'preorder'` — tidak dipakai rendering (renderer generik, cuma perlu
+/// [shortLabel]+[amount]), disimpan jaga-jaga kalau ada kode masa depan yg
+/// perlu menaut balik ke baris `PreorderEntries` sumber.
 class DebtSettlementDetailLine {
   const DebtSettlementDetailLine({
     required this.invoiceId,
@@ -9304,12 +9442,16 @@ class DebtSettlementDetailLine {
     required this.invoiceDate,
     required this.amount,
     required this.customerName,
+    this.type = 'debt',
+    this.preorderEntryId,
   });
 
   /// Id nota SUMBER — dipakai hyperlink "Nota X" di struk in-app
   /// (`receipt_screen.dart`) navigasi balik ke nota asal (`context.push
   /// ('/kasir/struk/$invoiceId')`). Kosong (data lama sebelum field ini
-  /// ditambahkan) -> tidak ditampilkan sbg link, teks polos saja.
+  /// ditambahkan) -> tidak ditampilkan sbg link, teks polos saja. Utk
+  /// `type == 'preorder'`, ini nota SUMBER pre-order (bukan nota baru),
+  /// sehingga link "tap ke nota asal" tetap bekerja sama persis.
   final String invoiceId;
   final String invoiceLocalId;
 
@@ -9319,15 +9461,25 @@ class DebtSettlementDetailLine {
   final int amount;
   final String customerName;
 
-  /// Label ringkas utk baris item struk, mis. "Lunasi Nota #12" (segmen
-  /// terakhir `invoiceLocalId`, pola sama dgn `CartMeta.displayOrderNumber`
-  /// di `cart_meta_provider.dart`) — menggantikan "Nota K1-20260907-0012"
-  /// yg terlalu verbose saat baris ini menyatu langsung ke list item
-  /// produk (bukan section terpisah lagi, lihat dok kelas ini).
+  /// `'debt'` atau `'preorder'` — lihat dok kelas ini.
+  final String type;
+
+  /// Baris `PreorderEntries` sumber — null utk `type == 'debt'` (& utk data
+  /// lama sebelum field ini ada).
+  final String? preorderEntryId;
+
+  /// Label ringkas utk baris item struk (segmen terakhir `invoiceLocalId`,
+  /// pola sama dgn `CartMeta.displayOrderNumber` di `cart_meta_provider.
+  /// dart`) — menggantikan "Nota K1-20260907-0012" yg terlalu verbose saat
+  /// baris ini menyatu langsung ke list item produk (bukan section terpisah
+  /// lagi, lihat dok kelas ini). "Lunasi Nota #N" utk hutang, "Lunasi
+  /// Pre-order #N" utk pre-order — N sama-sama diturunkan dari segmen
+  /// terakhir `invoiceLocalId` (nota SUMBER, bukan nota baru).
   String get shortLabel {
     final seg = invoiceLocalId.split('-').last;
     final n = int.tryParse(seg);
-    return 'Lunasi Nota #${n == null ? seg : n.toString()}';
+    final label = n == null ? seg : n.toString();
+    return type == 'preorder' ? 'Lunasi Pre-order #$label' : 'Lunasi Nota #$label';
   }
 }
 
@@ -9336,7 +9488,9 @@ class DebtSettlementDetailLine {
 /// (aman, tidak melempar). `invoiceId`/`invoiceDate` OPSIONAL di JSON lama
 /// (struk sebelum redesain kedua ini belum menyimpannya) — field nullable
 /// di model, TIDAK perlu migrasi DB (kolom `debtSettlementDetail` sudah
-/// blob JSON string nullable).
+/// blob JSON string nullable). `type`/`preorderEntryId` JUGA opsional (susulan
+/// fitur "Pelunasi Pre-order") — absen -> `type` default `'debt'`
+/// (kompatibel mundur, lihat dok `DebtSettlementDetailLine.type`).
 List<DebtSettlementDetailLine> parseDebtSettlementDetail(String? raw) {
   if (raw == null || raw.isEmpty) return const [];
   try {
@@ -9354,12 +9508,41 @@ List<DebtSettlementDetailLine> parseDebtSettlementDetail(String? raw) {
                 : DateTime.fromMillisecondsSinceEpoch(dateMs),
             amount: (m['amount'] as num).toInt(),
             customerName: m['customerName'] as String? ?? '',
+            type: m['type'] as String? ?? 'debt',
+            preorderEntryId: m['preorderEntryId'] as String?,
           );
         })
         .toList();
   } catch (_) {
     return const [];
   }
+}
+
+/// Satu kandidat pre-order pada sheet "Pelunasi Pre-order"
+/// (`preorder_settlement_sheet.dart`) — hasil
+/// [AppDatabase.getPreorderSettlementCandidates], sudah diperkaya nama
+/// produk+satuan & data nota sumber (satu JOIN, bukan N+1).
+class PreorderSettlementCandidate {
+  const PreorderSettlementCandidate({
+    required this.preorderEntryId,
+    required this.invoiceId,
+    required this.invoiceLocalId,
+    required this.invoiceDate,
+    required this.productName,
+    required this.unitName,
+    required this.amount,
+  });
+
+  final String preorderEntryId;
+  final String invoiceId;
+  final String invoiceLocalId;
+  final DateTime invoiceDate;
+  final String productName;
+  final String unitName;
+
+  /// DP/jaminan yang MASIH terhutang SAAT query dijalankan — sama nilai
+  /// [getPreorderDepositOwed] utk entri ini.
+  final int amount;
 }
 
 /// Satu nota belum lunas — dipakai daftar detail di Buku Hutang.
