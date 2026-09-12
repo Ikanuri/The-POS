@@ -47,6 +47,11 @@ class MergedReceiptScreen extends ConsumerStatefulWidget {
 
 class _MergedReceiptScreenState extends ConsumerState<MergedReceiptScreen> {
   bool _loading = true;
+  // Guard anti tap-dobel tombol cetak — risiko sama persis dgn
+  // `receipt_screen.dart` (_isPrinting): write bersamaan ke socket
+  // Bluetooth printer yg sama bisa merusak byte stream ESC/POS. Lihat
+  // dokumentasi lengkap di `_ReceiptScreenState._isPrinting`.
+  bool _isPrinting = false;
   List<Transaction> _txs = [];
   Map<String, List<TransactionItem>> _itemsByTx = {};
   Map<String, List<TransactionPayment>> _paymentsByTx = {};
@@ -212,41 +217,54 @@ class _MergedReceiptScreenState extends ConsumerState<MergedReceiptScreen> {
   }
 
   Future<void> _print() async {
-    final mac = await PrinterService.getSavedMac();
-    if (mac == null || mac.isEmpty) {
+    // Lihat dok `_ReceiptScreenState._isPrinting` — try/finally sejak awal
+    // supaya flag SELALU balik false lewat jalur keluar manapun.
+    if (_isPrinting) return;
+    setState(() => _isPrinting = true);
+    try {
+      final mac = await PrinterService.getSavedMac();
+      if (mac == null || mac.isEmpty) {
+        if (!mounted) return;
+        AppTheme.showSnack(context, 'Printer belum dikonfigurasi',
+            isError: true);
+        return;
+      }
+      final granted = await PrinterService.ensurePermissions();
+      if (!granted) {
+        if (!mounted) return;
+        AppTheme.showSnack(context, 'Izin Bluetooth ditolak', isError: true);
+        return;
+      }
+      final ok = await PrinterService.printMergedReceipt(
+        txs: _txs,
+        itemsByTx: _itemsByTx,
+        paymentsByTx: _paymentsByTx,
+        productNames: _productNames,
+        unitNames: _unitNames,
+        customerName: _customerName,
+        customerAddress: _customerAddress,
+        showEmployee: _showEmployee,
+        storeName: _storeName,
+        storeAddress: _storeAddress,
+        storePhone: _storePhone,
+        storeWhatsapp: _storeWhatsapp,
+        storeTelegram: _storeTelegram,
+        receiptHeader: _receiptHeader,
+        receiptFooter: _receiptFooter,
+        parentOf: _parentOf,
+        lastPaymentAt: _lastPaymentAt,
+      );
       if (!mounted) return;
-      AppTheme.showSnack(context, 'Printer belum dikonfigurasi', isError: true);
-      return;
+      AppTheme.showSnack(
+          context, ok ? 'Struk gabungan dicetak' : 'Gagal mencetak',
+          isError: !ok);
+    } finally {
+      if (mounted) {
+        setState(() => _isPrinting = false);
+      } else {
+        _isPrinting = false;
+      }
     }
-    final granted = await PrinterService.ensurePermissions();
-    if (!granted) {
-      if (!mounted) return;
-      AppTheme.showSnack(context, 'Izin Bluetooth ditolak', isError: true);
-      return;
-    }
-    final ok = await PrinterService.printMergedReceipt(
-      txs: _txs,
-      itemsByTx: _itemsByTx,
-      paymentsByTx: _paymentsByTx,
-      productNames: _productNames,
-      unitNames: _unitNames,
-      customerName: _customerName,
-      customerAddress: _customerAddress,
-      showEmployee: _showEmployee,
-      storeName: _storeName,
-      storeAddress: _storeAddress,
-      storePhone: _storePhone,
-      storeWhatsapp: _storeWhatsapp,
-      storeTelegram: _storeTelegram,
-      receiptHeader: _receiptHeader,
-      receiptFooter: _receiptFooter,
-      parentOf: _parentOf,
-      lastPaymentAt: _lastPaymentAt,
-    );
-    if (!mounted) return;
-    AppTheme.showSnack(
-        context, ok ? 'Struk gabungan dicetak' : 'Gagal mencetak',
-        isError: !ok);
   }
 
   /// Struk gabungan bisa memuat PULUHAN item dari banyak nota sekaligus →
@@ -313,7 +331,7 @@ class _MergedReceiptScreenState extends ConsumerState<MergedReceiptScreen> {
           IconButton(
             icon: const Icon(Icons.print_outlined),
             tooltip: 'Cetak',
-            onPressed: _print,
+            onPressed: _isPrinting ? null : _print,
           ),
         ],
       ),

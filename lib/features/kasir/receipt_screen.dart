@@ -188,6 +188,17 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   List<TransactionItem> _items = [];
   List<TransactionPayment> _payments = [];
 
+  /// Guard anti tap-dobel tombol cetak — tanpa ini, tap cepat berulang
+  /// selagi rangkaian async `_printReceipt` (getSavedMac -> ensurePermissions
+  /// -> printReceipt) masih berjalan bisa memicu 2 write bersamaan ke socket
+  /// Bluetooth printer yang sama (native `doWrite` di MainActivity.kt SPAWN
+  /// THREAD BARU tiap panggilan, TANPA sinkronisasi) -> byte stream ESC/POS
+  /// bisa ke-interleave/rusak (struk dobel/garbled), bukan cuma cetak dua
+  /// kali. Dibungkus try/finally di `_printReceipt` supaya SELALU balik ke
+  /// false apa pun jalur keluarnya (early return printer belum dikonfigurasi/
+  /// izin ditolak, atau error di tengah).
+  bool _isPrinting = false;
+
   /// Rincian per-produk retur/edit, dikelompokkan per `paymentId` — dipakai
   /// KHUSUS kartu "Riwayat Pembayaran" in-app (`_buildPaymentTimeline`).
   /// TIDAK dipakai nota share/print (permintaan eksplisit user — lihat dok
@@ -2158,62 +2169,77 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   }
 
   Future<void> _printReceipt() async {
-    final mac = await PrinterService.getSavedMac();
-    if (mac == null || mac.isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Printer belum dikonfigurasi'),
-          action: SnackBarAction(
-            label: 'Pengaturan',
-            onPressed: () => context.push('/pengaturan/printer'),
+    // Seluruh body dibungkus try/finally SEJAK AWAL (bukan cuma setelah
+    // early-return izin/konfigurasi) supaya flag SELALU balik ke false lewat
+    // jalur keluar MANAPUN — early return "printer belum dikonfigurasi",
+    // "izin ditolak", exception tak terduga di tengah, maupun jalur sukses
+    // normal. Kalau lupa salah satu, tombol bisa permanen disabled.
+    if (_isPrinting) return;
+    setState(() => _isPrinting = true);
+    try {
+      final mac = await PrinterService.getSavedMac();
+      if (mac == null || mac.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Printer belum dikonfigurasi'),
+            action: SnackBarAction(
+              label: 'Pengaturan',
+              onPressed: () => context.push('/pengaturan/printer'),
+            ),
           ),
-        ),
-      );
-      return;
-    }
-    // Pastikan izin Bluetooth runtime sudah ada agar tidak menggantung.
-    final granted = await PrinterService.ensurePermissions();
-    if (!granted) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Izin Bluetooth ditolak'),
-          action: SnackBarAction(
-            label: 'Pengaturan',
-            onPressed: () => context.push('/pengaturan/printer'),
+        );
+        return;
+      }
+      // Pastikan izin Bluetooth runtime sudah ada agar tidak menggantung.
+      final granted = await PrinterService.ensurePermissions();
+      if (!granted) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Izin Bluetooth ditolak'),
+            action: SnackBarAction(
+              label: 'Pengaturan',
+              onPressed: () => context.push('/pengaturan/printer'),
+            ),
           ),
-        ),
+        );
+        return;
+      }
+      final prefs = await _getStorePrefs();
+      final qrData = await _resolvePrintQrData();
+      if (!mounted) return;
+      final ok = await PrinterService.printReceipt(
+        tx: _tx!,
+        items: _items,
+        payments: _payments,
+        productNames: _productNames,
+        unitNames: _unitNames,
+        customer: _customer,
+        employeeName: _employeeForReceipt,
+        storeName: prefs.name,
+        storeAddress: prefs.address,
+        storePhone: prefs.phone,
+        storeWhatsapp: prefs.whatsapp,
+        storeTelegram: prefs.telegram,
+        receiptHeader: prefs.header,
+        receiptFooter: prefs.footer,
+        strukNote: _tx!.strukNote,
+        parentOf: _parentOf,
+        preorderDeposit: _preorderDeposit,
+        qrData: qrData,
       );
-      return;
+      if (!mounted) return;
+      AppTheme.showSnack(
+          context, ok ? 'Struk berhasil dicetak' : 'Gagal mencetak struk',
+          isError: !ok);
+    } finally {
+      if (mounted) {
+        setState(() => _isPrinting = false);
+      } else {
+        _isPrinting = false;
+      }
     }
-    final prefs = await _getStorePrefs();
-    final qrData = await _resolvePrintQrData();
-    if (!mounted) return;
-    final ok = await PrinterService.printReceipt(
-      tx: _tx!,
-      items: _items,
-      payments: _payments,
-      productNames: _productNames,
-      unitNames: _unitNames,
-      customer: _customer,
-      employeeName: _employeeForReceipt,
-      storeName: prefs.name,
-      storeAddress: prefs.address,
-      storePhone: prefs.phone,
-      storeWhatsapp: prefs.whatsapp,
-      storeTelegram: prefs.telegram,
-      receiptHeader: prefs.header,
-      receiptFooter: prefs.footer,
-      strukNote: _tx!.strukNote,
-      parentOf: _parentOf,
-      preorderDeposit: _preorderDeposit,
-      qrData: qrData,
-    );
-    if (!mounted) return;
-    AppTheme.showSnack(
-        context, ok ? 'Struk berhasil dicetak' : 'Gagal mencetak struk',
-        isError: !ok);
   }
 
   /// Item 62 susulan — cetak thermal TIDAK punya dialog opsi sendiri;
@@ -3132,7 +3158,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
           IconButton(
             icon: const Icon(Icons.print_outlined),
             tooltip: 'Cetak Struk',
-            onPressed: _tx == null ? null : () => _printReceipt(),
+            onPressed:
+                (_tx == null || _isPrinting) ? null : () => _printReceipt(),
           ),
         ],
       ),
