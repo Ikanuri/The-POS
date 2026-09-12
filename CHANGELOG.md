@@ -7,6 +7,11 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-12 (sesi kelima puluh enam — select-all teks cari lama saat tap +/- produk)
+
+- `3c1ddce` — feat(kasir): select-all teks cari lama saat tap +/- di
+  kartu/tile/varian produk
+
 ## 2026-09-12 (sesi kelima puluh lima — tombol Penuhi pre-order langsung di kartu nota)
 
 - `3242222` — feat(kasir): tombol Penuhi pre-order langsung di kartu nota

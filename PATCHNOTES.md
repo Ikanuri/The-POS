@@ -8,6 +8,13 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 12 September 2026 (sesi kelima puluh enam)
+
+### ✨ Fitur Baru
+- Setelah tap +/- di kartu produk, kalau kolom cari masih berisi teks
+  pencarian lama, teksnya otomatis ter-blok supaya bisa langsung diketik
+  ulang tanpa hapus manual.
+
 ## 12 September 2026 (sesi kelima puluh lima)
 
 ### ✨ Fitur Baru

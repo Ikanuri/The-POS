@@ -6,23 +6,77 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 12 September 2026, sesi kelima puluh lima — tombol
-"Penuhi" pre-order langsung di kartu nota (`receipt_screen.dart`, lihat
-di bawah). Versi kerja **2.61.0+128** (MINOR naik dari 2.60.3+127 —
-fitur baru terlihat pengguna, PATCH reset ke 0). schemaVersion **43**
-(tidak berubah, tanpa migrasi). Catatan: sesi lain (agen paralel) sedang
-mengerjakan fitur search-highlight di `kasir_screen.dart` di branch
-`claude/kategori-produk-qty-harga-mqjh21` yang sama — kalau nomor
-versi/commit di sini sudah tidak sinkron dgn `pubspec.yaml`/`git log`
-aktual, itu WAJAR (rebase pending dari sesi lain), jangan dianggap
-korupsi data — cek `git log` langsung utk state terkini.
+_Update sesi 12 September 2026, sesi kelima puluh enam — select-all
+teks cari lama saat tap +/- kartu/tile/varian produk di `kasir_screen.
+dart` (lihat di bawah). Versi kerja **2.62.0+129** (MINOR naik dari
+2.61.0+128 — fitur baru terlihat pengguna, PATCH reset ke 0).
+schemaVersion **43** (tidak berubah, tanpa migrasi). Ini rebase TERBARU
+di atas sesi kelima puluh lima (tombol "Penuhi" pre-order, `receipt_
+screen.dart`, agen paralel — sudah digabung bersih, tidak ada konflik).
 
 **Follow-up yang DIDISKUSIKAN tapi SENGAJA BELUM dibangun** (bukan lupa
 — keputusan eksplisit user "jangan dulu"): melunasi pre-order DP-Rp0
 sbg baris keranjang bersamaan belanja lain di hari yang sama (analog
 pelunasan hutang) — fitur TERPISAH & lebih besar dari tombol "Penuhi"
-sesi ini, belum dijadwalkan. Kalau sesi depan perlu ini, mulai dari nol
+sesi 55, belum dijadwalkan. Kalau sesi depan perlu ini, mulai dari nol
 (belum ada kode/desain tersimpan di mana pun)._
+
+## Sesi kelima puluh enam — select-all teks cari lama saat tap +/- produk
+
+Permintaan user: setelah tap stepper "+"/"-" di kartu grid, tile
+daftar, atau baris varian dropdown kasir, KALAU field cari sedang
+expanded (fokus) & masih berisi teks sisa pencarian sebelumnya, teksnya
+otomatis ter-select-all — supaya kasir bisa langsung ketik ulang produk
+berikutnya tanpa hapus manual. Kalau field cari collapsed/tidak fokus,
+tap stepper TIDAK boleh menyentuhnya sama sekali (tidak expand, tidak
+highlight, tidak memicu keyboard).
+
+**Implementasi** (`kasir_screen.dart`): fungsi baru `_highlightSearchIfActive`
+di `_KasirScreenState` — logika select-all sama persis dgn yang sudah
+ada di `_KasirTopbarState._onFocusChange` (dipakai saat field BARU
+dapat fokus), TAPI tanpa `addPostFrameCallback` karena di kasus ini
+field SUDAH fokus (bukan baru dapat fokus), jadi tidak perlu menunggu
+cursor default Flutter dulu. Parameter baru `VoidCallback?
+onAfterQtyChange` ditambahkan ke 3 widget (pola sama persis dgn
+`onBeforeTap` yang sudah ada di 2 di antaranya): `_ProductCard` (kartu
+grid), `_ProductListTile` (tile daftar), `_VariantDropdown` (baris
+varian — sebelumnya TIDAK punya hook apa pun ke `_KasirScreenState`,
+constructor cuma `parent`/`parentDetail`/`cartId`). Dipanggil di akhir
+closure `onTap` (setelah `onQuickAdd`/`onOpenEntry`/`_incrementVariant`)
+DAN `onMinus` (hanya saat benar-benar terpasang, `qty > 0`) di masing-
+masing widget — `AddControl`, `_decrementProduct`, `_incrementVariant`,
+`_decrementVariant` (fungsi top-level) TIDAK diubah sama sekali.
+`_KasirScreenState` menyambungkan `_highlightSearchIfActive` sbg
+`onAfterQtyChange` di 3 titik konstruksi: `_ProductCard(...)` &
+`_ProductListTile(...)` (keduanya di `itemBuilder` grid/list), dan
+`_ProductListTile` meneruskannya lagi ke `_VariantDropdown(...)` yang
+dikonstruksinya sendiri (dropdown varian inline anak dari tile, bukan
+langsung dari `_KasirScreenState`).
+
+**Test baru** (`test/kasir_stepper_search_highlight_test.dart`, 10
+test, 3 grup — kartu grid/tile daftar/baris varian): tiap grup
+menguji field fokus+ada teks (select-all penuh), field fokus+kosong
+(tidak error, tidak ada select), field collapsed/tidak fokus+ada teks
+(stepper TIDAK menyentuh field sama sekali — focus/selection/teks
+semua tetap seperti semula); grup kartu grid ditambah 1 test tombol
+"-" (bukan cuma "+") utk membuktikan jalur onMinus juga tersambung.
+Catatan teknis test: teks pencarian yang diketik dalam skenario ini
+SENGAJA dipilih agar tetap cocok dgn nama produk yang sedang diuji
+(mis. "minyak"/"pop ice") — field cari kasir benar-benar memfilter
+`StreamProvider` produk, jadi teks yang tidak cocok bikin kartu/tile
+lenyap dari tree sebelum stepper sempat di-tap; longPress expand baris
+varian juga WAJIB dilakukan SETELAH mengetik query (bukan sebelum) krn
+mengetik memicu rebuild list yang mereset state `_expanded` lokal
+tile. Revert-verified: fix (kasir_screen.dart) di-stash sementara, 4
+test assersi select-all gagal sensibel (`Expected: <0> Actual: <N>` —
+posisi selection tidak berubah dari sebelum tap), 6 test lain (KOSONG +
+collapsed) tetap hijau krn memang cuma menegaskan TIDAK ada efek;
+restore, hijau lagi.
+
+`flutter analyze` 0 issue. Full suite: **1633 test lulus, 0 gagal**
+(rebase bersih di atas commit sesi 55 `a9955c5`, tidak ada flake
+`backup_schema_version_guard_test.dart` di run ini). Commit: `3c1ddce`
+(sebelum rebase; hash final lihat `git log` setelah push).
 
 ## Sesi kelima puluh lima — tombol Penuhi pre-order langsung di kartu nota
 
