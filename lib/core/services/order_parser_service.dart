@@ -197,14 +197,32 @@ class OrderParserService {
         final newQty = prev.qty + qty;
         final reResolved =
             await priceService.resolvePrice(productUnitId: unitId, qty: newQty);
+        // Baris dobel (transfer handoff yang sama tertempel 2x) digabung ke
+        // qty baru — `reResolved` di atas SUDAH benar menghitung ulang harga
+        // bertingkat utk qty gabungan itu. TAPI jangan langsung pakai
+        // `price ?? reResolved.price` mentah spt jalur non-merge: `price`
+        // (flag `p=`) SELALU ada di transfer handoff (beda dari katalog HTML
+        // pelanggan yg flag-nya kosong), jadi itu akan SELALU menang &
+        // membekukan harga qty-tunggal LAMA ke qty gabungan BARU — salah utk
+        // toko yang pakai harga bertingkat (harga berubah di ambang qty).
+        //
+        // `priceOverridden` (flag `v=1`) membedakan dua niat pengirim:
+        // - false: harga sender berasal dari resolve tingkat normal saat itu
+        //   (skrng basi utk qty baru) → WAJIB pakai `reResolved.price` fresh.
+        // - true: harga sender adalah override MANUAL sengaja (bukan hasil
+        //   tingkat) → override itu tetap berlaku brp pun qty gabungannya,
+        //   jadi tetap percaya `price` dari sender (fallback ke resolve fresh
+        //   hanya kalau flag `p=` itu sendiri entah kenapa tidak ada).
         items[idx] = ParsedOrderItem(
           productId: prev.productId,
           productUnitId: prev.productUnitId,
           productName: prev.productName,
           unitName: prev.unitName,
           qty: newQty,
-          price: price ?? reResolved.price,
-          originalPrice: originalPrice ?? price ?? reResolved.price,
+          price: priceOverridden ? (price ?? reResolved.price) : reResolved.price,
+          originalPrice: priceOverridden
+              ? (originalPrice ?? price ?? reResolved.price)
+              : reResolved.price,
           costPrice: costPriceOverride ?? reResolved.costPrice,
           priceOverridden: priceOverridden,
           isVariant: prev.isVariant,

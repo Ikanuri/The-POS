@@ -811,5 +811,99 @@ void main() {
       expect(minyak.currentResolvedPrice, 32000);
       await db.close();
     });
+
+    test(
+        'baris dobel transfer handoff dgn harga bertingkat: harga sender '
+        'BUKAN override manual (priceOverridden=false) → merge WAJIB pakai '
+        'harga hasil resolve ulang utk qty gabungan (tingkat baru), bukan '
+        'harga tingkat lama qty tunggal', () async {
+      final db = AppDatabase(NativeDatabase.memory());
+      final p1 = await _addProduct(db, name: 'Beras', price: 13000);
+      final u1 = await _unitIdOf(db, p1);
+      // Tingkat 2: qty >= 5 → harga turun jadi 11000.
+      await db.into(db.priceTiers).insert(PriceTiersCompanion.insert(
+            id: '$u1-t2',
+            productUnitId: u1,
+            minQty: const Value(5),
+            price: 11000,
+          ));
+
+      final cart = [
+        CartItem(
+          productId: p1,
+          productUnitId: u1,
+          productName: 'Beras',
+          unitName: 'Kg',
+          qty: 3,
+          price: 13000, // Harga tingkat qty 1-4, BUKAN override manual.
+          originalPrice: 13000,
+          costPrice: 10000,
+        ),
+      ];
+      final encoded =
+          OrderParserService.encodeHandoff(items: cart, employeeName: 'Budi');
+      // Duplikasi baris (tempel 2x): qty gabungan 3+3=6, melewati ambang
+      // tingkat 2 (minQty 5) → harga SEHARUSNYA 11000, bukan 13000 lama.
+      final psnMatch = RegExp(r'#PSN:(.+)').firstMatch(encoded)!;
+      final itemPart = psnMatch.group(1)!;
+      final duped = encoded.replaceFirst(
+          '#PSN:$itemPart', '#PSN:$itemPart;$itemPart');
+
+      final result = await OrderParserService.parse(db: db, text: duped);
+      expect(result.items, hasLength(1));
+      final beras = result.items.single;
+      expect(beras.qty, 6, reason: 'qty digabung dari 2 baris identik');
+      expect(beras.price, 11000,
+          reason: 'harga tingkat qty gabungan (6) harus dipakai, bukan '
+              'harga tingkat lama qty tunggal (3) yg dibekukan dari sender');
+      expect(beras.originalPrice, 11000);
+      await db.close();
+    });
+
+    test(
+        'baris dobel transfer handoff dgn override HARGA MANUAL '
+        '(priceOverridden=true) → merge TETAP percaya harga sender, TIDAK '
+        'dihitung ulang ke tingkat baru (override sengaja berlaku brp pun '
+        'qty gabungannya)', () async {
+      final db = AppDatabase(NativeDatabase.memory());
+      final p1 = await _addProduct(db, name: 'Beras Premium', price: 13000);
+      final u1 = await _unitIdOf(db, p1);
+      await db.into(db.priceTiers).insert(PriceTiersCompanion.insert(
+            id: '$u1-t2',
+            productUnitId: u1,
+            minQty: const Value(5),
+            price: 11000,
+          ));
+
+      final cart = [
+        CartItem(
+          productId: p1,
+          productUnitId: u1,
+          productName: 'Beras Premium',
+          unitName: 'Kg',
+          qty: 3,
+          price: 12500, // Override manual kasir, bukan hasil tingkat mana pun.
+          originalPrice: 12500,
+          costPrice: 10000,
+          priceOverridden: true,
+        ),
+      ];
+      final encoded =
+          OrderParserService.encodeHandoff(items: cart, employeeName: 'Budi');
+      final psnMatch = RegExp(r'#PSN:(.+)').firstMatch(encoded)!;
+      final itemPart = psnMatch.group(1)!;
+      final duped = encoded.replaceFirst(
+          '#PSN:$itemPart', '#PSN:$itemPart;$itemPart');
+
+      final result = await OrderParserService.parse(db: db, text: duped);
+      expect(result.items, hasLength(1));
+      final beras = result.items.single;
+      expect(beras.qty, 6);
+      expect(beras.price, 12500,
+          reason: 'override manual sender tetap dihormati walau qty '
+              'gabungan melewati ambang tingkat baru');
+      expect(beras.originalPrice, 12500);
+      await db.close();
+    });
   });
 }
