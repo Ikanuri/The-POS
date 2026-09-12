@@ -8,6 +8,20 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 12 September 2026 (sesi kelima puluh tujuh)
+
+### ✨ Fitur Baru
+- **"Pelunasi Pre-order" langsung dari keranjang.** Kalau pelanggan
+  yang lagi belanja hari ini ternyata juga punya pre-order lain
+  (mis. galon/tabung gas) yang DP/jaminannya belum lunas, kasir tidak
+  perlu lagi memungut pembayaran itu terpisah. Cukup tap pengingat DP
+  di keranjang, pilih pre-order mana yang mau ikut dilunasi, dan
+  nominalnya otomatis ditambahkan ke total yang perlu diterima sekali
+  bayar — persis seperti fitur "Lunasi Hutang" yang sudah ada. Barang
+  pre-order-nya sendiri TIDAK ikut ditambahkan ke keranjang (itu urusan
+  terpisah, tetap lewat "Penuhi" seperti biasa), murni pelunasan
+  uangnya saja.
+
 ## 12 September 2026 (sesi kelima puluh enam)
 
 ### ✨ Fitur Baru

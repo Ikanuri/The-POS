@@ -7,6 +7,13 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-12 (sesi kelima puluh tujuh — fitur Pelunasi Pre-order via keranjang)
+
+- `da0e9f4` — feat(kasir): wiring checkout Pelunasi Pre-order di payment_screen
+- `0ad7bba` — feat(kasir): sheet + baris keranjang Pelunasi Pre-order
+- `79e1ca7` — feat(kasir): backend Pelunasi Pre-order — param
+  preorderSettlements + kandidat query + provider
+
 ## 2026-09-12 (sesi kelima puluh enam — select-all teks cari lama saat tap +/- produk)
 
 - `3c1ddce` — feat(kasir): select-all teks cari lama saat tap +/- di

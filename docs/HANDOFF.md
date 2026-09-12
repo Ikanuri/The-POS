@@ -6,20 +6,103 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 12 September 2026, sesi kelima puluh enam — select-all
-teks cari lama saat tap +/- kartu/tile/varian produk di `kasir_screen.
-dart` (lihat di bawah). Versi kerja **2.62.0+129** (MINOR naik dari
-2.61.0+128 — fitur baru terlihat pengguna, PATCH reset ke 0).
-schemaVersion **43** (tidak berubah, tanpa migrasi). Ini rebase TERBARU
-di atas sesi kelima puluh lima (tombol "Penuhi" pre-order, `receipt_
-screen.dart`, agen paralel — sudah digabung bersih, tidak ada konflik).
+_Update sesi 12 September 2026, sesi kelima puluh tujuh — fitur
+"Pelunasi Pre-order" via keranjang (lihat di bawah, task #17). Versi
+kerja **2.63.0+130** (MINOR naik dari 2.62.0+129 — fitur baru terlihat
+pengguna, PATCH reset ke 0). schemaVersion **43** (tidak berubah, TANPA
+migrasi — fitur ini reuse kolom `transactions.debtSettlementDetail`
+yang sudah ada, cuma ditambah field diskriminator `type` di JSON-nya).
+Ini rebase TERBARU di atas sesi kelima puluh enam (select-all teks
+cari lama, `kasir_screen.dart`, agen paralel — sudah digabung bersih,
+tidak ada konflik).
 
-**Follow-up yang DIDISKUSIKAN tapi SENGAJA BELUM dibangun** (bukan lupa
-— keputusan eksplisit user "jangan dulu"): melunasi pre-order DP-Rp0
-sbg baris keranjang bersamaan belanja lain di hari yang sama (analog
-pelunasan hutang) — fitur TERPISAH & lebih besar dari tombol "Penuhi"
-sesi 55, belum dijadwalkan. Kalau sesi depan perlu ini, mulai dari nol
-(belum ada kode/desain tersimpan di mana pun)._
+Follow-up dari sesi 55/56 ("melunasi pre-order DP-Rp0 sbg baris
+keranjang bersamaan belanja lain di hari yang sama, analog pelunasan
+hutang") SUDAH DIBANGUN sesi ini — bukan lagi item menggantung._
+
+## Sesi kelima puluh tujuh — fitur "Pelunasi Pre-order" via keranjang (task #17)
+
+Permintaan user (persis): pelanggan dengan pre-order terbuka yang
+DP/jaminannya masih terhutang (harga dikunci Rp 0 saat checkout
+awal) mungkin JUGA belanja barang lain hari ini, dan tidak mau bayar
+terpisah. Dibutuhkan fitur keranjang, ARSITEKTURNYA IDENTIK dgn
+"Lunasi Hutang" yang sudah ada, yang menambahkan baris pelunasan utk
+nominal pre-order yang terhutang ke keranjang hari ini — TANPA
+menduplikasi produk pre-order itu sbg baris item keranjang. Uangnya
+dikreditkan ke nota ASLI pre-order itu (via `collectPreorderDeposit`
+yang SUDAH ADA sebelumnya, tidak diubah logikanya), bukan ditambahkan
+sbg omzet nota baru — persis pola `settleMergedDebt` utk hutang.
+
+**Desain kunci (SENGAJA, jangan diubah tanpa alasan baru)**:
+- **TANPA migrasi DB.** Kolom `transactions.debtSettlementDetail`
+  (nullable TEXT/JSON, sudah ada) di-reuse utk KEDUA jenis baris
+  (hutang & pre-order), dibedakan field diskriminator baru `"type"`
+  (`'debt'` — default kalau field ini absen di JSON lama, kompatibel
+  mundur — atau `'preorder'`), plus `"preorderEntryId"` utk baris
+  pre-order. `DebtSettlementDetailLine` dapat 2 field baru (`type`
+  default `'debt'`, `preorderEntryId` nullable); `shortLabel`
+  bercabang: "Lunasi Nota #N" (hutang, tidak berubah) vs "Lunasi
+  Pre-order #N" (baru). Semua kode render (in-app `receipt_screen.
+  dart`, share, cetak `printer_service.dart`) TIDAK PERLU diubah SAMA
+  SEKALI — sudah generik (label+amount+link), diverifikasi bukan
+  cuma diasumsikan.
+- **`saveTransactionWithDebtSettlements`** (`app_database.dart`) dapat
+  parameter opsional baru `preorderSettlements` (default `[]`) — di
+  dalam `transaction()` yang SAMA (tidak nested), loop tiap entri
+  panggil `collectPreorderDeposit` (fungsi lama, TIDAK diubah
+  logikanya) memakai nominal BEKU dari cart entry sbg `amount`; kalau
+  return `null` (DP sudah terkumpul jalur lain di antaranya — race
+  jarang) entri di-SKIP diam-diam dari `detail`, bukan melempar.
+  Fungsi & parameter LAMA (`debtSettlements` dkk.) TIDAK berubah
+  perilakunya — dibuktikan test regresi eksplisit.
+- **Provider baru** `cart_preorder_settlement_provider.dart` —
+  `CartPreorderSettlementNotifier`/`PreorderSettlementEntry`, 1:1
+  MIRROR `CartDebtSettlementNotifier`/`DebtSettlementEntry`
+  (SharedPreferences key `cartpreordersettle_v1_<cartId>`, family per
+  `cartId`, `cleanupOrphanPreorderSettlements()`).
+- **Query kandidat** `getPreorderSettlementCandidates(customerId)`
+  (`app_database.dart`) — JOIN tunggal (preorder_entries+
+  transaction_items+transactions+product_units+products+unit_types),
+  BUKAN N+1 lewat `getPreorderDepositOwed` per-entri. Gerbang chip
+  cart (murah, "ada apa tidak") pakai agregat SQL terpisah
+  `getCustomerOutstandingPreorderDeposit`.
+- **UI**: `preorder_settlement_sheet.dart` (mirror
+  `debt_settlement_sheet.dart` — checklist "Pilih Pre-order untuk
+  Dilunasi"), chip pengingat baru (warna tertiary, ikon
+  `inventory_2_outlined`) + `_PreorderSettlementEntryRow` di
+  `cart_sheet.dart` (menyatu di list item yang sama, SETELAH baris
+  hutang), kartu ringkasan "Turut Pelunasi Pre-order" di
+  `payment_screen.dart` (baris "Total Diterima" gabungan HANYA
+  dirender sekali, di kartu TERAKHIR yang tampil, supaya tidak dobel
+  saat hutang+pre-order sama-sama aktif).
+- Hold/resume pesanan ditahan (`kasir_screen.dart`, 3 titik: hold
+  manual, resume, auto-hold saat pindah antrian) & "Kosongkan
+  Keranjang" ikut menyertakan/membersihkan
+  `cartPreorderSettlementProvider`, mirror persis siklus
+  `cartDebtSettlementProvider`.
+- **Bug lama yang IKUT dibenerin** (ditemukan saat wiring
+  `cleanupOrphanPreorderSettlements`): `CartDebtSettlementNotifier.
+  cleanupOrphanDebtSettlements()` TERNYATA tidak pernah dipanggil dari
+  mana pun sejak awal (fungsinya ada, cuma tidak terpasang di
+  `main.dart`) — dipasang sekarang bareng versi pre-order-nya.
+
+**Test baru** (semua revert-verified — fix di-stash sementara, test
+gagal sensibel, restore, hijau lagi):
+- `test/preorder_settlement_checkout_test.dart` (Tier 1, 6 test): DP
+  terkumpul ke nota SUMBER tanpa menginflasi nota baru, entri
+  owed-null di-skip diam-diam, jalur `debtSettlements`-saja TIDAK
+  regresi, gabungan hutang+pre-order dalam satu `detail`, parse JSON
+  lama (tanpa `type`) & JSON baru (`type:'preorder'`).
+- `test/cart_sheet_preorder_settlement_test.dart` (Tier 2, 4 test):
+  gerbang izin sama persis hutang, tap chip -> sheet -> Terapkan ->
+  entri masuk + Total naik, tap baris -> entri hilang + Total turun.
+
+`flutter analyze` 0 issue. Full suite: **1649 test lulus, 0 gagal**
+(+10 test baru bersih — 6 di `preorder_settlement_checkout_test.dart`,
+4 di `cart_sheet_preorder_settlement_test.dart` — tanpa flake
+`backup_schema_version_guard_test.dart` di run ini). Commits: lihat
+CHANGELOG.md (dipecah backend/UI/payment_screen/docs, urutan
+kronologis).
 
 ## Sesi kelima puluh enam — select-all teks cari lama saat tap +/- produk
 
