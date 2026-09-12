@@ -31,6 +31,7 @@ import '../shell/sync_status_banner.dart';
 import 'cart_meta_provider.dart';
 import 'cart_debt_settlement_provider.dart';
 import 'cart_prabayar_provider.dart';
+import 'cart_preorder_settlement_provider.dart';
 import 'cart_price_category_provider.dart';
 import 'cart_provider.dart';
 import 'handoff_gate_provider.dart';
@@ -495,6 +496,7 @@ final _heldOrdersListProvider = StreamProvider<List<HeldOrder>>((ref) {
   int prabayarChangeTaken,
   String? priceCategoryId,
   List<DebtSettlementEntry> debtSettlement,
+  List<PreorderSettlementEntry> preorderSettlement,
 }) _parseHeldPayload(String json) {
   try {
     final decoded = jsonDecode(json);
@@ -512,6 +514,7 @@ final _heldOrdersListProvider = StreamProvider<List<HeldOrder>>((ref) {
         prabayarChangeTaken: 0,
         priceCategoryId: null,
         debtSettlement: const <DebtSettlementEntry>[],
+        preorderSettlement: const <PreorderSettlementEntry>[],
       );
     }
     if (decoded is Map<String, dynamic>) {
@@ -542,6 +545,18 @@ final _heldOrdersListProvider = StreamProvider<List<HeldOrder>>((ref) {
               .add(DebtSettlementEntry.fromJson(e as Map<String, dynamic>));
         } catch (_) {/* entri lama tak kompatibel -> dilewati, bukan fatal */}
       }
+      // Fitur "Pelunasi Pre-order" — key baru (absen di payload lama
+      // pra-fitur ini, fallback list kosong — kompatibel mundur), pola
+      // penanganan error identik `debtSettlement` di atas.
+      final preorderSettlementRaw =
+          decoded['preorderSettlement'] as List? ?? const [];
+      final preorderSettlement = <PreorderSettlementEntry>[];
+      for (final e in preorderSettlementRaw) {
+        try {
+          preorderSettlement.add(
+              PreorderSettlementEntry.fromJson(e as Map<String, dynamic>));
+        } catch (_) {/* entri lama tak kompatibel -> dilewati, bukan fatal */}
+      }
       return (
         items: items,
         meta: metaRaw != null ? CartMeta.fromJson(metaRaw) : const CartMeta(),
@@ -556,6 +571,7 @@ final _heldOrdersListProvider = StreamProvider<List<HeldOrder>>((ref) {
         // fallback null = "Normal" — kompatibel mundur).
         priceCategoryId: decoded['priceCategory'] as String?,
         debtSettlement: debtSettlement,
+        preorderSettlement: preorderSettlement,
       );
     }
   } catch (_) {/* data rusak → kosong */}
@@ -568,6 +584,7 @@ final _heldOrdersListProvider = StreamProvider<List<HeldOrder>>((ref) {
     prabayarChangeTaken: 0,
     priceCategoryId: null,
     debtSettlement: const <DebtSettlementEntry>[],
+    preorderSettlement: const <PreorderSettlementEntry>[],
   );
 }
 
@@ -1674,6 +1691,8 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
       final prabayar = ref.read(cartPrabayarProvider(_cartId));
       final priceCategoryId = ref.read(cartPriceCategoryProvider(_cartId));
       final debtSettlement = ref.read(cartDebtSettlementProvider(_cartId));
+      final preorderSettlement =
+          ref.read(cartPreorderSettlementProvider(_cartId));
       final payload = jsonEncode({
         'items': cart.map((c) => c.toJson()).toList(),
         'meta': meta.toJson(),
@@ -1685,6 +1704,10 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
         // Fitur "Lunasi Hutang" — ikut ditahan/dipulihkan sama persis siklus
         // hidup entri Pra-Bayar (lihat dok `CartDebtSettlementNotifier`).
         'debtSettlement': debtSettlement.map((e) => e.toJson()).toList(),
+        // Fitur "Pelunasi Pre-order" — ikut ditahan/dipulihkan sama persis
+        // siklus hidup entri Lunasi Hutang.
+        'preorderSettlement':
+            preorderSettlement.map((e) => e.toJson()).toList(),
       });
       await db.holdOrder(id: _kasirUuid.v4(), label: label, cartJson: payload);
       ref.read(cartProvider(_cartId).notifier).clear();
@@ -1692,6 +1715,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
       ref.read(cartPrabayarProvider(_cartId).notifier).clear();
       ref.read(cartPriceCategoryProvider(_cartId).notifier).clear();
       ref.read(cartDebtSettlementProvider(_cartId).notifier).clear();
+      ref.read(cartPreorderSettlementProvider(_cartId).notifier).clear();
       if (mounted) {
         setState(() => _heldPanelOpen = false);
         _showBanner('Pesanan "$label" ditahan', InlineBannerType.success);
@@ -1771,6 +1795,9 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
       ref
           .read(cartDebtSettlementProvider(_cartId).notifier)
           .replaceAll(parsed.debtSettlement);
+      ref
+          .read(cartPreorderSettlementProvider(_cartId).notifier)
+          .replaceAll(parsed.preorderSettlement);
       if (mounted) {
         setState(() => _heldPanelOpen = false);
         _showBanner(
@@ -1798,6 +1825,8 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
     final prabayar = ref.read(cartPrabayarProvider(_cartId));
     final priceCategoryId = ref.read(cartPriceCategoryProvider(_cartId));
     final debtSettlement = ref.read(cartDebtSettlementProvider(_cartId));
+    final preorderSettlement =
+        ref.read(cartPreorderSettlementProvider(_cartId));
     final label = meta.hasCustomer ? meta.customerName! : _autoHoldLabel();
     final payload = jsonEncode({
       'items': cart.map((c) => c.toJson()).toList(),
@@ -1806,6 +1835,8 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
       'prabayarChangeTaken': prabayarNotifier.changeTakenTotal,
       'priceCategory': priceCategoryId,
       'debtSettlement': debtSettlement.map((e) => e.toJson()).toList(),
+      'preorderSettlement':
+          preorderSettlement.map((e) => e.toJson()).toList(),
     });
     await ref
         .read(databaseProvider)
@@ -1815,6 +1846,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
     ref.read(cartPrabayarProvider(_cartId).notifier).clear();
     ref.read(cartPriceCategoryProvider(_cartId).notifier).clear();
     ref.read(cartDebtSettlementProvider(_cartId).notifier).clear();
+    ref.read(cartPreorderSettlementProvider(_cartId).notifier).clear();
     return label;
   }
 

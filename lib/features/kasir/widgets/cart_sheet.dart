@@ -27,11 +27,13 @@ import '../../../core/widgets/item_count_badge.dart';
 import '../cart_debt_settlement_provider.dart';
 import '../cart_meta_provider.dart';
 import '../cart_prabayar_provider.dart';
+import '../cart_preorder_settlement_provider.dart';
 import '../cart_price_category_provider.dart';
 import '../cart_provider.dart';
 import '../handoff_gate_provider.dart';
 import 'debt_payment_sheet.dart';
 import 'debt_settlement_sheet.dart';
+import 'preorder_settlement_sheet.dart';
 import 'add_control.dart';
 import 'cart_meta_pickers.dart';
 import 'cart_preview_paper.dart';
@@ -261,6 +263,8 @@ class _CartSheetState extends ConsumerState<CartSheet> {
           ref.read(cartPriceCategoryProvider(widget.cartId));
       final debtSettlement =
           ref.read(cartDebtSettlementProvider(widget.cartId));
+      final preorderSettlement =
+          ref.read(cartPreorderSettlementProvider(widget.cartId));
       final payload = jsonEncode({
         'items': cart.map((c) => c.toJson()).toList(),
         'meta': meta.toJson(),
@@ -273,6 +277,10 @@ class _CartSheetState extends ConsumerState<CartSheet> {
         // Fitur "Lunasi Hutang" — ikut ditahan/dipulihkan sama persis siklus
         // hidup entri Pra-Bayar.
         'debtSettlement': debtSettlement.map((e) => e.toJson()).toList(),
+        // Fitur "Pelunasi Pre-order" — ikut ditahan/dipulihkan sama persis
+        // siklus hidup entri Lunasi Hutang.
+        'preorderSettlement':
+            preorderSettlement.map((e) => e.toJson()).toList(),
       });
       await db.holdOrder(
           id: const Uuid().v4(), label: label, cartJson: payload);
@@ -281,6 +289,7 @@ class _CartSheetState extends ConsumerState<CartSheet> {
       ref.read(cartPrabayarProvider(widget.cartId).notifier).clear();
       ref.read(cartPriceCategoryProvider(widget.cartId).notifier).clear();
       ref.read(cartDebtSettlementProvider(widget.cartId).notifier).clear();
+      ref.read(cartPreorderSettlementProvider(widget.cartId).notifier).clear();
       if (!ctx.mounted) return;
       ScaffoldMessenger.of(ctx).showSnackBar(
         SnackBar(content: Text('Pesanan "$label" ditahan')),
@@ -566,6 +575,7 @@ class _CartSheetState extends ConsumerState<CartSheet> {
     ref.read(cartMetaProvider(widget.cartId).notifier).clear();
     ref.read(cartPrabayarProvider(widget.cartId).notifier).clear();
     ref.read(cartDebtSettlementProvider(widget.cartId).notifier).clear();
+    ref.read(cartPreorderSettlementProvider(widget.cartId).notifier).clear();
     // Bug fix: toggle kategori harga header (singleton per-cartId, TIDAK
     // per-transaksi) juga harus ikut reset saat keranjang dikosongkan manual.
     ref.read(cartPriceCategoryProvider(widget.cartId).notifier).clear();
@@ -992,6 +1002,22 @@ class _CartSheetState extends ConsumerState<CartSheet> {
     final debtSettlementTotal =
         debtSettlementEntries.fold<int>(0, (s, e) => s + e.amount);
 
+    // Fitur "Pelunasi Pre-order" DI KERANJANG — arsitektur IDENTIK dgn
+    // "Lunasi Hutang" di atas (gerbang SAMA persis [canDebtSettlement], data
+    // beda: DP/jaminan pre-order tertunggak, bukan nota tempo/kurang_bayar).
+    final customerPreorderDebt =
+        (canDebtSettlement && meta.customerId != null)
+            ? ref
+                .watch(cartCustomerPreorderDepositProvider(meta.customerId))
+                .valueOrNull
+            : null;
+    final showPreorderSettlementRow =
+        customerPreorderDebt != null && customerPreorderDebt.$2 > 0;
+    final preorderSettlementEntries =
+        ref.watch(cartPreorderSettlementProvider(widget.cartId));
+    final preorderSettlementTotal =
+        preorderSettlementEntries.fold<int>(0, (s, e) => s + e.amount);
+
     // Fase C "Kategori Harga" — toggle HANYA di keranjang utama kasir (bukan
     // mode Katalog/Tambah Belanjaan, lihat briefing), device berizin
     // `override_harga` (gerbang SAMA beratnya dgn override harga manual),
@@ -1234,6 +1260,47 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                 ),
               ),
             if (showDebtRow) const Divider(height: 1),
+            // Fitur "Pelunasi Pre-order" — arsitektur IDENTIK dgn chip
+            // "Lunasi Hutang" di atas (lihat dok
+            // `preorder_settlement_sheet.dart`), warna tertiary (bukan
+            // error) supaya kasir tetap bisa bedakan sekilas dua jenis
+            // pengingat ini kalau kebetulan tampil bersamaan.
+            if (showPreorderSettlementRow)
+              InkWell(
+                onTap: () => showPreorderSettlementSheet(
+                  ctx,
+                  ref,
+                  cartId: widget.cartId,
+                  customerId: meta.customerId!,
+                  customerName: meta.customerName ?? 'Pelanggan',
+                ),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  color: scheme.tertiaryContainer.withOpacity(0.25),
+                  child: Row(
+                    children: [
+                      Icon(Icons.inventory_2_outlined,
+                          size: 15, color: scheme.tertiary),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'DP Pre-order ${formatRupiah(customerPreorderDebt.$1)} '
+                          'di ${customerPreorderDebt.$2} pesanan — tap utk lunasi',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: scheme.tertiary),
+                        ),
+                      ),
+                      Icon(Icons.chevron_right, size: 16, color: scheme.tertiary),
+                    ],
+                  ),
+                ),
+              ),
+            if (showPreorderSettlementRow) const Divider(height: 1),
             // Fase C "Kategori Harga" — chip toggle "Normal" + tiap
             // PriceCategories terdaftar. Baris ini disembunyikan TOTAL bila
             // gerbang [canToggleCategory] tidak terpenuhi (lihat dok di atas).
@@ -1266,7 +1333,9 @@ class _CartSheetState extends ConsumerState<CartSheet> {
               ),
             if (canToggleCategory) const Divider(height: 1),
             Expanded(
-              child: (cart.isEmpty && debtSettlementEntries.isEmpty)
+              child: (cart.isEmpty &&
+                      debtSettlementEntries.isEmpty &&
+                      preorderSettlementEntries.isEmpty)
                   ? Center(
                       child: Text(
                         'Keranjang kosong',
@@ -1282,9 +1351,13 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                       // item keranjang sungguhan (bukan produk, gaya visual
                       // sama persis `_CartItemTile`, lihat
                       // `_DebtSettlementEntryRow`) — supaya kasir melihatnya
-                      // sbg bagian dari keranjang itu sendiri.
-                      final itemCount =
-                          ordered.length + debtSettlementEntries.length;
+                      // sbg bagian dari keranjang itu sendiri. "Pelunasi
+                      // Pre-order" (susulan, arsitektur identik) ditempel
+                      // SETELAH baris hutang — dua daftar independen, tidak
+                      // pernah saling konflik.
+                      final itemCount = ordered.length +
+                          debtSettlementEntries.length +
+                          preorderSettlementEntries.length;
                       return StepperActiveScope(
                         child: ListView.separated(
                           controller: scrollCtrl,
@@ -1293,6 +1366,17 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                           separatorBuilder: (_, __) =>
                               const Divider(height: 1, indent: 56),
                           itemBuilder: (ctx2, i) {
+                            if (i >=
+                                ordered.length + debtSettlementEntries.length) {
+                              final entry = preorderSettlementEntries[i -
+                                  ordered.length -
+                                  debtSettlementEntries.length];
+                              return _PreorderSettlementEntryRow(
+                                key: ValueKey(entry.id),
+                                cartId: widget.cartId,
+                                entry: entry,
+                              );
+                            }
                             if (i >= ordered.length) {
                               final entry =
                                   debtSettlementEntries[i - ordered.length];
@@ -1373,7 +1457,9 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                               // langsung lihat total uang fisik yang perlu
                               // diterima. Breakdown-nya di baris kecil
                               // `_shrinkToFit` di bawah (pola sama Pra-Bayar).
-                              formatRupiah(total + debtSettlementTotal),
+                              formatRupiah(total +
+                                  debtSettlementTotal +
+                                  preorderSettlementTotal),
                               maxLines: 1,
                               style: AppTheme.numStyle(context,
                                   size: 22,
@@ -1386,6 +1472,19 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                               Text(
                                 '+ Lunasi Hutang ${formatRupiah(debtSettlementTotal)} '
                                 '(${debtSettlementEntries.length} nota)',
+                                maxLines: 1,
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: scheme.tertiary),
+                              ),
+                            ),
+                          if (preorderSettlementEntries.isNotEmpty)
+                            _PrabayarFooterSummary._shrinkToFit(
+                              Text(
+                                '+ Pelunasi Pre-order '
+                                '${formatRupiah(preorderSettlementTotal)} '
+                                '(${preorderSettlementEntries.length} pesanan)',
                                 maxLines: 1,
                                 style: TextStyle(
                                     fontSize: 11,
@@ -1496,6 +1595,80 @@ class _DebtSettlementEntryRow extends ConsumerWidget {
                       padding: const EdgeInsets.only(top: 2),
                       child: Text(
                         formatTanggalPendek(entry.invoiceDate),
+                        style: TextStyle(
+                            fontSize: 13, color: scheme.onSurfaceVariant),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        formatRupiah(entry.amount),
+                        style: AppTheme.numStyle(context,
+                            size: 14,
+                            weight: FontWeight.w700,
+                            color: scheme.primary),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.close, size: 18, color: scheme.onSurfaceVariant),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Fitur "Pelunasi Pre-order" — arsitektur & gaya visual IDENTIK dgn
+/// [_DebtSettlementEntryRow] di atas (baca dok di sana dulu), satu baris DI
+/// DALAM daftar item keranjang per [PreorderSettlementEntry] aktif. Beda dari
+/// hutang: baris 1 menampilkan NAMA PRODUK pre-order (bukan nomor nota —
+/// pre-order selalu satu produk spesifik per DP, "Nota X" saja tidak cukup
+/// jelas), nomor nota sumber dipindah ke baris 2 bersama tanggal. Tap baris
+/// ini = hapus entri (batal lunasi pre-order itu), pola sama persis.
+class _PreorderSettlementEntryRow extends ConsumerWidget {
+  const _PreorderSettlementEntryRow({
+    super.key,
+    required this.cartId,
+    required this.entry,
+  });
+
+  final String cartId;
+  final PreorderSettlementEntry entry;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    return InkWell(
+      onTap: () => ref
+          .read(cartPreorderSettlementProvider(cartId).notifier)
+          .remove(entry.id),
+      child: Container(
+        color: scheme.tertiary.withOpacity(0.06),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+          child: Row(
+            children: [
+              Icon(Icons.inventory_2_outlined, size: 20, color: scheme.tertiary),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(entry.productName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 17)),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        'Nota ${entry.invoiceLocalId} · '
+                        '${formatTanggalPendek(entry.invoiceDate)}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                             fontSize: 13, color: scheme.onSurfaceVariant),
                       ),
