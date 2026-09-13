@@ -6,12 +6,42 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 13 September 2026, sesi keenam puluh dua — task #19 SELESAI:
-opsional "Sekaligus ambil/penuhi barang" saat pelunasan DP-0 pre-order
-via keranjang (Item 66). Commit `91920c1`. Versi kerja **2.64.0+135**
-(MINOR — fitur baru terlihat pengguna, ADA entri PATCHNOTES.md).
-schemaVersion TETAP **44** (tidak ada migrasi — murni provider/UI/DB
-function yg sudah ada, dipanggil dgn parameter tambahan).
+_Update sesi 13 September 2026, sesi keenam puluh tiga — Item 67 SELESAI:
+gabung baris "Riwayat Pembayaran" paling awal dgn nota hutang/pre-order
+di ketiga jenis struk (in-app, share/gambar, cetak). Commit `ebf623d`.
+Versi kerja **2.64.1+136** (PATCH — murni bugfix tampilan, ADA entri
+PATCHNOTES.md krn user langsung merasakan/screenshot ketidaksesuaian).
+schemaVersion TETAP **44** (tidak ada migrasi — murni perubahan tampilan
+di 3 renderer struk, `p.amount`/DB tidak disentuh sama sekali).
+
+Bug: "Dibayar" di Ringkasan struk sudah lama (dari fix lama) menjumlahkan
+`_debtSettlementTotal` (uang pelunasan hutang/DP-0 pre-order — dicatat
+sbg `transaction_payments` di nota SUMBER/lama, BUKAN nota ini, via
+`debtSettlementDetail` JSON blob di nota ini), tapi kartu "Riwayat
+Pembayaran"/timeline pembayaran (`_buildPaymentTimeline` in-app,
+`_ReceiptPaper` share/gambar, `printer_service.dart` cetak) menampilkan
+`_payments`/`payments` apa adanya TANPA ikut menjumlahkan — 2 angka di
+layar yang sama jadi tidak saling cocok tanpa penjelasan. User screenshot
+kasus "Lunasi Pre-order" DP-0 sekaligus checkout, minta fix SIMPEL
+("sesuai apa yg diketik kalkulator") bukan tambah baris baru.
+
+Fix: baris pembayaran PALING AWAL (`identical(p, payments.where((e) =>
+!e.voided).firstOrNull)`) di ketiga renderer digabung TAMPILANNYA dgn
+`_debtSettlementTotal` — dipilih krn `debtSettlementDetail` HANYA
+ditulis saat checkout awal (`saveTransactionWithDebtSettlements`), tidak
+pernah oleh cicilan/pembayaran berikutnya, jadi baris tertua = momen
+checkout yg sama persis dgn nominal kalkulator. Test baru
+`test/receipt_payment_timeline_settlement_test.dart` (4 test: in-app,
+share/gambar, cetak, + regresi cicilan 2x pembayaran — HANYA baris
+pertama digabung, TIDAK dobel-hitung). `test/receipt_debt_settlement_
+total_paid_test.dart` diupdate (assertion count 1->2 / 2->3) krn baris
+timeline sekarang IKUT benar menampilkan nominal gabungan (fallout yg
+diharapkan, bukan regresi). Revert-verify manual sudah dilakukan (semua
+4 test baru gagal sensible saat fix di-revert via patch, hijau lagi
+setelah dipulihkan). `flutter analyze` bersih. Full-suite background
+agent dispatch dalam proses saat hand-off ini ditulis — CEK hasilnya
+sebelum menganggap sesi ini benar-benar tuntas kalau melanjutkan dari
+sini.
 
 Yang dikerjakan: sheet "Pilih Pre-order untuk Dilunasi"
 (`preorder_settlement_sheet.dart`) dapat toggle per-baris "Sekaligus

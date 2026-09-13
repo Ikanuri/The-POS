@@ -8,6 +8,18 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 13 September 2026 (sesi keenam puluh tiga)
+
+### 🐛 Perbaikan
+- **"Riwayat Pembayaran" di struk sekarang sesuai dengan "Dibayar".**
+  Sebelumnya, kalau checkout sekaligus melunasi hutang/DP pre-order dalam
+  satu keranjang, angka "Dibayar" di bagian atas struk sudah benar
+  (menjumlahkan item + pelunasan), tapi kartu "Riwayat Pembayaran" di
+  bawahnya cuma menampilkan nominal item saja — jadi kelihatan tidak
+  cocok padahal keduanya sama-sama benar. Sekarang baris pembayaran di
+  Riwayat Pembayaran ikut menampilkan nominal gabungan, sesuai dengan
+  yang sungguh-sungguh diketik kasir di kalkulator.
+
 ## 13 September 2026 (sesi keenam puluh dua)
 
 ### ✨ Fitur Baru

@@ -7,6 +7,11 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-13 (sesi keenam puluh tiga — gabung Riwayat Pembayaran dgn nota hutang/pre-order, Item 67)
+
+- `ebf623d` — fix(kasir): gabung baris "Riwayat Pembayaran" paling awal dgn
+  nota hutang/pre-order
+
 ## 2026-09-13 (sesi keenam puluh dua — opsional "Sekaligus penuhi" pelunasan pre-order, Item 66, task #19)
 
 - `91920c1` — feat(kasir): opsional "Sekaligus ambil/penuhi barang" saat
