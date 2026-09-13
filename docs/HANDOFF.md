@@ -6,41 +6,45 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 13 September 2026, sesi kelima puluh sembilan — fix
-"Batalkan & Susun Ulang" (Item 64, lihat di bawah). Versi kerja
-**2.63.2+132** (PATCH naik dari 2.63.1+131 — bugfix, ADA entri
-PATCHNOTES.md krn user sendiri yang melaporkan pernah mengalami gejala
-"pesanan tertahan hilang" ini). schemaVersion TETAP **44** (tidak ada
-migrasi baru sesi ini — murni provider Riverpod + kode UI).
+_Update sesi 13 September 2026, sesi keenam puluh — fix nominal Bayar/
+kalkulator/QR (Item 65, lihat di bawah). Versi kerja **2.63.3+133**
+(PATCH naik dari 2.63.2+132 — bugfix, ADA entri PATCHNOTES.md krn user
+sendiri melaporkan lewat screenshot). schemaVersion TETAP **44**.
 
-Root cause NYATA dari laporan lama "pesanan tertahan hilang" (yang
-sebelumnya di sesi 55 sempat diduga murni race kondisi tap ganda tombol
-Tahan/Lanjutkan, task #13 — fix RACE itu TETAP valid & tidak dicabut,
-tapi TERNYATA ada penyebab kedua yang independen): fungsi
-`_redoCartFromVoidedTransaction` (tombol "Batalkan & Susun Ulang" di
-Struk/Riwayat Transaksi) SELALU `clear()` lalu isi ulang
-`cartProvider(kMainCartId)` TANPA auto-hold dulu — beda dari
-`_resumeHeld` yang sudah lama auto-hold (Item 18). Keranjang yang
-sedang diproses kasir hilang DETERMINISTIK (bukan soal timing) begitu
-kasir buka struk nota LAIN yang sudah lunas & tap tombol itu. Ditemukan
-lewat AUDIT MANUAL (bukan laporan AI eksternal seperti sesi-sesi
-sebelumnya) setelah user sendiri melaporkan dugaan root cause yang
-BENAR. Sekalian ketemu bug ke-2 di fungsi yang sama saat diaudit lebih
-lanjut: `cartDebtSettlementProvider`/`cartPreorderSettlementProvider`/
-`cartPriceCategoryProvider` tidak pernah dibersihkan di fungsi ini —
-entri Lunasi Hutang/Pelunasi Pre-order/kategori harga milik sesi
-SEBELUMNYA bisa nempel ke transaksi susun-ulang yang tidak ada
-hubungannya. Fix keduanya sekaligus (satu commit `5887b5c`) — lihat
-komentar "Item 64" di `tx_history_sheet.dart`, test baru di
-`test/void_restock_redo_flow_test.dart` (3 test baru, revert-verify
-manual sudah dilakukan: masing² gagal sensible saat fix di-revert
-terpisah).
+Bug nyata ditemukan dari screenshot user: tombol "Bayar Rp 378.150"
+& "Uang Pas" di kalkulator cuma menampilkan `_total` (belanja saja),
+padahal ada entri "Turut Lunasi Hutang" Rp 553.900 aktif di keranjang
+yg sama — "Total Diterima (Belanja + Hutang)" yg BENAR (Rp 932.050)
+cuma tampil di ringkasan, tombol Bayar & kalkulatornya sendiri lupa
+ikut pakai `_grandTotal`. Audit lanjutan menemukan ini BUKAN cuma bug
+tampilan: pelunasan hutang/pre-order (`saveTransactionWithDebtSettlements`
+param `debtSettlements`/`preorderSettlements`) dijalankan TANPA SYARAT,
+nominalnya beku & tidak pernah dicek ulang terhadap uang yg sungguhan
+diterima kasir — kasir bisa checkout dgn `_tendered` cuma cukup utk
+`_total` sendiri, sementara hutang pelanggan LAIN tetap tercatat lunas
+penuh tanpa uangnya benar-benar berpindah tangan.
+
+Fix (commit `f7cac8b`): `_bayarLabel()`/`_QrisDisplay.total`/
+`_CashKeypadSheet.total` semua diganti ke `_grandTotal`. Gerbang baru:
+kalau `_settlementTotal > 0` (Lunasi Hutang + Pelunasi Pre-order aktif)
+DAN uang yg diketik kasir < `_grandTotal` -> checkout DITOLAK dgn
+SnackBar peringatan (bukan lolos diam-diam), baru diizinkan kalau sudah
+cukup — nilainya lalu dipetakan balik `_tendered = result -
+_settlementTotal` supaya `transactions.total`/`paid` nota BARU tetap
+murni porsi belanja sendiri (tidak berubah dari sebelumnya). Tombol
+pintas "Selesaikan Transaksi" (Pra-Bayar) juga digerbang sama
+(`_prabayarCoversTotal` sekarang WAJIB `_settlementTotal == 0` juga) —
+Pra-Bayar cuma menutup belanja, bukan pelunasan hutang/pre-order. Test
+baru `test/payment_screen_settlement_grandtotal_test.dart` (4 test),
+revert-verify manual sudah dilakukan (2 dari 4 test gagal sensible saat
+fix inti di-revert, 2 lainnya menguji jalur lain yg tidak fully exercise
+baris yg direvert dlm kombinasi itu — sudah dicek satu-satu).
 
 Task #19 (opsional "sekaligus penuhi" saat pelunasan DP-0, desain sudah
 dikonfirmasi user) masih `pending` — belum dieksekusi, menunggu giliran.
 
-_Ringkasan sesi sebelumnya (58, fix sync Item 63) di bawah ini,
-dipertahankan sbg histori teknis:_
+_Ringkasan sesi sebelumnya (59, fix "Batalkan & Susun Ulang" Item 64;
+58, fix sync Item 63) di bawah ini, dipertahankan sbg histori teknis:_
 
 Bug yang diperbaiki: `transaction_items` (qty/priceAtSale/subtotal)
 diperlakukan append-only murni oleh `dumpSince`/`mergeRows` — koreksi
@@ -58,6 +62,11 @@ updated_at >= ?` + `mergeRows` special-case last-write-wins persis pola
 
 Ini rebase TERBARU di atas sesi kelima puluh tujuh (Pelunasi Pre-order
 via keranjang, task #17) — sudah digabung bersih, tidak ada konflik.
+
+## Sesi keenam puluh — fix nominal Bayar/kalkulator/QR (Item 65)
+
+Root cause dilaporkan user via screenshot — lihat ringkasan lengkap di
+paragraf pembuka file ini. Commit `f7cac8b`.
 
 ## Sesi kelima puluh sembilan — fix "Batalkan & Susun Ulang" (Item 64)
 

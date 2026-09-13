@@ -8,6 +8,20 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 13 September 2026 (sesi keenam puluh)
+
+### 🐛 Perbaikan
+- **Tombol "Bayar" & kalkulator sekarang menampilkan total yang benar saat
+  ada pelunasan hutang/pre-order digabung ke keranjang.** Sebelumnya kalau
+  ada entri "Lunasi Hutang"/"Pelunasi Pre-order" aktif, tombol "Bayar",
+  "Uang Pas" di kalkulator, dan nominal QRIS dinamis cuma menampilkan
+  harga belanja hari itu — TIDAK termasuk nominal pelunasan yang seharusnya
+  ikut diterima sekali jalan. Sekarang semuanya menampilkan total gabungan
+  yang benar. Ditambah pengaman baru: kalau uang yang diketik kasir belum
+  cukup menutup total gabungan itu, checkout ditolak dengan peringatan
+  (bukan lolos diam-diam) — supaya pelunasan hutang/pre-order tidak pernah
+  tercatat lunas tanpa uangnya benar-benar diterima.
+
 ## 13 September 2026 (sesi kelima puluh sembilan)
 
 ### 🐛 Perbaikan

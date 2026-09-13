@@ -7,6 +7,11 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-13 (sesi keenam puluh — fix nominal Bayar/kalkulator/QR, Item 65)
+
+- `f7cac8b` — fix(kasir): tombol Bayar/kalkulator/QR pakai Total belanja
+  saja, bukan gabungan Lunasi Hutang/Pre-order
+
 ## 2026-09-13 (sesi kelima puluh sembilan — fix "Batalkan & Susun Ulang", Item 64)
 
 - `5887b5c` — fix(kasir): "Batalkan & Susun Ulang" timpa keranjang aktif
