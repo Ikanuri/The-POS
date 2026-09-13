@@ -6,10 +6,15 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 13 September 2026, sesi keenam puluh — fix nominal Bayar/
-kalkulator/QR (Item 65, lihat di bawah). Versi kerja **2.63.3+133**
-(PATCH naik dari 2.63.2+132 — bugfix, ADA entri PATCHNOTES.md krn user
-sendiri melaporkan lewat screenshot). schemaVersion TETAP **44**.
+_Update sesi 13 September 2026, sesi keenam puluh satu — ganti label
+"Pelunasi Pre-order" jadi "Melunasi Pre-order" di 2 teks UI (kartu
+"Turut ... Pre-order" di layar Bayar, ringkasan footer keranjang) —
+permintaan user, murni teks, TANPA ubah identifier kode/provider/file.
+Commit `bf936c2`. Versi kerja **2.63.4+134** (PATCH, tanpa PATCHNOTES —
+sekadar koreksi kata, bukan bugfix perilaku).
+
+Sesi sebelumnya (60) — fix nominal Bayar/kalkulator/QR (Item 65, lihat
+di bawah). schemaVersion TETAP **44**.
 
 Bug nyata ditemukan dari screenshot user: tombol "Bayar Rp 378.150"
 & "Uang Pas" di kalkulator cuma menampilkan `_total` (belanja saja),

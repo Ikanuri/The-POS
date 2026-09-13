@@ -7,6 +7,11 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-13 (sesi keenam puluh satu — ganti label "Pelunasi" jadi "Melunasi" Pre-order)
+
+- `bf936c2` — fix(kasir): ganti label "Pelunasi Pre-order" jadi
+  "Melunasi Pre-order" di UI
+
 ## 2026-09-13 (sesi keenam puluh — fix nominal Bayar/kalkulator/QR, Item 65)
 
 - `f7cac8b` — fix(kasir): tombol Bayar/kalkulator/QR pakai Total belanja
