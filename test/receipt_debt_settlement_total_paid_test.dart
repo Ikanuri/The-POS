@@ -77,14 +77,21 @@ void main() {
     await tester.pumpAndSettle();
 
     // Baris "Total" adalah Text tunggal berisi persis nominal gabungan.
-    expect(find.text(formatRupiah(902400)), findsOneWidget,
-        reason: '"Total" harus menampilkan gabungan item + nota hutang, '
-            'bukan cuma tx.total mentah (Rp 212.400)');
+    // Item 67: baris Riwayat Pembayaran paling awal SEKARANG juga
+    // menampilkan Text persis sama ("Rp 902.400") — jadi 2 match, bukan 1.
+    expect(find.text(formatRupiah(902400)), findsNWidgets(2),
+        reason: '"Total" DAN baris Riwayat Pembayaran paling awal harus '
+            'menampilkan gabungan item + nota hutang, bukan cuma tx.total '
+            'mentah (Rp 212.400)');
     // Baris "Dibayar" formatnya '<metode> · <nominal>' dalam SATU Text
     // (bukan Text terpisah) — cek via textContaining.
-    expect(find.textContaining(formatRupiah(902400)), findsNWidgets(2),
-        reason: '"Total" & "Dibayar" (format "Tunai · Rp ...") harus '
-            'sama-sama mengandung nominal gabungan Rp 902.400');
+    // Item 67: baris Riwayat Pembayaran paling awal sekarang JUGA ikut
+    // digabung (lihat receipt_payment_timeline_settlement_test.dart) —
+    // jadi ada 3 match, bukan 2.
+    expect(find.textContaining(formatRupiah(902400)), findsNWidgets(3),
+        reason: '"Total", "Dibayar" (format "Tunai · Rp ..."), DAN baris '
+            'Riwayat Pembayaran paling awal harus sama-sama mengandung '
+            'nominal gabungan Rp 902.400');
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));
@@ -101,9 +108,11 @@ void main() {
     await tester.tap(find.byTooltip('Bagikan Struk'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Rp ${_fmtNum(902400)}'), findsNWidgets(2),
+    // Item 67: baris timeline "Pembayaran:" paling awal sekarang JUGA ikut
+    // digabung — jadi ada 3 match ("Total", "Bayar..", DAN baris timeline).
+    expect(find.text('Rp ${_fmtNum(902400)}'), findsNWidgets(3),
         reason: 'struk share/gambar juga harus menggabung item + hutang '
-            'di baris Total/Bayar (2 baris: "Total" & "Bayar..")');
+            'di baris Total/Bayar/timeline (3 baris)');
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));

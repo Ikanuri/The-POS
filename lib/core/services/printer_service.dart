@@ -989,10 +989,8 @@ class PrinterService {
           payments.any((p) => !p.voided && p.note == 'Tambah belanjaan');
       final totalPrabayarChangeTaken = hasLaterAddItemsRound
           ? 0
-          : payments
-              .where((p) => !p.voided)
-              .fold<int>(
-                  0, (s, p) => s + (p.prabayarChangeTakenBeforeCheckout ?? 0));
+          : payments.where((p) => !p.voided).fold<int>(
+              0, (s, p) => s + (p.prabayarChangeTakenBeforeCheckout ?? 0));
       final kembalianGabungan =
           (latestWithChange?.changeGiven ?? 0) + totalPrabayarChangeTaken;
       // "Bayar" HARUS Total + Kembalian (bukan netPaid mentah) saat ada
@@ -1070,10 +1068,20 @@ class PrinterService {
     if (showTimeline) {
       out.addAll(bodySep());
       out.addAll(bodyText('Pembayaran:', styles: const PosStyles(bold: true)));
+      // Item 67 — pasangan fix `_ReceiptScreenState._buildPaymentTimeline`/
+      // `_ReceiptPaper` (`receipt_screen.dart`, baca dok di sana): baris
+      // pembayaran PALING AWAL digabung dgn `debtSettlementTotal` supaya
+      // konsisten dgn "Bayar" di ringkasan atas (yg SUDAH lama
+      // menjumlahkan itu) — murni tampilan cetak, TIDAK menyentuh
+      // `p.amount`/DB.
+      final earliestPayment = visiblePayments.firstOrNull;
       for (final p in visiblePayments) {
         final left =
             '${_fmtDateTimeFull(p.paidAt)} ${_methodShort(p.method, name: p.methodName)}';
-        out.addAll(bodyLR(left, 'Rp ${_fmtNum(p.amount)}'));
+        final amount = identical(p, earliestPayment)
+            ? p.amount + debtSettlementTotal
+            : p.amount;
+        out.addAll(bodyLR(left, 'Rp ${_fmtNum(amount)}'));
       }
     }
 
@@ -1449,10 +1457,8 @@ class PrinterService {
       final txHasLaterAddItemsRound =
           pays.any((p) => !p.voided && p.note == 'Tambah belanjaan');
       if (!txHasLaterAddItemsRound) {
-        grandPrabayarChangeTaken += pays
-            .where((p) => !p.voided)
-            .fold<int>(
-                0, (s, p) => s + (p.prabayarChangeTakenBeforeCheckout ?? 0));
+        grandPrabayarChangeTaken += pays.where((p) => !p.voided).fold<int>(
+            0, (s, p) => s + (p.prabayarChangeTakenBeforeCheckout ?? 0));
       }
       // NET (dikurangi kembalian yg dipakai ulang sbg pembayaran) — bukan
       // `tx.paid` mentah, sama akar masalah dgn Item 23 di struk tunggal.

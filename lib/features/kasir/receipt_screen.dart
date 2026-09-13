@@ -500,7 +500,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         recognizer: l.invoiceId.isEmpty
             ? null
             : (_debtSettlementLinkRecognizers.putIfAbsent(
-                    l.invoiceId, () => TapGestureRecognizer())
+                l.invoiceId, () => TapGestureRecognizer())
               ..onTap = () => context.push('/kasir/struk/${l.invoiceId}')),
       ));
     }
@@ -2870,8 +2870,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     // negatif) — lihat dok di atas.
     final netQty = <String, double>{};
     for (final item in _items) {
-      netQty[item.productUnitId] =
-          (netQty[item.productUnitId] ?? 0) + item.qty;
+      netQty[item.productUnitId] = (netQty[item.productUnitId] ?? 0) + item.qty;
     }
 
     final cartItems = <CartItem>[];
@@ -3479,13 +3478,11 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                             _SummaryRow(
                                 'Retur', '- ${formatRupiah(_returAmount)}',
                                 color: scheme.error),
-                            _SummaryRow(
-                                'Total akhir',
+                            _SummaryRow('Total akhir',
                                 formatRupiah(tx.total + _debtSettlementTotal),
                                 bold: true, color: scheme.primary),
                           ] else
-                            _SummaryRow(
-                                'Total',
+                            _SummaryRow('Total',
                                 formatRupiah(tx.total + _debtSettlementTotal),
                                 bold: true, color: scheme.primary),
                           if (device.canSeeReports && _showProfit)
@@ -4160,19 +4157,19 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                             return;
                           }
                           if (maxQty != null && parsed > maxQty) {
-                            setSheetState(() => qtyError =
-                                'Tidak boleh melebihi qty di nota '
-                                '(${_fmtQtyShort(maxQty)}) — tambah lewat '
-                                'Tambah Belanjaan');
+                            setSheetState(() =>
+                                qtyError = 'Tidak boleh melebihi qty di nota '
+                                    '(${_fmtQtyShort(maxQty)}) — tambah lewat '
+                                    'Tambah Belanjaan');
                             return;
                           }
                           if (showDeposit) {
                             final parsedDeposit =
                                 double.tryParse(depositCtrl.text.trim()) ?? 0;
                             if (parsedDeposit > parsed) {
-                              setSheetState(() => depositError =
-                                  'Tidak boleh melebihi jumlah '
-                                  '(${_fmtQtyShort(parsed)})');
+                              setSheetState(() =>
+                                  depositError = 'Tidak boleh melebihi jumlah '
+                                      '(${_fmtQtyShort(parsed)})');
                               return;
                             }
                           }
@@ -4374,7 +4371,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   /// `_showQtyDialog` di bawah SENGAJA (fungsi privat di file lain, bukan
   /// diekspos) — tidak layak diekstrak jadi widget bersama utk satu dialog
   /// sesederhana ini.
-  Widget _preorderFulfillButton(PreorderEntry p, String productName, double sisa) {
+  Widget _preorderFulfillButton(
+      PreorderEntry p, String productName, double sisa) {
     return TextButton(
       style: TextButton.styleFrom(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -4527,11 +4525,13 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                 final jaminan = p.depositQty > 0
                     ? ' · ${_fmtQtyShort(p.depositQty)} jaminan'
                     : '';
-                final sisa = (p.qtyOrdered - terpenuhi).clamp(0.0, p.qtyOrdered);
+                final sisa =
+                    (p.qtyOrdered - terpenuhi).clamp(0.0, p.qtyOrdered);
                 // Tombol "Penuhi" cuma masuk akal utk entri yang MASIH
                 // terbuka — sama persis gerbang status di bawah (bukan
                 // Dibatalkan/Selesai).
-                final canFulfill = p.cancelledAt == null && p.fulfilledAt == null;
+                final canFulfill =
+                    p.cancelledAt == null && p.fulfilledAt == null;
                 return _laciMejaEntryBlock(
                   fg: fg,
                   headline: '${_fmtQtyShort(p.qtyOrdered)} $nama$jaminan',
@@ -4540,9 +4540,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                   events: events,
                   lastEditedAt: p.lastEditedAt,
                   onEdit: () => _editPreorderEntry(p, nama),
-                  fulfillButton: canFulfill
-                      ? _preorderFulfillButton(p, nama, sisa)
-                      : null,
+                  fulfillButton:
+                      canFulfill ? _preorderFulfillButton(p, nama, sisa) : null,
                   status: p.cancelledAt != null
                       ? (text: 'Dibatalkan', done: true)
                       : p.fulfilledAt != null
@@ -4634,157 +4633,186 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
               ],
             ),
             const SizedBox(height: 4),
+            // Item 67 — bug nyata dilaporkan user (screenshot): "Dibayar" di
+            // Ringkasan atas SENGAJA menjumlahkan `_debtSettlementTotal`
+            // (permintaan user lama, supaya Total/Dibayar konsisten dgn
+            // baris item pelunasan yang menyatu ke daftar item) — tapi kartu
+            // Riwayat Pembayaran cuma menampilkan `_payments` APA ADANYA
+            // (uang pelunasan sungguhan tercatat sbg `transaction_payments`
+            // di nota SUMBER, bukan nota ini), jadi dua angka di LAYAR YANG
+            // SAMA tidak saling menjumlah tanpa penjelasan. Fix: tambahkan
+            // nominal pelunasan ke tampilan baris pembayaran PALING AWAL
+            // (paling masuk akal — itu momen checkout yang SAMA persis dgn
+            // nominal yg diketik kasir di kalkulator sekali jalan, bukan
+            // cicilan belakangan; `_debtSettlementLines` HANYA pernah
+            // ditulis saat checkout awal, tidak pernah oleh pembayaran
+            // susulan) — TIDAK menyentuh `p.amount`/DB sama sekali, murni
+            // angka tampilan di sini (sejalan pola `_debtSettlementTotal`
+            // yang sudah lama begitu utk "Total"/"Dibayar").
             for (final p in _payments)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 3),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Expanded(
-                          child: Text(_formatDateTime(p.paidAt),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                child: Builder(builder: (context) {
+                  final isEarliestUnvoided = !p.voided &&
+                      identical(
+                          p, _payments.where((e) => !e.voided).firstOrNull);
+                  final displayAmount = isEarliestUnvoided
+                      ? p.amount + _debtSettlementTotal
+                      : p.amount;
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            child: Text(_formatDateTime(p.paidAt),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: scheme.onSurfaceVariant,
+                                    decoration: p.voided
+                                        ? TextDecoration.lineThrough
+                                        : null)),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(_methodLabel(p.method, name: p.methodName),
                               style: TextStyle(
                                   fontSize: 12,
                                   color: scheme.onSurfaceVariant,
                                   decoration: p.voided
                                       ? TextDecoration.lineThrough
                                       : null)),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(_methodLabel(p.method, name: p.methodName),
-                            style: TextStyle(
-                                fontSize: 12,
-                                color: scheme.onSurfaceVariant,
-                                decoration: p.voided
-                                    ? TextDecoration.lineThrough
-                                    : null)),
-                        // Baris penanda retur/edit (amount SELALU 0, nilai
-                        // sungguhannya ada di header "(Retur) Rp X" di blok
-                        // rincian di bawah) — "Rp 0" di sini cuma noise,
-                        // disembunyikan.
-                        if (p.amount != 0) ...[
-                          const SizedBox(width: 8),
-                          Text(formatRupiah(p.amount),
-                              style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color:
-                                      p.voided ? scheme.onSurfaceVariant : null,
-                                  decoration: p.voided
-                                      ? TextDecoration.lineThrough
-                                      : null)),
+                          // Baris penanda retur/edit (amount SELALU 0, nilai
+                          // sungguhannya ada di header "(Retur) Rp X" di blok
+                          // rincian di bawah) — "Rp 0" di sini cuma noise,
+                          // disembunyikan. `displayAmount` (bukan `p.amount`
+                          // mentah) supaya baris checkout ikut menampilkan
+                          // nominal pelunasan yg digabung (Item 67, lihat dok
+                          // di atas).
+                          if (displayAmount != 0) ...[
+                            const SizedBox(width: 8),
+                            Text(formatRupiah(displayAmount),
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: p.voided
+                                        ? scheme.onSurfaceVariant
+                                        : null,
+                                    decoration: p.voided
+                                        ? TextDecoration.lineThrough
+                                        : null)),
+                          ],
+                          if (!p.voided && !isVoid && !_isReturLinkedPayment(p))
+                            IconButton(
+                              icon: const Icon(Icons.cancel_outlined, size: 16),
+                              tooltip: 'Batalkan Pembayaran',
+                              visualDensity: VisualDensity.compact,
+                              alignment: Alignment.center,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                  minWidth: 28, minHeight: 28),
+                              color: scheme.error,
+                              onPressed: () => _voidPayment(p),
+                            ),
                         ],
-                        if (!p.voided && !isVoid && !_isReturLinkedPayment(p))
-                          IconButton(
-                            icon: const Icon(Icons.cancel_outlined, size: 16),
-                            tooltip: 'Batalkan Pembayaran',
-                            visualDensity: VisualDensity.compact,
-                            alignment: Alignment.center,
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(
-                                minWidth: 28, minHeight: 28),
-                            color: scheme.error,
-                            onPressed: () => _voidPayment(p),
+                      ),
+                      if (p.voided)
+                        Text('Dibatalkan',
+                            style: TextStyle(
+                                fontSize: 11,
+                                fontStyle: FontStyle.italic,
+                                color: scheme.error)),
+                      // Rincian per-produk retur/edit momen INI (permintaan
+                      // user) — HANYA in-app, tidak pernah muncul di nota
+                      // share/print (di luar `_ReceiptPaper`/`printer_service.
+                      // dart` sepenuhnya). Baris pembayaran yang dibatalkan
+                      // tidak lagi relevan finansial, jadi rinciannya
+                      // disembunyikan juga.
+                      if (!p.voided &&
+                          (_adjustmentLines[p.id]?.isNotEmpty ?? false))
+                        _AdjustmentLinesBlock(
+                          method: p.method,
+                          total: _adjustmentLines[p.id]!
+                              .fold<int>(0, (s, l) => s + l.subtotal),
+                          lines: _adjustmentLines[p.id]!,
+                          scheme: scheme,
+                        ),
+                      // Kembalian milik pembayaran INI (bukan akumulatif) —
+                      // nempel langsung di bawah nominalnya, satu momen yang
+                      // sama (lihat AppDatabase._computePaymentDelta). Poin 3
+                      // permintaan user: berlaku juga utk momen retur/edit di
+                      // atas (marker retur/edit BISA punya changeGiven kalau
+                      // nilainya melampaui sisa hutang — lihat dok
+                      // `_paymentDeltaAfterUnpaidItemChange`), bukan cuma
+                      // pembayaran biasa. Pembayaran yang dibatalkan tidak
+                      // punya kembalian relevan lagi (sudah tidak dihitung
+                      // finansial).
+                      if (p.changeGiven > 0 && !p.voided)
+                        _ChangeTakenRow(
+                          amount: formatRupiah(p.changeGiven),
+                          taken: p.changeTaken,
+                          color: scheme.tertiary,
+                          onChanged: isVoid
+                              ? null
+                              : (v) => _toggleChangeTaken(p.id, v),
+                        ),
+                      // Sisa tempo per momen (poin 2 & 3 permintaan user) —
+                      // pola sama _ChangeTakenRow tapi TANPA centang (sisa
+                      // tempo tidak "dipakai ulang"/tidak butuh reminder
+                      // ambil). Berlaku baik utk sesi bayar biasa (mis. bayar
+                      // 192.000 dari total 193.000 -> Sisa 1.000) maupun utk
+                      // momen retur/edit yang masih menyisakan hutang.
+                      if (p.sisaAfter > 0 && !p.voided)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 1),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.only(left: 30),
+                                child: Text('Sisa',
+                                    style: TextStyle(color: scheme.error)),
+                              ),
+                              Text(formatRupiah(p.sisaAfter),
+                                  style: TextStyle(color: scheme.error)),
+                            ],
                           ),
-                      ],
-                    ),
-                    if (p.voided)
-                      Text('Dibatalkan',
-                          style: TextStyle(
+                        ),
+                      // Fitur Pra-Bayar (susulan, permintaan user) — `amount`
+                      // baris ini TETAP nilai ASLI/gross yg BENAR-BENAR dikunci
+                      // kasir (`buildPrabayarCheckout` — fix nominal struk,
+                      // dulu SEMPAT dipotong diam-diam, itu BUG yg dilaporkan
+                      // user via screenshot), sebagian uangnya
+                      // (`prabayarChangeTakenBeforeCheckout`) SUDAH dikembalikan
+                      // ke pembeli SEBELUM checkout (fase keranjang, checkbox
+                      // "kembalian sudah diambil" — `cart_prabayar_provider.
+                      // dart`) — dicatat TERPISAH di baris catatan di bawah ini,
+                      // BUKAN dikurangi dari nominal utama. SENGAJA beda visual dari
+                      // `_ChangeTakenRow` (tanpa checkbox, label eksplisit
+                      // "sebelum checkout") supaya TIDAK tertukar makna dgn
+                      // kembalian NORMAL baris "sekarang"/kasir loket — ini
+                      // murni catatan historis (bukan aksi yg bisa
+                      // ditoggle), sudah pasti sudah diambil krn checkbox-nya
+                      // sudah ditekan kasir sebelum layar ini pernah ada.
+                      if (!p.voided &&
+                          (p.prabayarChangeTakenBeforeCheckout ?? 0) > 0)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 30, top: 1),
+                          child: Text(
+                            'Kembalian ${formatRupiah(p.prabayarChangeTakenBeforeCheckout!)} '
+                            'sudah diambil sebelum checkout',
+                            style: TextStyle(
                               fontSize: 11,
                               fontStyle: FontStyle.italic,
-                              color: scheme.error)),
-                    // Rincian per-produk retur/edit momen INI (permintaan
-                    // user) — HANYA in-app, tidak pernah muncul di nota
-                    // share/print (di luar `_ReceiptPaper`/`printer_service.
-                    // dart` sepenuhnya). Baris pembayaran yang dibatalkan
-                    // tidak lagi relevan finansial, jadi rinciannya
-                    // disembunyikan juga.
-                    if (!p.voided &&
-                        (_adjustmentLines[p.id]?.isNotEmpty ?? false))
-                      _AdjustmentLinesBlock(
-                        method: p.method,
-                        total: _adjustmentLines[p.id]!
-                            .fold<int>(0, (s, l) => s + l.subtotal),
-                        lines: _adjustmentLines[p.id]!,
-                        scheme: scheme,
-                      ),
-                    // Kembalian milik pembayaran INI (bukan akumulatif) —
-                    // nempel langsung di bawah nominalnya, satu momen yang
-                    // sama (lihat AppDatabase._computePaymentDelta). Poin 3
-                    // permintaan user: berlaku juga utk momen retur/edit di
-                    // atas (marker retur/edit BISA punya changeGiven kalau
-                    // nilainya melampaui sisa hutang — lihat dok
-                    // `_paymentDeltaAfterUnpaidItemChange`), bukan cuma
-                    // pembayaran biasa. Pembayaran yang dibatalkan tidak
-                    // punya kembalian relevan lagi (sudah tidak dihitung
-                    // finansial).
-                    if (p.changeGiven > 0 && !p.voided)
-                      _ChangeTakenRow(
-                        amount: formatRupiah(p.changeGiven),
-                        taken: p.changeTaken,
-                        color: scheme.tertiary,
-                        onChanged:
-                            isVoid ? null : (v) => _toggleChangeTaken(p.id, v),
-                      ),
-                    // Sisa tempo per momen (poin 2 & 3 permintaan user) —
-                    // pola sama _ChangeTakenRow tapi TANPA centang (sisa
-                    // tempo tidak "dipakai ulang"/tidak butuh reminder
-                    // ambil). Berlaku baik utk sesi bayar biasa (mis. bayar
-                    // 192.000 dari total 193.000 -> Sisa 1.000) maupun utk
-                    // momen retur/edit yang masih menyisakan hutang.
-                    if (p.sisaAfter > 0 && !p.voided)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 1),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.only(left: 30),
-                              child: Text('Sisa',
-                                  style: TextStyle(color: scheme.error)),
+                              color: scheme.tertiary,
                             ),
-                            Text(formatRupiah(p.sisaAfter),
-                                style: TextStyle(color: scheme.error)),
-                          ],
-                        ),
-                      ),
-                    // Fitur Pra-Bayar (susulan, permintaan user) — `amount`
-                    // baris ini TETAP nilai ASLI/gross yg BENAR-BENAR dikunci
-                    // kasir (`buildPrabayarCheckout` — fix nominal struk,
-                    // dulu SEMPAT dipotong diam-diam, itu BUG yg dilaporkan
-                    // user via screenshot), sebagian uangnya
-                    // (`prabayarChangeTakenBeforeCheckout`) SUDAH dikembalikan
-                    // ke pembeli SEBELUM checkout (fase keranjang, checkbox
-                    // "kembalian sudah diambil" — `cart_prabayar_provider.
-                    // dart`) — dicatat TERPISAH di baris catatan di bawah ini,
-                    // BUKAN dikurangi dari nominal utama. SENGAJA beda visual dari
-                    // `_ChangeTakenRow` (tanpa checkbox, label eksplisit
-                    // "sebelum checkout") supaya TIDAK tertukar makna dgn
-                    // kembalian NORMAL baris "sekarang"/kasir loket — ini
-                    // murni catatan historis (bukan aksi yg bisa
-                    // ditoggle), sudah pasti sudah diambil krn checkbox-nya
-                    // sudah ditekan kasir sebelum layar ini pernah ada.
-                    if (!p.voided &&
-                        (p.prabayarChangeTakenBeforeCheckout ?? 0) > 0)
-                      Padding(
-                        padding: const EdgeInsets.only(left: 30, top: 1),
-                        child: Text(
-                          'Kembalian ${formatRupiah(p.prabayarChangeTakenBeforeCheckout!)} '
-                          'sudah diambil sebelum checkout',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontStyle: FontStyle.italic,
-                            color: scheme.tertiary,
                           ),
                         ),
-                      ),
-                  ],
-                ),
+                    ],
+                  );
+                }),
               ),
           ],
         ),
@@ -5082,8 +5110,8 @@ class _ReceiptPaper extends StatelessWidget {
             // (redesain keempat) — kode nota lengkap yg direfer, bukan
             // cuma `shortLabel` yg sudah dipersingkat di atas.
             Text('* Nota asal: ${l.invoiceLocalId}',
-                style: _mono.copyWith(
-                    fontSize: 11, fontStyle: FontStyle.italic)),
+                style:
+                    _mono.copyWith(fontSize: 11, fontStyle: FontStyle.italic)),
           ],
           const _DashedLine(),
           // Pegawai (di atas jumlah produk). "Pegawai: " normal, nama bold.
@@ -5214,18 +5242,31 @@ class _ReceiptPaper extends StatelessWidget {
             const _DashedLine(),
             Text('Pembayaran:',
                 style: _mono.copyWith(fontWeight: FontWeight.w700)),
-            ..._visiblePayments.map((p) => Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                          '${_fmtDateTime(p.paidAt)} ${_methodShort(p.method, name: p.methodName)}',
-                          style: _mono.copyWith(fontSize: 11)),
-                    ),
-                    Text('Rp ${_fmtNum(p.amount)}',
-                        style: _mono.copyWith(fontSize: 11)),
-                  ],
-                )),
+  // Item 67 — pasangan fix `_ReceiptScreenState._buildPaymentTimeline`
+            // (baca dok di sana): baris pembayaran PALING AWAL digabung dgn
+            // `_debtSettlementTotal` supaya konsisten dgn "Dibayar" di
+            // Ringkasan (yg SUDAH lama menjumlahkan itu) — murni tampilan,
+            // TIDAK menyentuh `p.amount`/DB.
+            Builder(builder: (context) {
+              final earliest = _visiblePayments.firstOrNull;
+              return Column(
+                children: _visiblePayments
+                    .map((p) => Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                  '${_fmtDateTime(p.paidAt)} ${_methodShort(p.method, name: p.methodName)}',
+                                  style: _mono.copyWith(fontSize: 11)),
+                            ),
+                            Text(
+                                'Rp ${_fmtNum(identical(p, earliest) ? p.amount + _debtSettlementTotal : p.amount)}',
+                                style: _mono.copyWith(fontSize: 11)),
+                          ],
+                        ))
+                    .toList(),
+              );
+            }),
           ],
           if (tx.strukNote != null) ...[
             const _DashedLine(),
@@ -5593,8 +5634,7 @@ class _DebtSettlementSummaryRow extends StatelessWidget {
               fontSize: 13,
               fontWeight: FontWeight.w700,
               color: color,
-              decoration:
-                  recognizer != null ? TextDecoration.underline : null),
+              decoration: recognizer != null ? TextDecoration.underline : null),
           recognizer: recognizer,
         ),
       ),
@@ -5614,7 +5654,8 @@ class _DebtSettlementSummaryRow extends StatelessWidget {
         ),
       ),
       trailing: Text(formatRupiah(line.amount),
-          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: color)),
+          style: TextStyle(
+              fontSize: 13, fontWeight: FontWeight.w600, color: color)),
     );
   }
 }
