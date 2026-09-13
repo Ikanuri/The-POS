@@ -6,15 +6,41 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 13 September 2026, sesi keenam puluh satu — ganti label
-"Pelunasi Pre-order" jadi "Melunasi Pre-order" di 2 teks UI (kartu
-"Turut ... Pre-order" di layar Bayar, ringkasan footer keranjang) —
-permintaan user, murni teks, TANPA ubah identifier kode/provider/file.
-Commit `bf936c2`. Versi kerja **2.63.4+134** (PATCH, tanpa PATCHNOTES —
-sekadar koreksi kata, bukan bugfix perilaku).
+_Update sesi 13 September 2026, sesi keenam puluh dua — task #19 SELESAI:
+opsional "Sekaligus ambil/penuhi barang" saat pelunasan DP-0 pre-order
+via keranjang (Item 66). Commit `91920c1`. Versi kerja **2.64.0+135**
+(MINOR — fitur baru terlihat pengguna, ADA entri PATCHNOTES.md).
+schemaVersion TETAP **44** (tidak ada migrasi — murni provider/UI/DB
+function yg sudah ada, dipanggil dgn parameter tambahan).
 
-Sesi sebelumnya (60) — fix nominal Bayar/kalkulator/QR (Item 65, lihat
-di bawah). schemaVersion TETAP **44**.
+Yang dikerjakan: sheet "Pilih Pre-order untuk Dilunasi"
+(`preorder_settlement_sheet.dart`) dapat toggle per-baris "Sekaligus
+ambil/penuhi barang" (cuma tampil saat baris tercentang, default OFF).
+`PreorderSettlementEntry.fulfillOnSettle` (field baru, default false,
+ikut di-serialize toJson/fromJson & payload hold/resume). Saat checkout,
+`saveTransactionWithDebtSettlements` (param `preorderSettlements` dpt
+field `fulfillOnSettle` baru) memanggil `fulfillPreorderEntry` (qty
+PENUH, BUKAN partial — keputusan desain) SETELAH `collectPreorderDeposit`
+sukses, nested transaction (Drift savepoint, pola sama yg SUDAH dipakai
+`collectPreorderDeposit` sendiri di fungsi yg sama — bukan mekanisme
+baru). Indikator visual "Sekaligus penuhi barang" di baris keranjang
+(`_PreorderSettlementEntryRow`, `cart_sheet.dart`) saat toggle aktif.
+TIDAK menyentuh dashboard Laci Meja/tombol "Penuhi" struk (#18) sama
+sekali — murni tambahan opsional di jalur cart settlement (#17). Test
+baru di `test/preorder_settlement_checkout_test.dart` (2 test DB-level,
+assert `fulfilledAt`+stok terpotong vs TIDAK tersentuh) &
+`test/cart_sheet_preorder_settlement_test.dart` (1 test widget, toggle
+cuma muncul saat tercentang + tersimpan ke entri) — revert-verify manual
+sudah dilakukan (test "true" gagal sensible saat fix di-revert, test
+"false" tetap hijau membuktikan tidak ada regresi).
+
+**Semua 19 task di task manager sekarang `completed`** — tidak ada
+pekerjaan menggantung dari sesi-sesi sebelumnya per hand-off ini.
+
+Sesi sebelumnya (61) — ganti label "Pelunasi Pre-order" jadi "Melunasi
+Pre-order" di UI (Item lihat di bawah), commit `bf936c2`.
+
+Sesi 60 — fix nominal Bayar/kalkulator/QR (Item 65, lihat di bawah).
 
 Bug nyata ditemukan dari screenshot user: tombol "Bayar Rp 378.150"
 & "Uang Pas" di kalkulator cuma menampilkan `_total` (belanja saja),

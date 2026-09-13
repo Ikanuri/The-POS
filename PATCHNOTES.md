@@ -8,6 +8,18 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 13 September 2026 (sesi keenam puluh dua)
+
+### ✨ Fitur Baru
+- **"Sekaligus ambil/penuhi barang" saat melunasi DP pre-order dari
+  keranjang.** Di sheet "Pilih Pre-order untuk Dilunasi", tiap pre-order
+  yang dicentang sekarang punya opsi tambahan "Sekaligus ambil/penuhi
+  barang" — kalau diaktifkan, begitu checkout selesai, pre-order itu
+  langsung ditandai terpenuhi (barang diserahkan) sekaligus, tidak perlu
+  lagi buka dashboard Laci Meja atau tombol "Penuhi" terpisah. Opsional
+  per-pre-order — kalau pelanggan cuma bayar DP dulu tapi belum ambil
+  barang, cukup biarkan opsi ini tidak dicentang seperti biasa.
+
 ## 13 September 2026 (sesi keenam puluh)
 
 ### 🐛 Perbaikan

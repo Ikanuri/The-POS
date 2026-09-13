@@ -7,6 +7,11 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-13 (sesi keenam puluh dua — opsional "Sekaligus penuhi" pelunasan pre-order, Item 66, task #19)
+
+- `91920c1` — feat(kasir): opsional "Sekaligus ambil/penuhi barang" saat
+  pelunasan DP-0 pre-order via cart
+
 ## 2026-09-13 (sesi keenam puluh satu — ganti label "Pelunasi" jadi "Melunasi" Pre-order)
 
 - `bf936c2` — fix(kasir): ganti label "Pelunasi Pre-order" jadi
