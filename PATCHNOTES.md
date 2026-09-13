@@ -8,6 +8,21 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 13 September 2026 (sesi kelima puluh sembilan)
+
+### 🐛 Perbaikan
+- **Keranjang yang sedang diproses tidak lagi bisa hilang saat "Batalkan &
+  Susun Ulang".** Ditemukan akar masalah sebenarnya dari laporan "pesanan
+  tertahan hilang": kalau kasir sedang memproses satu keranjang (belum
+  ditekan Tahan/checkout), lalu berpindah ke Struk nota LAIN yang sudah
+  lunas dan menekan "Batalkan & Susun Ulang", keranjang yang sedang
+  diproses tadi hilang tanpa peringatan, tertimpa isi nota yang dibatalkan.
+  Sekarang keranjang aktif otomatis ditahan dulu (muncul di daftar Pesanan
+  Tertahan) sebelum ditimpa — tidak ada lagi yang hilang.
+- Perbaikan terkait: sisa pilihan "Lunasi Hutang"/"Pelunasi Pre-order"/
+  kategori harga dari sesi sebelumnya tidak lagi ikut nempel secara tidak
+  sengaja ke transaksi hasil "Batalkan & Susun Ulang".
+
 ## 12 September 2026 (sesi kelima puluh tujuh)
 
 ### ✨ Fitur Baru

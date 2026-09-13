@@ -7,6 +7,11 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-13 (sesi kelima puluh sembilan — fix "Batalkan & Susun Ulang", Item 64)
+
+- `5887b5c` — fix(kasir): "Batalkan & Susun Ulang" timpa keranjang aktif
+  tanpa auto-hold & sisa provider settlement/kategori harga
+
 ## 2026-09-12 (sesi kelima puluh delapan — fix sync transaction_items, Item 63)
 
 - `2b6132b` — fix(sync): transaction_items — koreksi post-insert

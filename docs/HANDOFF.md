@@ -6,14 +6,41 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 12 September 2026, sesi kelima puluh delapan — fix bug
-sync Item 63 (lihat di bawah, task #20). Versi kerja **2.63.1+131**
-(PATCH naik dari 2.63.0+130 — murni bugfix internal, TANPA fitur baru
-terlihat pengguna; #17/#18 di sesi 55/57 belum sampai rilis nyata ke
-lapangan sejauh dokumentasi ini bisa pastikan, jadi tidak ada entri
-PATCHNOTES.md utk fix ini). schemaVersion **44** (naik dari 43 —
-`transaction_items` dapat kolom nullable `updated_at`, migrasi aditif
-murni).
+_Update sesi 13 September 2026, sesi kelima puluh sembilan — fix
+"Batalkan & Susun Ulang" (Item 64, lihat di bawah). Versi kerja
+**2.63.2+132** (PATCH naik dari 2.63.1+131 — bugfix, ADA entri
+PATCHNOTES.md krn user sendiri yang melaporkan pernah mengalami gejala
+"pesanan tertahan hilang" ini). schemaVersion TETAP **44** (tidak ada
+migrasi baru sesi ini — murni provider Riverpod + kode UI).
+
+Root cause NYATA dari laporan lama "pesanan tertahan hilang" (yang
+sebelumnya di sesi 55 sempat diduga murni race kondisi tap ganda tombol
+Tahan/Lanjutkan, task #13 — fix RACE itu TETAP valid & tidak dicabut,
+tapi TERNYATA ada penyebab kedua yang independen): fungsi
+`_redoCartFromVoidedTransaction` (tombol "Batalkan & Susun Ulang" di
+Struk/Riwayat Transaksi) SELALU `clear()` lalu isi ulang
+`cartProvider(kMainCartId)` TANPA auto-hold dulu — beda dari
+`_resumeHeld` yang sudah lama auto-hold (Item 18). Keranjang yang
+sedang diproses kasir hilang DETERMINISTIK (bukan soal timing) begitu
+kasir buka struk nota LAIN yang sudah lunas & tap tombol itu. Ditemukan
+lewat AUDIT MANUAL (bukan laporan AI eksternal seperti sesi-sesi
+sebelumnya) setelah user sendiri melaporkan dugaan root cause yang
+BENAR. Sekalian ketemu bug ke-2 di fungsi yang sama saat diaudit lebih
+lanjut: `cartDebtSettlementProvider`/`cartPreorderSettlementProvider`/
+`cartPriceCategoryProvider` tidak pernah dibersihkan di fungsi ini —
+entri Lunasi Hutang/Pelunasi Pre-order/kategori harga milik sesi
+SEBELUMNYA bisa nempel ke transaksi susun-ulang yang tidak ada
+hubungannya. Fix keduanya sekaligus (satu commit `5887b5c`) — lihat
+komentar "Item 64" di `tx_history_sheet.dart`, test baru di
+`test/void_restock_redo_flow_test.dart` (3 test baru, revert-verify
+manual sudah dilakukan: masing² gagal sensible saat fix di-revert
+terpisah).
+
+Task #19 (opsional "sekaligus penuhi" saat pelunasan DP-0, desain sudah
+dikonfirmasi user) masih `pending` — belum dieksekusi, menunggu giliran.
+
+_Ringkasan sesi sebelumnya (58, fix sync Item 63) di bawah ini,
+dipertahankan sbg histori teknis:_
 
 Bug yang diperbaiki: `transaction_items` (qty/priceAtSale/subtotal)
 diperlakukan append-only murni oleh `dumpSince`/`mergeRows` — koreksi
@@ -31,6 +58,14 @@ updated_at >= ?` + `mergeRows` special-case last-write-wins persis pola
 
 Ini rebase TERBARU di atas sesi kelima puluh tujuh (Pelunasi Pre-order
 via keranjang, task #17) — sudah digabung bersih, tidak ada konflik.
+
+## Sesi kelima puluh sembilan — fix "Batalkan & Susun Ulang" (Item 64)
+
+Root cause KEDUA (independen dari race #13) utk laporan lama "pesanan
+tertahan hilang" — lihat ringkasan lengkap di paragraf pembuka file ini.
+Dieksekusi langsung tanpa dicatat ke task manager (instruksi user).
+Commit `5887b5c`. Task #19 (fulfill opsional saat pelunasan DP-0) masih
+menunggu di antrian, belum dieksekusi.
 
 ## Sesi kelima puluh delapan — fix sync transaction_items pasca-insert (Item 63, task #20)
 
