@@ -36,6 +36,7 @@ class PreorderSettlementEntry {
     required this.createdAt,
     this.method = 'tunai',
     this.methodName,
+    this.fulfillOnSettle = false,
   });
 
   final String id;
@@ -73,6 +74,16 @@ class PreorderSettlementEntry {
   final String method;
   final String? methodName;
 
+  /// Item 66 (susulan, opsional — permintaan user) — kalau true, SELAIN
+  /// mengumpulkan DP via `collectPreorderDeposit`, checkout JUGA langsung
+  /// memenuhi (`fulfillPreorderEntry`, qty PENUH — bukan partial, keputusan
+  /// "paling simpel & aman") pre-order ini dalam transaksi atomik yang
+  /// sama. Default false — pelunasan TANPA fulfill tetap jalur utama;
+  /// toggle ini per-baris di sheet "Pilih Pre-order untuk Dilunasi", TIDAK
+  /// menyentuh alur dashboard Laci Meja/tombol "Penuhi" struk (#18) sama
+  /// sekali.
+  final bool fulfillOnSettle;
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'preorderEntryId': preorderEntryId,
@@ -86,6 +97,7 @@ class PreorderSettlementEntry {
         'createdAt': createdAt.millisecondsSinceEpoch,
         'method': method,
         'methodName': methodName,
+        'fulfillOnSettle': fulfillOnSettle,
       };
 
   factory PreorderSettlementEntry.fromJson(Map<String, dynamic> json) =>
@@ -106,6 +118,7 @@ class PreorderSettlementEntry {
             DateTime.fromMillisecondsSinceEpoch(json['createdAt'] as int),
         method: json['method'] as String? ?? 'tunai',
         methodName: json['methodName'] as String?,
+        fulfillOnSettle: json['fulfillOnSettle'] as bool? ?? false,
       );
 }
 
@@ -178,6 +191,32 @@ class CartPreorderSettlementNotifier
   /// pemilihan pre-order saat kasir uncentang satu baris.
   void removeByPreorderEntry(String preorderEntryId) {
     state = state.where((e) => e.preorderEntryId != preorderEntryId).toList();
+  }
+
+  /// Item 66 — ubah toggle "Sekaligus penuhi" utk entri [id] yang SUDAH ada
+  /// di keranjang (dipanggil dari sheet saat kasir tap toggle per-baris).
+  void setFulfillOnSettle(String id, bool value) {
+    state = [
+      for (final e in state)
+        if (e.id == id)
+          PreorderSettlementEntry(
+            id: e.id,
+            preorderEntryId: e.preorderEntryId,
+            invoiceId: e.invoiceId,
+            invoiceLocalId: e.invoiceLocalId,
+            invoiceDate: e.invoiceDate,
+            customerId: e.customerId,
+            customerName: e.customerName,
+            productName: e.productName,
+            amount: e.amount,
+            createdAt: e.createdAt,
+            method: e.method,
+            methodName: e.methodName,
+            fulfillOnSettle: value,
+          )
+        else
+          e,
+    ];
   }
 
   /// Ganti seluruh isi (dipakai saat melanjutkan pesanan ditahan) — sejalan

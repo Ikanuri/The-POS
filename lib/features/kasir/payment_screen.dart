@@ -977,6 +977,9 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                 amount: e.amount,
                 method: debtSettlementMethod,
                 methodName: debtSettlementMethodName,
+                // Item 66 — toggle opsional per-baris, lihat dok
+                // `PreorderSettlementEntry.fulfillOnSettle`.
+                fulfillOnSettle: e.fulfillOnSettle,
               ))
           .toList();
 

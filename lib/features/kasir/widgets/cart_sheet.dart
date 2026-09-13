@@ -1673,6 +1673,27 @@ class _PreorderSettlementEntryRow extends ConsumerWidget {
                             fontSize: 13, color: scheme.onSurfaceVariant),
                       ),
                     ),
+                    // Item 66 — indikator toggle "Sekaligus penuhi" yang
+                    // dipilih kasir di sheet, supaya terlihat langsung dari
+                    // keranjang (tanpa buka sheet lagi) apakah checkout ini
+                    // juga akan memenuhi barangnya, bukan cuma bayar DP.
+                    if (entry.fulfillOnSettle)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.check_circle_outline,
+                                size: 13, color: scheme.tertiary),
+                            const SizedBox(width: 4),
+                            Text('Sekaligus penuhi barang',
+                                style: TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: scheme.tertiary)),
+                          ],
+                        ),
+                      ),
                     Padding(
                       padding: const EdgeInsets.only(top: 2),
                       child: Text(

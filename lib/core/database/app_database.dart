@@ -3402,6 +3402,7 @@ class AppDatabase extends _$AppDatabase {
           int amount,
           String method,
           String? methodName,
+          bool fulfillOnSettle,
         })> preorderSettlements = const [],
     required String kasirId,
     DateTime? now,
@@ -3453,6 +3454,17 @@ class AppDatabase extends _$AppDatabase {
         // (sudah terkumpul lewat jalur lain di antara pilih & bayar) —
         // skip diam-diam, lihat dok fungsi ini.
         if (owed == null) continue;
+        // Item 66 (susulan, opsional per-baris) — DP-nya sudah benar²
+        // terkumpul barusan (owed != null), jadi kalau kasir centang
+        // "Sekaligus penuhi", langsung penuhi qty PENUH entri ini di
+        // transaksi atomik yang sama (`fulfillPreorderEntry` sendiri
+        // sudah urus stok/log Laci Meja — tidak diulang di sini). TIDAK
+        // memakai `locallyModified` (default false), sama persis pola
+        // `collectPreorderDeposit` di atas — cart checkout ini memang
+        // belum membedakan device owner/asisten utk event Laci Meja.
+        if (ps.fulfillOnSettle) {
+          await fulfillPreorderEntry(ps.preorderEntryId, deviceCode: kasirId);
+        }
         detail.add({
           'invoiceId': ps.invoiceId,
           'invoiceLocalId': ps.invoiceLocalId,

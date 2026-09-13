@@ -70,14 +70,21 @@ class _PreorderSettlementSheetBodyState
     extends ConsumerState<_PreorderSettlementSheetBody> {
   late final Set<String> _selected;
 
+  /// Item 66 — pre-order (by [PreorderSettlementCandidate.preorderEntryId])
+  /// yang toggle "Sekaligus penuhi" aktif. Pra-isi dari entri yang SUDAH ada
+  /// di keranjang (mis. kasir buka sheet lagi), sama pola dgn [_selected].
+  late final Set<String> _fulfillOnSettle;
+
   @override
   void initState() {
     super.initState();
     // Pra-centang pre-order yang SUDAH jadi entri di keranjang ini (mis.
     // kasir buka sheet lagi utk uncentang sebagian yang tadi dipilih).
     final current = ref.read(cartPreorderSettlementProvider(widget.cartId));
-    _selected = current
-        .where((e) => e.customerId == widget.customerId)
+    final mine = current.where((e) => e.customerId == widget.customerId);
+    _selected = mine.map((e) => e.preorderEntryId).toSet();
+    _fulfillOnSettle = mine
+        .where((e) => e.fulfillOnSettle)
         .map((e) => e.preorderEntryId)
         .toSet();
   }
@@ -88,6 +95,9 @@ class _PreorderSettlementSheetBodyState
     setState(() {
       if (_allSelected) {
         _selected.clear();
+        // Item 66 — uncentang semua juga melepas toggle "Sekaligus penuhi"
+        // baris-baris itu (gerbangnya sama: cuma relevan kalau tercentang).
+        _fulfillOnSettle.clear();
       } else {
         _selected
           ..clear()
@@ -101,14 +111,18 @@ class _PreorderSettlementSheetBodyState
         ref.read(cartPreorderSettlementProvider(widget.cartId).notifier);
     for (final c in widget.candidates) {
       final isSelected = _selected.contains(c.preorderEntryId);
+      final wantsFulfill = _fulfillOnSettle.contains(c.preorderEntryId);
       if (isSelected) {
         // Sudah ada entri utk pre-order ini -> biarkan (tidak menimpa
         // amount, konsisten dgn dok `PreorderSettlementEntry`: nominal
-        // dibekukan saat dicentang). Belum ada -> tambah baru.
-        final already = ref
+        // dibekukan saat dicentang) — TAPI toggle "Sekaligus penuhi" boleh
+        // diubah kapan pun sheet ini dibuka ulang, jadi tetap disinkronkan.
+        // Belum ada -> tambah baru.
+        final existing = ref
             .read(cartPreorderSettlementProvider(widget.cartId))
-            .any((e) => e.preorderEntryId == c.preorderEntryId);
-        if (!already) {
+            .where((e) => e.preorderEntryId == c.preorderEntryId)
+            .firstOrNull;
+        if (existing == null) {
           notifier.add(PreorderSettlementEntry(
             id: const Uuid().v4(),
             preorderEntryId: c.preorderEntryId,
@@ -123,7 +137,10 @@ class _PreorderSettlementSheetBodyState
             // Placeholder — DITIMPA metode FINAL kasir di layar Bayar (lihat
             // dok `PreorderSettlementEntry.method`).
             method: 'tunai',
+            fulfillOnSettle: wantsFulfill,
           ));
+        } else if (existing.fulfillOnSettle != wantsFulfill) {
+          notifier.setFulfillOnSettle(existing.id, wantsFulfill);
         }
       } else {
         notifier.removeByPreorderEntry(c.preorderEntryId);
@@ -178,31 +195,68 @@ class _PreorderSettlementSheetBodyState
                 itemBuilder: (_, i) {
                   final c = widget.candidates[i];
                   final checked = _selected.contains(c.preorderEntryId);
-                  return CheckboxListTile(
-                    value: checked,
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    controlAffinity: ListTileControlAffinity.leading,
-                    onChanged: (v) => setState(() {
-                      if (v ?? false) {
-                        _selected.add(c.preorderEntryId);
-                      } else {
-                        _selected.remove(c.preorderEntryId);
-                      }
-                    }),
-                    title: Text(c.productName,
-                        style: const TextStyle(fontWeight: FontWeight.w600)),
-                    subtitle: Text(
-                        'Nota ${c.invoiceLocalId} · '
-                        '${formatTanggalPendek(c.invoiceDate)}',
-                        style: const TextStyle(fontSize: 12)),
-                    secondary: Text(
-                      formatRupiah(c.amount),
-                      style: AppTheme.numStyle(context,
-                          size: 13,
-                          weight: FontWeight.w700,
-                          color: scheme.primary),
-                    ),
+                  final fulfillChecked =
+                      _fulfillOnSettle.contains(c.preorderEntryId);
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CheckboxListTile(
+                        value: checked,
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        controlAffinity: ListTileControlAffinity.leading,
+                        onChanged: (v) => setState(() {
+                          if (v ?? false) {
+                            _selected.add(c.preorderEntryId);
+                          } else {
+                            _selected.remove(c.preorderEntryId);
+                            // Item 66 — baris tidak lagi dilunasi -> toggle
+                            // "Sekaligus penuhi"-nya tidak relevan lagi.
+                            _fulfillOnSettle.remove(c.preorderEntryId);
+                          }
+                        }),
+                        title: Text(c.productName,
+                            style:
+                                const TextStyle(fontWeight: FontWeight.w600)),
+                        subtitle: Text(
+                            'Nota ${c.invoiceLocalId} · '
+                            '${formatTanggalPendek(c.invoiceDate)}',
+                            style: const TextStyle(fontSize: 12)),
+                        secondary: Text(
+                          formatRupiah(c.amount),
+                          style: AppTheme.numStyle(context,
+                              size: 13,
+                              weight: FontWeight.w700,
+                              color: scheme.primary),
+                        ),
+                      ),
+                      // Item 66 (susulan, opsional) — cuma relevan kalau
+                      // barisnya tercentang utk dilunasi. Tergeser sedikit
+                      // ke kanan (indent) supaya jelas menempel baris di
+                      // atasnya, bukan baris terpisah yang berdiri sendiri.
+                      if (checked)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 32, bottom: 4),
+                          child: CheckboxListTile(
+                            value: fulfillChecked,
+                            dense: true,
+                            visualDensity: VisualDensity.compact,
+                            contentPadding: EdgeInsets.zero,
+                            controlAffinity: ListTileControlAffinity.leading,
+                            onChanged: (v) => setState(() {
+                              if (v ?? false) {
+                                _fulfillOnSettle.add(c.preorderEntryId);
+                              } else {
+                                _fulfillOnSettle.remove(c.preorderEntryId);
+                              }
+                            }),
+                            title: Text('Sekaligus ambil/penuhi barang',
+                                style: TextStyle(
+                                    fontSize: 12.5,
+                                    color: scheme.onSurfaceVariant)),
+                          ),
+                        ),
+                    ],
                   );
                 },
               ),

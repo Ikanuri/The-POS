@@ -114,6 +114,7 @@ void main() {
           amount: 30000,
           method: 'tunai',
           methodName: null,
+          fulfillOnSettle: false,
         ),
       ],
       kasirId: 'K1',
@@ -188,6 +189,7 @@ void main() {
           amount: 30000,
           method: 'tunai',
           methodName: null,
+          fulfillOnSettle: false,
         ),
       ],
       kasirId: 'K1',
@@ -311,6 +313,7 @@ void main() {
           amount: 30000,
           method: 'tunai',
           methodName: null,
+          fulfillOnSettle: false,
         ),
       ],
       kasirId: 'K1',
@@ -346,5 +349,111 @@ void main() {
     expect(parsed.single.type, 'preorder');
     expect(parsed.single.preorderEntryId, 'po9');
     expect(parsed.single.shortLabel, 'Lunasi Pre-order #9');
+  });
+
+  test(
+      'Item 66: fulfillOnSettle=true -> pre-order langsung terpenuhi & stok '
+      'terpotong PENUH dalam checkout yang SAMA (bukan cuma DP terkumpul)',
+      () async {
+    await seedPreorderSource(
+        txId: 'po_src6',
+        preorderId: 'po6',
+        customerId: 'c6',
+        customerName: 'Rini',
+        qty: 3);
+    await db.adjustStock(productUnitId: 'U2', newQty: 10, note: 'seed');
+
+    const newTxId = 'newtx6';
+    await db.saveTransactionWithDebtSettlements(
+      tx: newSaleCompanion(newTxId, total: 5000),
+      items: const [],
+      payments: const [],
+      stockItems: const [],
+      debtSettlements: const [],
+      preorderSettlements: [
+        (
+          preorderEntryId: 'po6',
+          invoiceId: 'po_src6',
+          invoiceLocalId: 'po_src6',
+          invoiceDate: DateTime.now().subtract(const Duration(days: 2)),
+          customerName: 'Rini',
+          amount: 30000,
+          method: 'tunai',
+          methodName: null,
+          fulfillOnSettle: true,
+        ),
+      ],
+      kasirId: 'K1',
+    );
+
+    final entry = await (db.select(db.preorderEntries)
+          ..where((t) => t.id.equals('po6')))
+        .getSingle();
+    expect(entry.paid, isTrue, reason: 'DP tetap ikut terkumpul spt biasa');
+    expect(entry.fulfilledAt, isNotNull,
+        reason: 'fulfillOnSettle=true harus langsung memenuhi entrinya');
+
+    final stock = await db.currentStock('U2');
+    expect(stock, 7,
+        reason: 'stok harus terpotong PENUH sejumlah qtyOrdered (3), sama '
+            'seperti fulfillPreorderEntry dipanggil manual');
+
+    final ledgerRows = await (db.select(db.stockLedger)
+          ..where((t) => t.type.equals('preorder_fulfill')))
+        .get();
+    expect(ledgerRows, hasLength(1));
+    expect(ledgerRows.single.qtyChange, -3);
+  });
+
+  test(
+      'Item 66: fulfillOnSettle=false (default) -> DP terkumpul TAPI entri '
+      'TETAP belum terpenuhi, stok TIDAK tersentuh -- tidak ada regresi',
+      () async {
+    await seedPreorderSource(
+        txId: 'po_src7',
+        preorderId: 'po7',
+        customerId: 'c7',
+        customerName: 'Tono',
+        qty: 3);
+    await db.adjustStock(productUnitId: 'U2', newQty: 10, note: 'seed');
+
+    const newTxId = 'newtx7';
+    await db.saveTransactionWithDebtSettlements(
+      tx: newSaleCompanion(newTxId, total: 5000),
+      items: const [],
+      payments: const [],
+      stockItems: const [],
+      debtSettlements: const [],
+      preorderSettlements: [
+        (
+          preorderEntryId: 'po7',
+          invoiceId: 'po_src7',
+          invoiceLocalId: 'po_src7',
+          invoiceDate: DateTime.now().subtract(const Duration(days: 2)),
+          customerName: 'Tono',
+          amount: 30000,
+          method: 'tunai',
+          methodName: null,
+          fulfillOnSettle: false,
+        ),
+      ],
+      kasirId: 'K1',
+    );
+
+    final entry = await (db.select(db.preorderEntries)
+          ..where((t) => t.id.equals('po7')))
+        .getSingle();
+    expect(entry.paid, isTrue);
+    expect(entry.fulfilledAt, isNull,
+        reason: 'default fulfillOnSettle=false TIDAK boleh ikut memenuhi — '
+            'pemenuhan tetap jalur terpisah (dashboard/tombol Penuhi struk)');
+
+    final stock = await db.currentStock('U2');
+    expect(stock, 10, reason: 'stok TIDAK boleh tersentuh sama sekali');
+
+    final ledgerRows = await (db.select(db.stockLedger)
+          ..where((t) => t.type.equals('preorder_fulfill')))
+        .get();
+    expect(ledgerRows, isEmpty);
   });
 }

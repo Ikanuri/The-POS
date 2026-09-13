@@ -285,4 +285,53 @@ void main() {
         isEmpty);
     expect(find.textContaining('Melunasi Pre-order'), findsNothing);
   });
+
+  testWidgets(
+      'Item 66: toggle "Sekaligus ambil/penuhi barang" HANYA muncul saat '
+      'baris tercentang, & menyimpan fulfillOnSettle=true ke entri',
+      (tester) async {
+    final r = await pumpCartSheetOpen(tester,
+        deviceRole: 'owner',
+        terimaPembayaran: true,
+        customerId: 'c1',
+        customerName: 'Sari',
+        seed: (db) async {
+          await seedCustomer(db, customerId: 'c1', customerName: 'Sari');
+          await seedPreorder(db,
+              customerId: 'c1',
+              preorderEntryId: 'po1',
+              txId: 'tx1',
+              txLocalId: 'A1-0007',
+              productName: 'Galon Aqua',
+              originalPrice: 20000,
+              createdAt: DateTime(2026, 1, 1));
+        });
+    addTearDown(() async => r.db.close());
+
+    await tester.tap(chipFinder);
+    await tester.pumpAndSettle();
+
+    // Belum dicentang -> toggle fulfill TIDAK ada sama sekali.
+    final fulfillToggleFinder =
+        find.text('Sekaligus ambil/penuhi barang');
+    expect(fulfillToggleFinder, findsNothing);
+
+    await tester.tap(find.text('Galon Aqua'));
+    await tester.pumpAndSettle();
+    expect(fulfillToggleFinder, findsOneWidget,
+        reason: 'toggle fulfill baru relevan setelah barisnya dicentang');
+
+    await tester.tap(fulfillToggleFinder);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Terapkan'));
+    await tester.pumpAndSettle();
+
+    final entries =
+        r.container.read(cartPreorderSettlementProvider(kMainCartId));
+    expect(entries, hasLength(1));
+    expect(entries.single.fulfillOnSettle, isTrue);
+
+    // Indikator ikut tampil di baris keranjangnya (`_PreorderSettlementEntryRow`).
+    expect(find.text('Sekaligus penuhi barang'), findsOneWidget);
+  });
 }
