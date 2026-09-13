@@ -603,7 +603,16 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   /// true bila pool Pra-Bayar yang tersedia SENDIRI sudah menutup/melebihi
   /// total keranjang — kasir tidak perlu lagi pilih metode/nominal apa pun
   /// di layar ini, cukup tombol konfirmasi "Selesaikan Transaksi".
-  bool get _prabayarCoversTotal => _prabayarPool > 0 && _prabayarPool >= _total;
+  ///
+  /// Item 65 — WAJIB `_settlementTotal == 0` juga: Pra-Bayar cuma menutup
+  /// [_total] (belanja baru), TIDAK PERNAH menutup pelunasan hutang/
+  /// pre-order (uang fisik terpisah yang harus diterima kasir SEKARANG,
+  /// beda dari kredit Pra-Bayar yang sudah "nempel" sejak sebelum layar
+  /// ini dibuka) — tanpa syarat ini, tombol pintas "Selesaikan Transaksi"
+  /// bisa meloloskan checkout TANPA kasir pernah menerima uang tambahan
+  /// utk pelunasan itu, padahal nominalnya tetap diproses lunas penuh.
+  bool get _prabayarCoversTotal =>
+      _prabayarPool > 0 && _prabayarPool >= _total && _settlementTotal == 0;
 
   /// Fitur "Lunasi Hutang" — entri yang dikunci di keranjang ini (nota
   /// sumber & nominal SUDAH ditentukan sejak kasir centang di sheet "Pilih
@@ -633,6 +642,11 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
   int get _preorderSettlementTotal =>
       _preorderSettlementEntries.fold<int>(0, (s, e) => s + e.amount);
+
+  /// Item 65 — nominal gabungan Lunasi Hutang + Pelunasi Pre-order, dipakai
+  /// gerbang keypad (lihat `_onBayarPressed`) supaya uang yang benar-benar
+  /// diterima kasir WAJIB menutup [_grandTotal], bukan cuma [_total].
+  int get _settlementTotal => _debtSettlementTotal + _preorderSettlementTotal;
 
   /// Total keseluruhan yang perlu DITERIMA kasir dari pelanggan: total
   /// belanja baru ([_total]) + seluruh nominal Lunasi Hutang + seluruh
@@ -1910,7 +1924,14 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                   _QrisDisplay(
                     methods: _methods,
                     selectedId: _selectedMethodId,
-                    total: _total,
+                    // Item 65 — QR mode "Nominal" (dinamis) mengunci jumlah
+                    // yang di-scan pelanggan (`_isQrisNominalLocked`, tidak
+                    // bisa dikurangi lagi saat bayar) — WAJIB [_grandTotal],
+                    // bukan [_total] polos, kalau tidak pelanggan cuma
+                    // discan diminta bayar porsi belanja saja padahal ada
+                    // pelunasan hutang/pre-order yang juga harus tertutup
+                    // sekali scan itu.
+                    total: _grandTotal,
                     dynamicMode: _qrisDynamic,
                     onDynamicModeChanged: _setQrisDynamic,
                   ),
@@ -2087,7 +2108,15 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   /// diinput nanti di sheet keypad — jadi tidak butuh _tendered di sini.
   bool get _bayarEnabled => ref.read(cartProvider(_cartId)).isNotEmpty;
 
-  String _bayarLabel() => 'Bayar ${formatRupiah(_total)}';
+  // Item 65 — bug nyata dilaporkan user: label ini (& keypad/QR di bawah)
+  // dulu pakai [_total] polos, TIDAK termasuk [_settlementTotal] — kasir
+  // bisa tap "Uang Pas"/scan QRIS lalu checkout dgn uang JAUH lebih sedikit
+  // dari yang sebenarnya harus diterima, sementara pelunasan hutang/
+  // pre-order tetap tercatat LUNAS PENUH tanpa syarat (nominalnya beku,
+  // tidak pernah dicek ulang terhadap uang yang sungguhan masuk) — risiko
+  // uang hilang tanpa jejak kesalahan di sistem. [_grandTotal] sudah benar
+  // dipakai di ringkasan "Total Diterima", cuma titik INI yang lupa ikut.
+  String _bayarLabel() => 'Bayar ${formatRupiah(_grandTotal)}';
 
   /// QRIS yang nominalnya SUDAH terkunci di dalam QR (toggle "Nominal").
   /// Pelanggan tidak bisa mengubah jumlahnya saat scan, jadi tidak ada yang
@@ -2109,6 +2138,12 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   Future<void> _onBayarPressed() async {
     FocusScope.of(context).unfocus();
     if (_isQrisNominalLocked) {
+      // QR sudah menyisipkan nominal [_grandTotal] (lihat `_QrisDisplay`
+      // di bawah, fix Item 65) — pelanggan scan & bayar PENUH itu, jadi
+      // `_tendered` (porsi belanja BARU saja, exclude settlement — lihat
+      // dok `_settlementTotal`) = _grandTotal - _settlementTotal = _total,
+      // TIDAK berubah dari sebelumnya, cuma sekarang konsisten dgn nominal
+      // QR yang benar.
       setState(() => _tendered = _total);
       await _confirm();
       return;
@@ -2121,7 +2156,14 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
         builder: (_) => _CashKeypadSheet(
-          total: _total,
+          // Item 65 — bug nyata: dulu [_total] polos, kalkulator (label
+          // "Total", "Uang Pas", kembalian/kurang) tidak pernah tahu ada
+          // tambahan [_settlementTotal] yang WAJIB ikut diterima kasir
+          // sekali jalan — kasir bisa checkout dgn uang jauh kurang dari
+          // semestinya, sementara pelunasan hutang/pre-order (nominalnya
+          // beku, TIDAK pernah dicek ulang thd uang yg sungguhan masuk)
+          // tetap tercatat LUNAS PENUH tanpa syarat.
+          total: _grandTotal,
           initial: _tendered,
           methodName: selectedMethod?.name ?? _selectedMethodType,
           unclaimedChangeAmount: _unclaimedChange?.amount,
@@ -2132,7 +2174,26 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         ),
       );
       if (result == null) return; // dibatalkan
-      setState(() => _tendered = result);
+      // Item 65 — kalau ada pelunasan hutang/pre-order aktif, uang yang
+      // diketik kasir WAJIB menutup _grandTotal (nominal settlement beku
+      // & TIDAK boleh "kurang_bayar" diam-diam — beda dari belanja baru
+      // sendiri yang memang boleh kurang_bayar/tempo). Tanpa gerbang ini,
+      // hutang/pre-order pelanggan lain bisa tercatat lunas walau kasir
+      // belum benar-benar menerima uangnya.
+      if (_settlementTotal > 0 && result < _grandTotal) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(
+                'Uang diterima ${formatRupiah(result)} belum menutup Total '
+                'Diterima ${formatRupiah(_grandTotal)} (Belanja + '
+                'Hutang/Pre-order) — tambah uang, atau lepas dulu entri '
+                'pelunasan yang tidak jadi diproses sekarang.'),
+            duration: const Duration(seconds: 5),
+          ));
+        }
+        return;
+      }
+      setState(() => _tendered = result - _settlementTotal);
     }
     await _confirm();
   }
