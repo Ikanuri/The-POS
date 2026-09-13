@@ -6,10 +6,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:the_pos/core/database/app_database.dart';
+import 'package:the_pos/core/models/cart_item.dart';
 import 'package:the_pos/core/providers/device_provider.dart';
 import 'package:the_pos/core/theme/app_theme.dart';
+import 'package:the_pos/features/kasir/cart_debt_settlement_provider.dart';
 import 'package:the_pos/features/kasir/cart_meta_provider.dart';
 import 'package:the_pos/features/kasir/cart_prabayar_provider.dart';
+import 'package:the_pos/features/kasir/cart_preorder_settlement_provider.dart';
+import 'package:the_pos/features/kasir/cart_price_category_provider.dart';
 import 'package:the_pos/features/kasir/cart_provider.dart';
 import 'package:the_pos/features/kasir/receipt_screen.dart';
 
@@ -204,5 +208,128 @@ void main() {
     // Nota retur TIDAK punya tombol "Batalkan" sama sekali di Struk (guard
     // !isRetur yg sudah ada) — jadi tidak ada apa pun utk ditap di sini.
     expect(find.text('Batalkan'), findsNothing);
+  });
+
+  const activeItem = CartItem(
+    productId: 'active-p',
+    productUnitId: 'active-u',
+    productName: 'Gula Pasir',
+    unitName: 'Kg',
+    qty: 1,
+    price: 15000,
+    originalPrice: 15000,
+    costPrice: 10000,
+  );
+
+  testWidgets(
+      'Item 64: keranjang aktif yg SEDANG ADA ISINYA (belum ditahan/checkout) '
+      'DITAHAN OTOMATIS dulu -> tidak hilang -- sebelum "Batalkan & Susun '
+      'Ulang" menimpanya dgn barang nota lain', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(() async => db.close());
+    await seedTxWithItem(db, 'tx5');
+
+    final container = await pumpReceipt(tester, db, 'tx5');
+    // Kasir sedang memproses keranjang aktif LAIN (belum ditahan/checkout)
+    // SEBELUM membuka struk nota tx5 & tap "Batalkan & Susun Ulang".
+    container.read(cartProvider(kMainCartId).notifier).addItem(activeItem);
+
+    await tester.tap(find.text('Batalkan'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Batalkan & Susun Ulang'));
+    await tester.pumpAndSettle();
+    if (find.text('Bawa Pembayaran Lama?').evaluate().isNotEmpty) {
+      await tester.tap(find.text('Lewati'));
+      await tester.pumpAndSettle();
+    }
+
+    // Keranjang aktif SEKARANG berisi barang tx5 (bukan lagi activeItem).
+    final cart = container.read(cartProvider(kMainCartId));
+    expect(cart, hasLength(1));
+    expect(cart.single.productId, 'p1');
+
+    // Keranjang LAMA (berisi activeItem) tidak hilang -- ketemu lagi sbg
+    // pesanan tertahan baru di DB.
+    final held = await db.select(db.heldOrders).get();
+    expect(held, hasLength(1),
+        reason: 'keranjang aktif sebelumnya WAJIB auto-tertahan, tidak boleh '
+            'ditimpa begitu saja tanpa jejak');
+    expect(held.single.cartJson, contains('active-p'));
+  });
+
+  testWidgets(
+      'Item 64: keranjang aktif KOSONG (tidak ada barang) -> TIDAK membuat '
+      'pesanan tertahan kosong saat "Batalkan & Susun Ulang"',
+      (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(() async => db.close());
+    await seedTxWithItem(db, 'tx6');
+
+    await pumpReceipt(tester, db, 'tx6');
+
+    await tester.tap(find.text('Batalkan'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Batalkan & Susun Ulang'));
+    await tester.pumpAndSettle();
+    if (find.text('Bawa Pembayaran Lama?').evaluate().isNotEmpty) {
+      await tester.tap(find.text('Lewati'));
+      await tester.pumpAndSettle();
+    }
+
+    final held = await db.select(db.heldOrders).get();
+    expect(held, isEmpty);
+  });
+
+  testWidgets(
+      'Item 64: entri "Lunasi Hutang"/"Pelunasi Pre-order"/kategori harga '
+      'SISA dari keranjang aktif sebelumnya IKUT DIBERSIHKAN, tidak nempel '
+      'ke transaksi susun-ulang yg tidak ada hubungannya', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(() async => db.close());
+    await seedTxWithItem(db, 'tx7');
+
+    final container = await pumpReceipt(tester, db, 'tx7');
+    // Sisa state dari sesi SEBELUMNYA (pelanggan/keranjang lain sama sekali,
+    // tidak ada hubungan dgn tx7) yg belum sempat di-checkout/dibersihkan.
+    container.read(cartPriceCategoryProvider(kMainCartId).notifier)
+        .setCategory('grosir');
+    container.read(cartDebtSettlementProvider(kMainCartId).notifier).add(
+        DebtSettlementEntry(
+          id: 'stale-debt',
+          invoiceId: 'old-inv',
+          invoiceLocalId: 'K1-99',
+          invoiceDate: DateTime.now(),
+          customerId: 'other-cust',
+          customerName: 'Pelanggan Lain',
+          amount: 10000,
+          createdAt: DateTime.now(),
+        ));
+    container.read(cartPreorderSettlementProvider(kMainCartId).notifier).add(
+        PreorderSettlementEntry(
+          id: 'stale-preorder',
+          preorderEntryId: 'po-old',
+          invoiceId: 'old-inv2',
+          invoiceLocalId: 'K1-98',
+          invoiceDate: DateTime.now(),
+          customerId: 'other-cust2',
+          customerName: 'Pelanggan Lain 2',
+          productName: 'Galon Aqua',
+          amount: 20000,
+          createdAt: DateTime.now(),
+        ));
+
+    await tester.tap(find.text('Batalkan'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Batalkan & Susun Ulang'));
+    await tester.pumpAndSettle();
+    if (find.text('Bawa Pembayaran Lama?').evaluate().isNotEmpty) {
+      await tester.tap(find.text('Lewati'));
+      await tester.pumpAndSettle();
+    }
+
+    expect(container.read(cartPriceCategoryProvider(kMainCartId)), isNull);
+    expect(container.read(cartDebtSettlementProvider(kMainCartId)), isEmpty);
+    expect(
+        container.read(cartPreorderSettlementProvider(kMainCartId)), isEmpty);
   });
 }

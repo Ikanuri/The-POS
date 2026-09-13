@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
@@ -10,8 +11,11 @@ import '../../../core/database/app_database.dart';
 import '../../../core/providers/device_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/input_formatters.dart';
+import '../cart_debt_settlement_provider.dart';
 import '../cart_meta_provider.dart';
 import '../cart_prabayar_provider.dart';
+import '../cart_preorder_settlement_provider.dart';
+import '../cart_price_category_provider.dart';
 import '../cart_provider.dart';
 import '../merged_receipt_screen.dart';
 import 'debt_payment_sheet.dart';
@@ -1381,11 +1385,65 @@ Future<bool> showVoidTransactionDialog(
 /// `CartMeta.replacesTxId`, dibaca `payment_screen.dart` saat checkout utk
 /// menulis `internalNote: 'GANTI:<id nota lama>'` (pola sama `RETUR:<id>`).
 ///
-/// Keranjang aktif SEBELUMNYA (kalau ada isinya) DITIMPA — beda dari resume
-/// pesanan tertahan (`kasir_screen.dart` `_resumeHeld`) yang auto-menahan
-/// keranjang lama dulu (Item 18): fungsi ini dipicu dari LUAR layar Kasir
-/// (Struk / sheet Riwayat Transaksi), tidak ada state widget Kasir yg bisa
-/// dipakai utk auto-hold di sini.
+/// Keranjang aktif SEBELUMNYA (kalau ada isinya) DITAHAN OTOMATIS dulu
+/// (Item 64 — bug nyata dilaporkan user: sebelumnya DITIMPA TANPA auto-hold
+/// sama sekali, keranjang yg sedang diproses kasir hilang diam-diam begitu
+/// fungsi ini dipanggil dari Struk/Riwayat Transaksi utk nota LAIN — beda
+/// dari resume pesanan tertahan `kasir_screen.dart` `_resumeHeld` yang
+/// SUDAH lama auto-menahan dulu, Item 18) — pola & urutan operasi sama
+/// persis `_autoHoldCurrentIfAny`, cuma ditulis ulang di sini krn fungsi
+/// itu private-method `_KasirScreenState` (tidak reachable dari file ini,
+/// yang dipicu dari LUAR layar Kasir). SEMUA provider keranjang (bukan cuma
+/// produk) juga SEKARANG ikut dibersihkan/diganti sebelum diisi ulang —
+/// sebelumnya `cartDebtSettlementProvider`/`cartPreorderSettlementProvider`/
+/// `cartPriceCategoryProvider` TIDAK ikut dibersihkan sama sekali, jadi
+/// entri "Lunasi Hutang"/"Pelunasi Pre-order"/kategori harga milik
+/// pelanggan/sesi SEBELUMNYA bisa nempel & ikut ke-checkout bersama
+/// transaksi baru yang tidak ada hubungannya.
+/// Tahan keranjang KASIR AKTIF (`kMainCartId`) secara OTOMATIS kalau sedang
+/// ada isinya — dipanggil sebelum `_redoCartFromVoidedTransaction` menimpanya
+/// dgn barang nota yg baru divoid (Item 64). Pola & urutan operasi sengaja
+/// ditulis ulang persis sama dgn `kasir_screen.dart`
+/// `_KasirScreenState._autoHoldCurrentIfAny` (baca dok di sana) — fungsi itu
+/// private method State, tidak reachable dari file ini (dipicu dari LUAR
+/// layar Kasir: Struk / sheet Riwayat Transaksi). Mengembalikan label yang
+/// dipakai, atau null bila keranjang produk kosong (tidak ada yang perlu
+/// ditahan).
+Future<String?> _autoHoldActiveCartIfAny(WidgetRef ref) async {
+  final cart = ref.read(cartProvider(kMainCartId));
+  if (cart.isEmpty) return null;
+  final meta = ref.read(cartMetaProvider(kMainCartId));
+  final prabayarNotifier = ref.read(cartPrabayarProvider(kMainCartId).notifier);
+  final prabayar = ref.read(cartPrabayarProvider(kMainCartId));
+  final priceCategoryId = ref.read(cartPriceCategoryProvider(kMainCartId));
+  final debtSettlement = ref.read(cartDebtSettlementProvider(kMainCartId));
+  final preorderSettlement =
+      ref.read(cartPreorderSettlementProvider(kMainCartId));
+  final now = DateTime.now();
+  final label = meta.hasCustomer
+      ? meta.customerName!
+      : 'Tanpa Nama ${now.hour.toString().padLeft(2, '0')}:'
+          '${now.minute.toString().padLeft(2, '0')}';
+  final payload = jsonEncode({
+    'items': cart.map((c) => c.toJson()).toList(),
+    'meta': meta.toJson(),
+    'prabayar': prabayar.map((e) => e.toJson()).toList(),
+    'prabayarChangeTaken': prabayarNotifier.changeTakenTotal,
+    'priceCategory': priceCategoryId,
+    'debtSettlement': debtSettlement.map((e) => e.toJson()).toList(),
+    'preorderSettlement': preorderSettlement.map((e) => e.toJson()).toList(),
+  });
+  await ref.read(databaseProvider).holdOrder(
+      id: const Uuid().v4(), label: label, cartJson: payload);
+  ref.read(cartProvider(kMainCartId).notifier).clear();
+  ref.read(cartMetaProvider(kMainCartId).notifier).clear();
+  ref.read(cartPrabayarProvider(kMainCartId).notifier).clear();
+  ref.read(cartPriceCategoryProvider(kMainCartId).notifier).clear();
+  ref.read(cartDebtSettlementProvider(kMainCartId).notifier).clear();
+  ref.read(cartPreorderSettlementProvider(kMainCartId).notifier).clear();
+  return label;
+}
+
 Future<void> _redoCartFromVoidedTransaction(
     BuildContext context, WidgetRef ref, Transaction tx) async {
   final db = ref.read(databaseProvider);
@@ -1398,8 +1456,22 @@ Future<void> _redoCartFromVoidedTransaction(
     return;
   }
 
+  final autoHeldLabel = await _autoHoldActiveCartIfAny(ref);
+  if (!context.mounted) return;
+
   final cartNotifier = ref.read(cartProvider(kMainCartId).notifier);
   cartNotifier.clear();
+  // Item 64 — provider sampingan keranjang (bukan cuma daftar produk) HARUS
+  // ikut dibersihkan di sini juga: nota yg baru divoid & disusun ulang TIDAK
+  // punya nilai "Lunasi Hutang"/"Pelunasi Pre-order"/kategori harga sendiri
+  // utk dipulihkan (beda dari resume pesanan tertahan yang punya nilai
+  // tersimpan utk di-`replaceAll`) — tanpa clear ini, entri milik
+  // pelanggan/sesi SEBELUMNYA (kalau ada, belum sempat ke-auto-hold di atas
+  // krn gerbangnya cuma cek keranjang PRODUK kosong/tidak) bisa nempel &
+  // ikut ke-checkout bersama transaksi baru yang tidak ada hubungannya.
+  ref.read(cartPriceCategoryProvider(kMainCartId).notifier).clear();
+  ref.read(cartDebtSettlementProvider(kMainCartId).notifier).clear();
+  ref.read(cartPreorderSettlementProvider(kMainCartId).notifier).clear();
   // Urutan list SUDAH induk-dulu-baru-varian (lihat dok
   // `cartItemsFromTransaction`) — `addItem` menaikkan storedQty induk
   // otomatis saat varian menyusul, invariant terjaga tanpa hitung ulang
@@ -1454,6 +1526,13 @@ Future<void> _redoCartFromVoidedTransaction(
         replacesTxId: tx.id,
       ));
   ref.read(cartPrabayarProvider(kMainCartId).notifier).clear();
+
+  // Item 64 — beri tahu kasir keranjang yg sedang diproses SEBELUMNYA tidak
+  // hilang, cuma ditahan (lihat dok `_autoHoldActiveCartIfAny`).
+  if (autoHeldLabel != null && context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Keranjang sebelumnya ditahan sbg "$autoHeldLabel"')));
+  }
 
   // Nota SUDAH menerima pembayaran (lunas, ATAU kurang_bayar dgn uang
   // sungguhan masuk) — TAWARKAN opsional bawa sbg Pra-Bayar ke keranjang
