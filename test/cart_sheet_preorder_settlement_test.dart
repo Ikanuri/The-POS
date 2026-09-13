@@ -283,6 +283,6 @@ void main() {
     expect(
         r.container.read(cartPreorderSettlementProvider(kMainCartId)),
         isEmpty);
-    expect(find.textContaining('Pelunasi Pre-order'), findsNothing);
+    expect(find.textContaining('Melunasi Pre-order'), findsNothing);
   });
 }

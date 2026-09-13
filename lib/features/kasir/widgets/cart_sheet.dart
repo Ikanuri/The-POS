@@ -1482,7 +1482,7 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                           if (preorderSettlementEntries.isNotEmpty)
                             _PrabayarFooterSummary._shrinkToFit(
                               Text(
-                                '+ Pelunasi Pre-order '
+                                '+ Melunasi Pre-order '
                                 '${formatRupiah(preorderSettlementTotal)} '
                                 '(${preorderSettlementEntries.length} pesanan)',
                                 maxLines: 1,

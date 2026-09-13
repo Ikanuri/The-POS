@@ -1538,7 +1538,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                               Icon(Icons.inventory_2_outlined,
                                   size: 16, color: scheme.tertiary),
                               const SizedBox(width: 6),
-                              Text('Turut Pelunasi Pre-order',
+                              Text('Turut Melunasi Pre-order',
                                   style: TextStyle(
                                       fontWeight: FontWeight.w700,
                                       color: scheme.tertiary)),
