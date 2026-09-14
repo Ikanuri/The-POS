@@ -76,12 +76,19 @@ class _PermissionTile extends ConsumerWidget {
 
   String _label(String key) => switch (key) {
         'asisten_stok_minus' => 'Izinkan Stok Minus',
+        'asisten_akses_backup' => 'Backup & Restore',
+        'asisten_akses_csv_produk' => 'Import/Export CSV Produk',
         _ => key,
       };
 
   String _desc(String key) => switch (key) {
         'asisten_stok_minus' =>
           'Asisten bisa menjual meski stok 0 (override stok minus)',
+        'asisten_akses_backup' =>
+          'Asisten bisa export & restore file backup toko (data SELURUH '
+              'toko, bukan cuma miliknya) — restore MENIMPA data yang ada',
+        'asisten_akses_csv_produk' =>
+          'Asisten bisa import/export daftar produk via file CSV',
         _ => '',
       };
 }

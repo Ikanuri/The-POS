@@ -83,6 +83,13 @@ const kKasirPermissionKeys = <String>[
   // Item 24d — default OFF. Tanpa izin ini, tombol "Bayar" di kasir
   // berubah jadi "Kirim ke Owner/Asisten" (lihat kasir_screen.dart).
   'terima_pembayaran',
+  // Susulan (permintaan user, screening "guard file sensitif") — dulu
+  // "Backup & Restore" & "Import/Export CSV Produk" TIDAK PERNAH bisa
+  // diakses Pegawai sama sekali (menu disembunyikan total, tanpa opsi
+  // apa pun). Sekarang opsional per-toko lewat toggle ini (default OFF,
+  // owner yang putuskan) — lihat `pengaturan_screen.dart`.
+  'akses_backup',
+  'akses_csv_produk',
 ];
 
 /// Izin khusus role Asisten. Disimpan di tabel kasir_permissions yang sama
@@ -90,6 +97,12 @@ const kKasirPermissionKeys = <String>[
 /// "Izin Asisten" terpisah. Asisten tetap punya akses penuh untuk hal lain.
 const kAsistenPermissionKeys = <String>[
   'asisten_stok_minus',
+  // Susulan — pasangan `akses_backup`/`akses_csv_produk` di atas, versi
+  // Asisten. "Alihkan Owner" SENGAJA TIDAK dibuatkan toggle sama sekali
+  // (utk role manapun) — menimpa TOTAL identitas+data toko/device, bukan
+  // cuma data biasa, tetap owner-only murni.
+  'asisten_akses_backup',
+  'asisten_akses_csv_produk',
 ];
 
 /// Baris hasil [AppDatabase.getPriceCategoryMembers] — Fase B "Kategori
@@ -753,8 +766,8 @@ class AppDatabase extends _$AppDatabase {
             // Log void (permintaan user) — siapa yang membatalkan & alasan
             // opsional (lihat dok `Transactions.voidedBy`/`voidReason`).
             // Nullable & aditif, nota lama tetap valid apa adanya.
-            await _addColumnIfMissing('transactions', 'voided_by',
-                transactions, transactions.voidedBy, m);
+            await _addColumnIfMissing('transactions', 'voided_by', transactions,
+                transactions.voidedBy, m);
             await _addColumnIfMissing('transactions', 'void_reason',
                 transactions, transactions.voidReason, m);
           }
@@ -767,10 +780,10 @@ class AppDatabase extends _$AppDatabase {
             await m.createTable(priceCategories);
             await _addColumnIfMissing('alt_prices', 'price_category_id',
                 altPrices, altPrices.priceCategoryId, m);
-            await _addColumnIfMissing('alt_prices', 'margin_anchor',
-                altPrices, altPrices.marginAnchor, m);
-            await _addColumnIfMissing(
-                'alt_prices', 'margin_type', altPrices, altPrices.marginType, m);
+            await _addColumnIfMissing('alt_prices', 'margin_anchor', altPrices,
+                altPrices.marginAnchor, m);
+            await _addColumnIfMissing('alt_prices', 'margin_type', altPrices,
+                altPrices.marginType, m);
             await _addColumnIfMissing('alt_prices', 'margin_value', altPrices,
                 altPrices.marginValue, m);
           }
@@ -802,20 +815,20 @@ class AppDatabase extends _$AppDatabase {
             // asumsikan selalu ada spt di DB produksi asli) supaya UPDATE
             // backfill di bawah tidak "no such table" pada fixture tsb.
             final existingTables = (await customSelect(
-                    "SELECT name FROM sqlite_master WHERE type='table'")
-                .get())
+                        "SELECT name FROM sqlite_master WHERE type='table'")
+                    .get())
                 .map((r) => r.data['name'] as String)
                 .toSet();
             if (existingTables.contains('suppliers')) {
-              await _addColumnIfMissing('suppliers', 'updated_at', suppliers,
-                  suppliers.updatedAt, m);
+              await _addColumnIfMissing(
+                  'suppliers', 'updated_at', suppliers, suppliers.updatedAt, m);
               await customStatement(
                   'UPDATE "suppliers" SET updated_at = created_at '
                   'WHERE updated_at IS NULL;');
             }
             if (existingTables.contains('purchases')) {
-              await _addColumnIfMissing('purchases', 'updated_at', purchases,
-                  purchases.updatedAt, m);
+              await _addColumnIfMissing(
+                  'purchases', 'updated_at', purchases, purchases.updatedAt, m);
               await customStatement(
                   'UPDATE "purchases" SET updated_at = created_at '
                   'WHERE updated_at IS NULL;');
@@ -885,9 +898,9 @@ class AppDatabase extends _$AppDatabase {
             // pada fixture tsb — di DB produksi asli tabelnya SELALU ada
             // (dibuat di blok `from < 40` pada upgrade berurutan yang sama).
             final hasPriceCategories = (await customSelect(
-                    "SELECT name FROM sqlite_master WHERE type='table' "
-                    "AND name='price_categories'")
-                .get())
+                        "SELECT name FROM sqlite_master WHERE type='table' "
+                        "AND name='price_categories'")
+                    .get())
                 .isNotEmpty;
             if (hasPriceCategories) {
               await m.alterTable(TableMigration(priceCategories));
@@ -3379,31 +3392,33 @@ class AppDatabase extends _$AppDatabase {
     required List<TransactionPaymentsCompanion> payments,
     required List<({String productUnitId, double qty, String note})> stockItems,
     required List<
-        ({
-          String customerName,
-          int amount,
-          List<
-              ({
-                String invoiceId,
-                String invoiceLocalId,
-                DateTime invoiceDate,
-                int amount
-              })> targets,
-          String method,
-          String? methodName,
-        })> debtSettlements,
+            ({
+              String customerName,
+              int amount,
+              List<
+                  ({
+                    String invoiceId,
+                    String invoiceLocalId,
+                    DateTime invoiceDate,
+                    int amount
+                  })> targets,
+              String method,
+              String? methodName,
+            })>
+        debtSettlements,
     List<
-        ({
-          String preorderEntryId,
-          String invoiceId,
-          String invoiceLocalId,
-          DateTime invoiceDate,
-          String customerName,
-          int amount,
-          String method,
-          String? methodName,
-          bool fulfillOnSettle,
-        })> preorderSettlements = const [],
+            ({
+              String preorderEntryId,
+              String invoiceId,
+              String invoiceLocalId,
+              DateTime invoiceDate,
+              String customerName,
+              int amount,
+              String method,
+              String? methodName,
+              bool fulfillOnSettle,
+            })>
+        preorderSettlements = const [],
     required String kasirId,
     DateTime? now,
     LoyaltyPointLedgerCompanion? loyaltyEntry,
@@ -4168,8 +4183,8 @@ class AppDatabase extends _$AppDatabase {
   /// jadi tidak perlu ditangani di sini.
   Future<List<CartItem>> cartItemsFromTransaction(String txId) async {
     final items = await (select(transactionItems)
-          ..where((t) =>
-              t.transactionId.equals(txId) & t.qty.isBiggerThanValue(0)))
+          ..where(
+              (t) => t.transactionId.equals(txId) & t.qty.isBiggerThanValue(0)))
         .get();
     if (items.isEmpty) return const [];
 
@@ -5234,8 +5249,7 @@ class AppDatabase extends _$AppDatabase {
               .getSingleOrNull();
           final now = DateTime.now();
           if (item != null) {
-            await (update(transactionItems)
-                  ..where((t) => t.id.equals(item.id)))
+            await (update(transactionItems)..where((t) => t.id.equals(item.id)))
                 .write(TransactionItemsCompanion(
               priceAtSale: const Value(0),
               subtotal: const Value(0),
@@ -6262,7 +6276,9 @@ class AppDatabase extends _$AppDatabase {
   }) =>
       (select(transactions)
             ..where((t) =>
-                (includeVoid ? const Constant(true) : t.status.isNotValue('void')) &
+                (includeVoid
+                    ? const Constant(true)
+                    : t.status.isNotValue('void')) &
                 t.createdAt.isBiggerOrEqualValue(from) &
                 t.createdAt.isSmallerOrEqualValue(to))
             ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
@@ -7007,9 +7023,8 @@ class AppDatabase extends _$AppDatabase {
           final ph = List.filled(approvedUnitIds.length, '?').join(', ');
           await customUpdate(
             'DELETE FROM "$table" WHERE product_unit_id IN ($ph)',
-            variables: approvedUnitIds
-                .map((id) => Variable<Object>(id))
-                .toList(),
+            variables:
+                approvedUnitIds.map((id) => Variable<Object>(id)).toList(),
             updates: {tableInfo},
           );
         }
@@ -8050,20 +8065,20 @@ class AppDatabase extends _$AppDatabase {
             innerJoin(transactions,
                 transactions.id.equalsExp(leftBehindItems.transactionId)),
           ])
-                ..where(leftBehindItems.customerId.equals(id) &
-                    leftBehindItems.collectedAt.isNull() &
-                    transactions.status.isNotValue('void')))
-              .get())
+                  ..where(leftBehindItems.customerId.equals(id) &
+                      leftBehindItems.collectedAt.isNull() &
+                      transactions.status.isNotValue('void')))
+                .get())
             .map((r) => r.readTable(leftBehindItems))
             .toList()
         : (await (select(leftBehindItems).join([
             innerJoin(transactions,
                 transactions.id.equalsExp(leftBehindItems.transactionId)),
           ])
-                ..where(leftBehindItems.customerNameText.equals(nama) &
-                    leftBehindItems.collectedAt.isNull() &
-                    transactions.status.isNotValue('void')))
-              .get())
+                  ..where(leftBehindItems.customerNameText.equals(nama) &
+                      leftBehindItems.collectedAt.isNull() &
+                      transactions.status.isNotValue('void')))
+                .get())
             .map((r) => r.readTable(leftBehindItems))
             .toList();
     final borrowed = id.isNotEmpty
@@ -8071,20 +8086,20 @@ class AppDatabase extends _$AppDatabase {
             innerJoin(transactions,
                 transactions.id.equalsExp(borrowedItems.transactionId)),
           ])
-                ..where(borrowedItems.customerId.equals(id) &
-                    borrowedItems.fullyReturnedAt.isNull() &
-                    transactions.status.isNotValue('void')))
-              .get())
+                  ..where(borrowedItems.customerId.equals(id) &
+                      borrowedItems.fullyReturnedAt.isNull() &
+                      transactions.status.isNotValue('void')))
+                .get())
             .map((r) => r.readTable(borrowedItems))
             .toList()
         : (await (select(borrowedItems).join([
             innerJoin(transactions,
                 transactions.id.equalsExp(borrowedItems.transactionId)),
           ])
-                ..where(borrowedItems.customerNameText.equals(nama) &
-                    borrowedItems.fullyReturnedAt.isNull() &
-                    transactions.status.isNotValue('void')))
-              .get())
+                  ..where(borrowedItems.customerNameText.equals(nama) &
+                      borrowedItems.fullyReturnedAt.isNull() &
+                      transactions.status.isNotValue('void')))
+                .get())
             .map((r) => r.readTable(borrowedItems))
             .toList();
 
@@ -8148,8 +8163,9 @@ class AppDatabase extends _$AppDatabase {
       ..where(leftBehindItems.collectedAt.isNull() &
           transactions.status.isNotValue('void'))
       ..orderBy([OrderingTerm.asc(leftBehindItems.createdAt)]);
-    return q.watch().map(
-        (rows) => rows.map((r) => r.readTable(leftBehindItems)).toList());
+    return q
+        .watch()
+        .map((rows) => rows.map((r) => r.readTable(leftBehindItems)).toList());
   }
 
   /// Tandai SELESAI seluruhnya. Tetap mencatat baris log (PLAN.md Item 54)
@@ -8222,8 +8238,8 @@ class AppDatabase extends _$AppDatabase {
           .watch();
     }
     final q = select(borrowedItems).join([
-      innerJoin(transactions,
-          transactions.id.equalsExp(borrowedItems.transactionId)),
+      innerJoin(
+          transactions, transactions.id.equalsExp(borrowedItems.transactionId)),
     ])
       ..where(borrowedItems.fullyReturnedAt.isNull() &
           transactions.status.isNotValue('void'))
@@ -8349,8 +8365,7 @@ class AppDatabase extends _$AppDatabase {
       String? eventId,
       String? deviceCode}) async {
     return transaction(() async {
-      final row = await (select(preorderEntries)
-            ..where((t) => t.id.equals(id)))
+      final row = await (select(preorderEntries)..where((t) => t.id.equals(id)))
           .getSingle();
       final taken = (await getLaciMejaTakenQty([id]))[id] ?? 0;
       final sisa = row.qtyOrdered - taken;
@@ -8769,10 +8784,10 @@ class AppDatabase extends _$AppDatabase {
     final rows = await (select(preorderEntries).join([
       innerJoin(transactionItems,
           transactionItems.id.equalsExp(preorderEntries.transactionItemId)),
-      innerJoin(
-          transactions, transactions.id.equalsExp(preorderEntries.transactionId)),
-      innerJoin(
-          productUnits, productUnits.id.equalsExp(preorderEntries.productUnitId)),
+      innerJoin(transactions,
+          transactions.id.equalsExp(preorderEntries.transactionId)),
+      innerJoin(productUnits,
+          productUnits.id.equalsExp(preorderEntries.productUnitId)),
       innerJoin(products, products.id.equalsExp(productUnits.productId)),
       leftOuterJoin(unitTypes, unitTypes.id.equalsExp(productUnits.unitTypeId)),
     ])
@@ -8902,8 +8917,7 @@ class AppDatabase extends _$AppDatabase {
     bool locallyModified = false,
   }) async {
     return transaction(() async {
-      final row = await (select(preorderEntries)
-            ..where((t) => t.id.equals(id)))
+      final row = await (select(preorderEntries)..where((t) => t.id.equals(id)))
           .getSingle();
       final now = DateTime.now();
       await recordLaciMejaEvent(
@@ -8957,7 +8971,12 @@ class AppDatabase extends _$AppDatabase {
       'WHERE bi.fully_returned_at IS NULL AND t.status != \'void\') + '
       '(SELECT COUNT(*) FROM preorder_entries '
       'WHERE fulfilled_at IS NULL AND cancelled_at IS NULL) AS cnt',
-      readsFrom: {leftBehindItems, borrowedItems, preorderEntries, transactions},
+      readsFrom: {
+        leftBehindItems,
+        borrowedItems,
+        preorderEntries,
+        transactions
+      },
     ).watchSingle().map((r) => r.data['cnt'] as int);
   }
 
@@ -9183,7 +9202,8 @@ class AppDatabase extends _$AppDatabase {
               final hostReturned = hostRow.data['qty_returned'];
               final incomingReturned = cleaned['qty_returned'];
               if (hostReturned is num &&
-                  (incomingReturned is! num || incomingReturned < hostReturned)) {
+                  (incomingReturned is! num ||
+                      incomingReturned < hostReturned)) {
                 cleaned['qty_returned'] = hostReturned;
               }
             }
@@ -9562,7 +9582,9 @@ class DebtSettlementDetailLine {
     final seg = invoiceLocalId.split('-').last;
     final n = int.tryParse(seg);
     final label = n == null ? seg : n.toString();
-    return type == 'preorder' ? 'Lunasi Pre-order #$label' : 'Lunasi Nota #$label';
+    return type == 'preorder'
+        ? 'Lunasi Pre-order #$label'
+        : 'Lunasi Nota #$label';
   }
 }
 
@@ -9579,23 +9601,20 @@ List<DebtSettlementDetailLine> parseDebtSettlementDetail(String? raw) {
   try {
     final decoded = jsonDecode(raw);
     if (decoded is! List) return const [];
-    return decoded
-        .map((e) {
-          final m = e as Map<String, dynamic>;
-          final dateMs = m['invoiceDate'] as int?;
-          return DebtSettlementDetailLine(
-            invoiceId: m['invoiceId'] as String? ?? '',
-            invoiceLocalId: m['invoiceLocalId'] as String,
-            invoiceDate: dateMs == null
-                ? null
-                : DateTime.fromMillisecondsSinceEpoch(dateMs),
-            amount: (m['amount'] as num).toInt(),
-            customerName: m['customerName'] as String? ?? '',
-            type: m['type'] as String? ?? 'debt',
-            preorderEntryId: m['preorderEntryId'] as String?,
-          );
-        })
-        .toList();
+    return decoded.map((e) {
+      final m = e as Map<String, dynamic>;
+      final dateMs = m['invoiceDate'] as int?;
+      return DebtSettlementDetailLine(
+        invoiceId: m['invoiceId'] as String? ?? '',
+        invoiceLocalId: m['invoiceLocalId'] as String,
+        invoiceDate:
+            dateMs == null ? null : DateTime.fromMillisecondsSinceEpoch(dateMs),
+        amount: (m['amount'] as num).toInt(),
+        customerName: m['customerName'] as String? ?? '',
+        type: m['type'] as String? ?? 'debt',
+        preorderEntryId: m['preorderEntryId'] as String?,
+      );
+    }).toList();
   } catch (_) {
     return const [];
   }

@@ -42,6 +42,34 @@ final _canInputExpenseProvider = FutureProvider<bool>((ref) async {
   return db.isPermissionEnabled('input_pengeluaran');
 });
 
+/// Screening "guard file sensitif" (permintaan user) — "Backup & Restore"
+/// & "Import/Export CSV Produk" dulu TIDAK PERNAH bisa diakses non-owner
+/// sama sekali (backup malah dulu terlihat tanpa gate apa pun — celah
+/// nyata). Sekarang: owner selalu, Kasir/Asisten opsional lewat toggle
+/// `akses_backup`/`asisten_akses_backup` masing² (default OFF, lihat
+/// `kKasirPermissionKeys`/`kAsistenPermissionKeys`) — owner yang putuskan
+/// per toko, BUKAN hardcode role. "Alihkan Owner" SENGAJA TIDAK dapat
+/// provider serupa — tetap owner-only murni (lihat `AlihOwnerScreen`).
+final _canAccessBackupProvider = FutureProvider<bool>((ref) async {
+  final device = ref.watch(deviceProvider);
+  if (device.isOwner) return true;
+  final db = ref.watch(databaseProvider);
+  final key =
+      device.deviceRole == 'asisten' ? 'asisten_akses_backup' : 'akses_backup';
+  return db.isPermissionEnabled(key);
+});
+
+/// Pasangan [_canAccessBackupProvider] utk Import/Export CSV Produk.
+final _canAccessCsvProvider = FutureProvider<bool>((ref) async {
+  final device = ref.watch(deviceProvider);
+  if (device.isOwner) return true;
+  final db = ref.watch(databaseProvider);
+  final key = device.deviceRole == 'asisten'
+      ? 'asisten_akses_csv_produk'
+      : 'akses_csv_produk';
+  return db.isPermissionEnabled(key);
+});
+
 /// Izinkan kasir jual meski stok 0 (pre-order) — setting global. Dulu ada
 /// langsung di halaman Pengaturan, sempat dipindah ke dalam Izin Kasir
 /// (kurang terlihat), sekarang dikembalikan jadi entri terpisah di sini
@@ -262,38 +290,57 @@ class PengaturanScreen extends ConsumerWidget {
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () => context.push('/pengaturan/sync'),
                       ),
-                      ListTile(
-                        leading: const Icon(Icons.save_alt_outlined),
-                        title: const Text('Backup & Restore'),
-                        subtitle: const Text('File terenkripsi .berkahpos'),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () => context.push('/pengaturan/backup'),
-                      ),
-                      ListTile(
-                        leading: const Icon(Icons.swap_horiz_outlined),
-                        title: const Text('Alihkan Owner'),
-                        subtitle: const Text(
-                            'Pindahkan seluruh data & identitas toko ke device lain'),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () => context.push('/pengaturan/alih-owner'),
-                      ),
+                      Builder(builder: (context) {
+                        final canBackup =
+                            ref.watch(_canAccessBackupProvider).valueOrNull ??
+                                false;
+                        if (!canBackup) return const SizedBox.shrink();
+                        return ListTile(
+                          leading: const Icon(Icons.save_alt_outlined),
+                          title: const Text('Backup & Restore'),
+                          subtitle: const Text('File terenkripsi .berkahpos'),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () => context.push('/pengaturan/backup'),
+                        );
+                      }),
+                      // Alihkan Owner SENGAJA TIDAK dapat toggle izin spt
+                      // Backup/CSV di atas — menimpa TOTAL identitas+data
+                      // toko/device (bukan cuma data biasa), tetap
+                      // owner-only murni (lihat dok `_canAccessBackupProvider`).
+                      if (device.isOwner)
+                        ListTile(
+                          leading: const Icon(Icons.swap_horiz_outlined),
+                          title: const Text('Alihkan Owner'),
+                          subtitle: const Text(
+                              'Pindahkan seluruh data & identitas toko ke device lain'),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () => context.push('/pengaturan/alih-owner'),
+                        ),
+                      Builder(builder: (context) {
+                        final canCsv =
+                            ref.watch(_canAccessCsvProvider).valueOrNull ??
+                                false;
+                        if (!canCsv) return const SizedBox.shrink();
+                        return Column(children: [
+                          ListTile(
+                            leading: const Icon(Icons.upload_file_outlined),
+                            title: const Text('Import Produk CSV'),
+                            subtitle:
+                                const Text('Impor daftar produk dari file CSV'),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () => context.push('/pengaturan/import-csv'),
+                          ),
+                          ListTile(
+                            leading: const Icon(Icons.download_outlined),
+                            title: const Text('Export Produk CSV'),
+                            subtitle: const Text(
+                                'Ekspor seluruh produk aktif ke CSV'),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () => _exportProductsCsv(context, ref),
+                          ),
+                        ]);
+                      }),
                       if (device.isOwner) ...[
-                        ListTile(
-                          leading: const Icon(Icons.upload_file_outlined),
-                          title: const Text('Import Produk CSV'),
-                          subtitle:
-                              const Text('Impor daftar produk dari file CSV'),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () => context.push('/pengaturan/import-csv'),
-                        ),
-                        ListTile(
-                          leading: const Icon(Icons.download_outlined),
-                          title: const Text('Export Produk CSV'),
-                          subtitle:
-                              const Text('Ekspor seluruh produk aktif ke CSV'),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () => _exportProductsCsv(context, ref),
-                        ),
                         ListTile(
                           leading: const Icon(Icons.storefront_outlined),
                           title: const Text('Katalog Pesanan'),
@@ -350,8 +397,7 @@ class PengaturanScreen extends ConsumerWidget {
                               ref.watch(_stockPauseProvider).valueOrNull ??
                                   false;
                           return SwitchListTile(
-                            secondary:
-                                const Icon(Icons.inventory_2_outlined),
+                            secondary: const Icon(Icons.inventory_2_outlined),
                             title: const Text('Jeda Pelacakan Stok'),
                             subtitle: Text(paused
                                 ? 'Aktif — semua produk yang tadinya dilacak sementara jadi non-stok'
@@ -574,8 +620,8 @@ class PengaturanScreen extends ConsumerWidget {
       if (confirmed != true) return;
       final count = await db.pauseStockTrackingForAllProducts();
       ref.invalidate(_stockPauseProvider);
-      messenger.showSnackBar(SnackBar(
-          content: Text('$count produk ditandai non-stok sementara')));
+      messenger.showSnackBar(
+          SnackBar(content: Text('$count produk ditandai non-stok sementara')));
     } else {
       final count = await db.resumeStockTrackingForAllProducts();
       ref.invalidate(_stockPauseProvider);

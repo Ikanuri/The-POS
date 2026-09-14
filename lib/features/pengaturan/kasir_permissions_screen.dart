@@ -95,6 +95,8 @@ class _PermissionTile extends ConsumerWidget {
         'override_harga' => 'Override Harga',
         'batal_transaksi' => 'Batalkan Transaksi',
         'terima_pembayaran' => 'Terima Pembayaran',
+        'akses_backup' => 'Backup & Restore',
+        'akses_csv_produk' => 'Import/Export CSV Produk',
         _ => key,
       };
 
@@ -108,6 +110,11 @@ class _PermissionTile extends ConsumerWidget {
         'terima_pembayaran' =>
           'Pegawai bisa terima uang & selesaikan pembayaran sendiri. '
               'Kalau OFF, tombol "Bayar" berubah jadi "Kirim ke Owner/Asisten".',
+        'akses_backup' =>
+          'Pegawai bisa export & restore file backup toko (data SELURUH '
+              'toko, bukan cuma miliknya) — restore MENIMPA data yang ada',
+        'akses_csv_produk' =>
+          'Pegawai bisa import/export daftar produk via file CSV',
         _ => '',
       };
 }
