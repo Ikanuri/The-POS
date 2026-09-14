@@ -8,6 +8,26 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 14 September 2026 (sesi keenam puluh enam)
+
+### ✨ Fitur Baru
+- **Rata-rata penjualan produk (harian/mingguan/bulanan)** di halaman
+  detail produk (Laporan → tab Produk → ketuk salah satu produk).
+  Membantu memperkirakan kecepatan jual suatu produk, bukan cuma total
+  terjual di rentang tanggal yang dipilih.
+- **Izin baru "Backup & Restore" dan "Import/Export CSV Produk"** untuk
+  Pegawai & Asisten (opsional, default nonaktif — atur di "Izin Pegawai"/
+  "Izin Asisten"). Owner sekarang bisa memilih apakah pegawai/asisten
+  tepercaya boleh mengakses fitur ini, tanpa harus login sebagai owner.
+
+### 🐛 Perbaikan
+- **Celah keamanan: "Backup & Restore" dulu bisa dibuka siapa saja.**
+  Menu "Backup & Restore" ternyata tidak pernah dibatasi berdasarkan
+  peran device sama sekali — Pegawai maupun Asisten bisa membuka & memakai
+  fitur backup/restore (yang bisa menimpa SELURUH data toko) tanpa izin
+  apa pun. Sekarang dibatasi seperti fitur sensitif lainnya (lihat izin
+  baru di atas).
+
 ## 14 September 2026 (sesi keenam puluh lima)
 
 ### ✨ Fitur Baru

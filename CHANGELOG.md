@@ -7,6 +7,13 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-14 (sesi keenam puluh enam — rata-rata penjualan produk & guard izin file sensitif, Item 70+71)
+
+- `e665f23` — feat(laporan): rata-rata penjualan produk (harian/mingguan/
+  bulanan) di halaman detail produk
+- `3b82116` — fix(pengaturan): guard "Backup & Restore" + toggle izin
+  akses file sensitif utk Kasir/Asisten
+
 ## 2026-09-14 (sesi keenam puluh lima — nested dropdown varian + cascade centang di Kategori Produk, Item 69)
 
 - `8934f07` — feat(produk): nested dropdown varian + cascade centang di

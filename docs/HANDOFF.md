@@ -6,73 +6,73 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 14 September 2026, sesi keenam puluh lima — Item 69
-SELESAI: nested dropdown varian + cascade centang di "Kelola Kategori"
-(Kategori PRODUK, `CategoryAssignProductsScreen` — user menegaskan ini
-BEDA dari Kategori Harga yg diperbaiki sesi sebelumnya). Commit
-`8934f07`. Versi kerja **2.65.0+138** (MINOR — ADA fitur baru terlihat
-pengguna: cascade centang varian, PATCH direset 0, ADA entri
-PATCHNOTES.md). schemaVersion TETAP **44** (tidak ada migrasi — semua
-lewat `setProductGroupMembership` yg sudah ada, dipanggil berulang per
-varian).
+_Update sesi 14 September 2026, sesi keenam puluh enam — Item 70+71
+SELESAI, Item 72 (UI dropdown) SEDANG DISKUSI (lihat "Pending" di bawah).
+Commit `e665f23` (Item 70) + `3b82116` (Item 71). Versi kerja
+**2.66.0+139** (MINOR — 2 fitur baru terlihat pengguna, PATCH direset 0,
+ADA entri PATCHNOTES.md). schemaVersion TETAP **44** (tidak ada migrasi
+di keduanya).
 
-Konteks: sesi 64 (Item 68) memperbaiki bug SERUPA tapi salah tempat —
-awalnya dikira di "Kategori Harga" (`kategori_harga_screen.dart`,
-`_ProductUnitPickerScreen`), TERNYATA user maksudnya "Kategori Produk"
-(`product_group_screen.dart` → "Kelola Kategori" → tap kategori →
-`CategoryAssignProductsScreen`, AppBar "Produk — {nama kategori}"). Fix
-Item 68 di Kategori Harga TETAP DIPERTAHANKAN (user eksplisit bilang
-"itu bagus... tapi jangan buang perubahan ini") — HANYA scope-nya yg
-keliru, bukan fix-nya salah. Item 69 ini menerapkan pola nested-dropdown
-yg SAMA ke layar yg BENAR (Kategori Produk), ditambah requirement baru
-yg tidak ada di Item 68: cascade centang.
+**Item 70** — rata-rata penjualan produk (harian/mingguan/bulanan) di
+`ProductStatsScreen` (Laporan → tab Produk → tap baris produk). Dihitung
+dari qtySold / jumlah HARI dalam rentang (inclusive, hari kosong ikut
+menurunkan angka — mencerminkan kecepatan jual sungguhan). Mingguan =
+harian×7, bulanan = harian×30 (pendekatan, bukan kalender). Test:
+`test/product_stats_avg_sales_test.dart` (2 test, revert-verify OK).
 
-Root cause SAMA dgn Item 68: `db.searchProducts` (dipakai `_load()` di
-`category_assign_products_screen.dart`) tidak filter
-`parentProductId.isNull()` — varian ikut lolos sbg `CheckboxListTile`
-baris TERPISAH. Fix: `_load()` bangun `_variantsByParent` (Map
-parentId->List&lt;Product&gt; varian) dari hasil search, filter `_results`
-jadi top-level saja — TAPI kalau pencarian cocok ke NAMA VARIAN doang
-(induk tidak cocok), induk tetap diambil terpisah (`db.select(db.
-products)..where(id.isIn(missingParentIds))`) supaya varian yg dicari
-tidak hilang begitu saja (tidak ada baris induk utk taruh dropdown-nya)
-— edge case yg SENGAJA tidak ditangani di Item 68 (kasir sendiri juga
-tidak menangani ini, `watchProducts` filter query langsung di SQL) tapi
-di sini ditangani krn `db.searchProducts` sudah balikin variannya jadi
-tinggal susulan query kecil. Baris induk & varian sama2 dirender via
-helper `_buildProductRow` baru (extract dari kode lama), tombol
-expand/collapse (`_expandedParentIds`, `Set<String>` di State, BUKAN
-provider terpisah spt Item 68 krn semua data varian sudah di-preload
-sinkron di `_load()`, tidak perlu fetch lagi saat expand).
+**Item 71** — screening keamanan (permintaan user eksplisit: "coba
+screening dulu apa saja yang harus diguard"): ditemukan "Backup &
+Restore" DAN "Alihkan Owner" di `pengaturan_screen.dart` TIDAK PERNAH
+digate sama sekali (padahal "Import/Export CSV Produk" di sebelahnya
+sudah owner-only) — Kasir/Asisten bisa buka & pakai keduanya tanpa syarat
+apa pun. Setelah didiskusikan (user tanya "bisa dibuat partial permission
+kayak override harga? mungkin utk asisten saja" → lalu "atau kasir butuh
+juga?" → user pilih **ya, keduanya**): "Alihkan Owner" TETAP owner-only
+murni tanpa toggle (beda kelas risiko — menimpa TOTAL identitas+data
+device, bukan cuma data). "Backup & Restore" & "Import/Export CSV
+Produk" jadi opsional per-toko lewat toggle baru di kedua layar izin:
+`akses_backup`/`akses_csv_produk` (Kasir, `kKasirPermissionKeys`) dan
+`asisten_akses_backup`/`asisten_akses_csv_produk` (Asisten,
+`kAsistenPermissionKeys` — key TERPISAH total, tidak saling nyasar).
+Providers baru `_canAccessBackupProvider`/`_canAccessCsvProvider` di
+`pengaturan_screen.dart` (owner selalu true, else cek
+`isPermissionEnabled` sesuai `deviceRole`). Test:
+`test/pengaturan_backup_csv_guard_test.dart` (8 test, revert-verify OK,
+7/8 gagal sensible saat di-revert).
 
-Fitur baru (permintaan eksplisit user, TIDAK ada di Item 68): centang
-produk INDUK → SEMUA variannya ikut tercentang otomatis — `_toggle()`
-setelah `setProductGroupMembership(parent,...)`, loop
-`setProductGroupMembership(variant, groupId, true)` utk tiap varian di
-`_variantsByParent[parent.id]`, lalu patch state lokal (`_patchMembership`
-+ `_replaceProduct` — cari di `_results` ATAU di semua `_variantsByParent`
-values) biar UI langsung reflect tanpa reload. SENGAJA SATU ARAH SAJA —
-uncentang induk TIDAK cascade ke varian (varian bisa sengaja
-dipertahankan independen di kategori itu; keputusan desain, bukan bug).
-Centang varian sendiri juga TIDAK cascade balik ke induk.
+**Item 72 (BELUM DIKERJAKAN, masih tahap klarifikasi saat hand-off ini
+ditulis)** — user kirim 3 screenshot yang GAGAL diproses (file corrupt/
+lebih besar dari limit 2000×2000px, 2x percobaan kirim ulang juga
+gagal) soal 3 dropdown yg UI-nya perlu diperbaiki: (1) dropdown pilih
+satuan di `cek_stok_screen.dart` (`_QtyUnitStepper`, sudah custom
+`PopupMenuButton` — BUKAN raw Flutter dropdown), (2) dropdown pilih
+satuan "Hitung Fisik" Stock Opname (`stock_opname_screen.dart` baris
+~292, `DropdownButton<int>` — MASIH raw Flutter default, style beda dari
+pola custom app lain, TEKS HARDCODE `Colors.black87` yg PASTI bermasalah
+di dark mode — bug nyata di kode, terlepas dari screenshot), (3)
+"Jenis Satuan" di edit produk (`produk_form_screen.dart`, `_UnitCard`
+sekitar baris 2191, `DropdownButtonFormField<int>` — ini yg PALING
+standar/paling kecil kemungkinan bermasalah dari 3 lokasi). SUDAH
+ditanya via `AskUserQuestion` opsi spesifik ("teks tak terbaca dark
+mode" / "menu menutupi field lain" / "kursor ketik ketiban dropdown")
+— user belum jawab spesifik, masih mau coba kirim ulang screenshot.
+**JANGAN mulai coding perbaikan dropdown sebelum screenshot BENAR-BENAR
+diterima & dilihat** (2 percobaan kirim gagal murni krn ukuran/format
+file, BUKAN krn fitur/tool bermasalah — minta user kirim ulang sbg PNG/
+JPEG ≤2000×2000px, atau deskripsi tertulis lebih detail kalau kirim ulang
+tetap gagal).
 
-Test baru `test/category_assign_products_varian_test.dart` (5 test:
-varian tidak lagi baris terpisah, centang varian sendiri tidak
-mencentang induk, centang induk cascade ke SEMUA varian termasuk state
-UI checkbox tanpa reload, uncentang induk TIDAK cascade ke varian
-[satu-arah], produk tanpa varian tidak dapat tombol expand) — revert-
-verify manual sudah dilakukan (4/5 test relevan gagal sensible saat fix
-di-revert via patch, hijau lagi setelah dipulihkan). Test lama
-(`category_assign_products_test.dart` level-DB, `category_assign_
-products_nav_test.dart` end-to-end tanpa varian) tetap hijau tanpa
-perubahan — dikonfirmasi tidak regresi. `flutter analyze` bersih.
-Full-suite background agent dispatch dalam proses saat hand-off ini
-ditulis — CEK hasilnya sebelum menganggap sesi ini benar-benar tuntas
-kalau melanjutkan dari sini.
+Sesi sebelumnya (65) — Item 69: nested dropdown varian + cascade centang
+di "Kelola Kategori" (Kategori PRODUK, `CategoryAssignProductsScreen` —
+beda dari Kategori Harga Item 68 di sesi 64, keduanya TETAP berlaku).
+Commit `8934f07`. Root cause sama dgn Item 68 (`db.searchProducts` tidak
+filter varian); tambahan: cascade centang produk induk → SEMUA
+variannya (satu arah, uncentang tidak cascade). Test:
+`test/category_assign_products_varian_test.dart` (5 test).
 
-Sesi sebelumnya (64) — Item 68 (Kategori Harga, TETAP berlaku, HANYA
-scope-nya yg keliru — lihat konteks di atas): nested dropdown varian di
-layar "Tambah Produk" Kategori Harga. Commit `cbda798`.
+Sesi sebelumnya (64) — Item 68 (Kategori Harga, TETAP berlaku): nested
+dropdown varian di layar "Tambah Produk" Kategori Harga. Commit
+`cbda798`.
 
 Bug: "Dibayar" di Ringkasan struk sudah lama (dari fix lama) menjumlahkan
 `_debtSettlementTotal` (uang pelunasan hutang/DP-0 pre-order — dicatat
