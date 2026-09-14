@@ -65,9 +65,13 @@ void main() {
 
     await tester.enterText(
         inDialog(find.widgetWithText(TextField, 'Nama Varian *')), 'Coklat');
-    await tester.tap(inDialog(find.text('Jenis Satuan')));
+    final jenisSatuanField = inDialog(find.text('Jenis Satuan'));
+    await tester.ensureVisible(jenisSatuanField);
+    await tester.tap(jenisSatuanField);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Renteng').last);
+    final rentengOption = find.text('Renteng').last;
+    await tester.ensureVisible(rentengOption);
+    await tester.tap(rentengOption);
     await tester.pumpAndSettle();
     await tester.enterText(
         inDialog(find.widgetWithText(TextField, 'Isi per Satuan')), '10');

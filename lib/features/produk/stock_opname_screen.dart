@@ -5,6 +5,7 @@ import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/inline_banner.dart';
+import '../../core/widgets/unit_dropdown.dart';
 
 /// Item 36 — Stock Opname (hitung fisik & rekonsiliasi stok).
 ///
@@ -29,13 +30,11 @@ class _StockOpnameScreenState extends ConsumerState<StockOpnameScreen> {
 
   Future<void> _startCount() async {
     final db = ref.read(databaseProvider);
-    final rows = await db
-        .watchStockOverview(groupId: _selectedGroupId)
-        .first;
+    final rows = await db.watchStockOverview(groupId: _selectedGroupId).first;
     if (!mounted) return;
     if (rows.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Tidak ada produk berstok di kategori ini')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Tidak ada produk berstok di kategori ini')));
       return;
     }
     await Navigator.of(context).push(MaterialPageRoute(
@@ -180,8 +179,8 @@ class _OpnameCountScreenState extends ConsumerState<_OpnameCountScreen> {
     // produk + `unit_types` per satuan (N+1 berlapis), padahal layar ini
     // menahan SEMUA baris di balik spinner sampai loopnya habis: katalog
     // grosir ribuan produk = ribuan round-trip sebelum apa pun tampil.
-    final unitsByProduct =
-        await db.getUnitsWithTypeNamesFor([for (final r in widget.rows) r.productId]);
+    final unitsByProduct = await db
+        .getUnitsWithTypeNamesFor([for (final r in widget.rows) r.productId]);
     for (final r in widget.rows) {
       final units = unitsByProduct[r.productId] ?? const [];
       if (units.length <= 1) continue;
@@ -189,8 +188,9 @@ class _OpnameCountScreenState extends ConsumerState<_OpnameCountScreen> {
         for (final u in units) _UnitChoice(unit: u.unit, unitName: u.unitName),
       ];
       _unitsByProduct[r.productId] = choices;
-      _selectedUnitIdx[r.productId] =
-          choices.indexWhere((c) => c.unit.isBaseUnit).clamp(0, choices.length - 1);
+      _selectedUnitIdx[r.productId] = choices
+          .indexWhere((c) => c.unit.isBaseUnit)
+          .clamp(0, choices.length - 1);
     }
     if (mounted) setState(() => _loadingUnits = false);
   }
@@ -263,8 +263,8 @@ class _OpnameCountScreenState extends ConsumerState<_OpnameCountScreen> {
                 return Card(
                   margin: const EdgeInsets.only(bottom: 6),
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                     child: choices == null
                         ? Row(
                             children: [
@@ -289,21 +289,23 @@ class _OpnameCountScreenState extends ConsumerState<_OpnameCountScreen> {
                                 child: _qtyField(r.productId),
                               ),
                               const SizedBox(width: 6),
-                              DropdownButton<int>(
-                                value: _selectedUnitIdx[r.productId] ?? 0,
-                                isDense: true,
-                                underline: const SizedBox.shrink(),
-                                style: const TextStyle(
-                                    fontSize: 12, color: Colors.black87),
-                                items: [
+                              // Item 72 — dulu `DropdownButton<int>` bawaan
+                              // Flutter dgn teks HARDCODE `Colors.black87`
+                              // (tak terbaca di dark mode) & posisi menunya
+                              // suka menimpa baris produk lain (screenshot
+                              // user, kasus 2 satuan bernama sama "Biji").
+                              // `UnitDropdown` generik (key = INDEKS pilihan,
+                              // bukan nama — 2 satuan bisa punya nama sama
+                              // persis, mis. varian isi beda tapi nama satuan
+                              // dasarnya sama).
+                              UnitDropdown<int>(
+                                entries: {
                                   for (var j = 0; j < choices.length; j++)
-                                    DropdownMenuItem(
-                                      value: j,
-                                      child: Text(choices[j].unitName),
-                                    ),
-                                ],
-                                onChanged: (v) => setState(() =>
-                                    _selectedUnitIdx[r.productId] = v ?? 0),
+                                    j: choices[j].unitName,
+                                },
+                                selectedKey: _selectedUnitIdx[r.productId] ?? 0,
+                                onSelected: (v) => setState(
+                                    () => _selectedUnitIdx[r.productId] = v),
                               ),
                             ],
                           ),
@@ -381,8 +383,7 @@ class _OpnameReviewScreenState extends ConsumerState<_OpnameReviewScreen>
     setState(() => _saving = true);
     final db = ref.read(databaseProvider);
     final device = ref.read(deviceProvider);
-    final changed =
-        widget.entries.where((e) => e.selisih != 0).toList();
+    final changed = widget.entries.where((e) => e.selisih != 0).toList();
     if (changed.isEmpty) {
       setState(() => _saving = false);
       showBanner('Tidak ada selisih — tidak ada yang perlu disimpan',
@@ -403,9 +404,11 @@ class _OpnameReviewScreenState extends ConsumerState<_OpnameReviewScreen>
         kasirId: device.deviceCode,
       );
       if (mounted) {
-        Navigator.of(context).popUntil((r) => r.isFirst || r.settings.name == '/');
+        Navigator.of(context)
+            .popUntil((r) => r.isFirst || r.settings.name == '/');
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Opname disimpan (${changed.length} produk disesuaikan)')));
+            content: Text(
+                'Opname disimpan (${changed.length} produk disesuaikan)')));
       }
     } catch (e) {
       if (mounted) {
@@ -551,8 +554,7 @@ class StockOpnameHistoryScreen extends ConsumerWidget {
                 margin: const EdgeInsets.only(bottom: 6),
                 child: ListTile(
                   title: Text(s.note, style: const TextStyle(fontSize: 13)),
-                  subtitle: Text(
-                      '${s.itemCount} produk disesuaikan',
+                  subtitle: Text('${s.itemCount} produk disesuaikan',
                       style: const TextStyle(fontSize: 11)),
                   trailing: Column(
                     mainAxisAlignment: MainAxisAlignment.center,

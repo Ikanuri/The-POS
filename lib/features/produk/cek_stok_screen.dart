@@ -8,6 +8,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/unit_dropdown.dart';
 import 'receive_goods_screen.dart';
 import 'reset_stock_screen.dart';
 import 'stock_opname_screen.dart';
@@ -78,8 +79,7 @@ class _ExcludedGroupsNotifier extends StateNotifier<Set<int>> {
     final next = Set<int>.from(state);
     if (!next.remove(groupId)) next.add(groupId);
     state = next;
-    await _db.setSetting(
-        _kExcludedGroupsSettingKey, jsonEncode(next.toList()));
+    await _db.setSetting(_kExcludedGroupsSettingKey, jsonEncode(next.toList()));
   }
 }
 
@@ -123,8 +123,7 @@ class _CekStokScreenState extends ConsumerState<CekStokScreen> {
     if (widget.initialGroupId != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        ref.read(_cekStokGroupProvider.notifier).state =
-            widget.initialGroupId;
+        ref.read(_cekStokGroupProvider.notifier).state = widget.initialGroupId;
       });
     }
     _orderFocus.addListener(() {
@@ -208,7 +207,8 @@ class _CekStokScreenState extends ConsumerState<CekStokScreen> {
 
   Future<void> _promptQty(String productId, String productName) async {
     final unit = _selectedUnit[productId] ?? '';
-    final ctrl = TextEditingController(text: _fmtQty(_orderQty[productId] ?? 1));
+    final ctrl =
+        TextEditingController(text: _fmtQty(_orderQty[productId] ?? 1));
     // Select-all supaya ketikan MENGGANTI angka lama, bukan menempel di
     // belakangnya (pelajaran dari dialog "Sesuaikan Stok").
     ctrl.selection =
@@ -235,8 +235,7 @@ class _CekStokScreenState extends ConsumerState<CekStokScreen> {
               onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
           FilledButton(
             onPressed: () => Navigator.pop(
-                ctx,
-                double.tryParse(ctrl.text.trim().replaceAll(',', '.'))),
+                ctx, double.tryParse(ctrl.text.trim().replaceAll(',', '.'))),
             child: const Text('Simpan'),
           ),
         ],
@@ -268,8 +267,8 @@ class _CekStokScreenState extends ConsumerState<CekStokScreen> {
 
   void _copyOrderText(String text) {
     Clipboard.setData(ClipboardData(text: text));
-    ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Teks order disalin')));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('Teks order disalin')));
   }
 
   void _shareOrderText(String text) {
@@ -359,15 +358,14 @@ class _CekStokScreenState extends ConsumerState<CekStokScreen> {
                       label: 'Semua',
                       selected: groupId == null,
                       onTap: () =>
-                          ref.read(_cekStokGroupProvider.notifier).state =
-                              null,
+                          ref.read(_cekStokGroupProvider.notifier).state = null,
                     ),
                     ...named.map((g) => _GroupChip(
                           label: g.name!,
                           selected: groupId == g.id,
-                          onTap: () =>
-                              ref.read(_cekStokGroupProvider.notifier).state =
-                                  g.id,
+                          onTap: () => ref
+                              .read(_cekStokGroupProvider.notifier)
+                              .state = g.id,
                         )),
                   ],
                 ),
@@ -453,14 +451,12 @@ class _CekStokScreenState extends ConsumerState<CekStokScreen> {
                     qty: _orderQty[rows[i].productId] ?? 1,
                     fmtQty: _fmtQty,
                     onQtyDelta: (d) => _adjustQty(rows[i].productId, d),
-                    onQtyTap: () =>
-                        _promptQty(rows[i].productId, rows[i].name),
+                    onQtyTap: () => _promptQty(rows[i].productId, rows[i].name),
                     onUnitChanged: (u) => _setUnit(rows[i].productId, u),
                   ),
                 );
               },
-              loading: () =>
-                  const Center(child: CircularProgressIndicator()),
+              loading: () => const Center(child: CircularProgressIndicator()),
               error: (e, _) => Center(child: Text('Error: $e')),
             ),
           ),
@@ -471,12 +467,10 @@ class _CekStokScreenState extends ConsumerState<CekStokScreen> {
               // kategorinya kebetulan dikecualikan bikin panel (dan tombol
               // sertakan/kecualikan di dalamnya) hilang total, user jadi
               // tidak bisa menyertakan kategorinya balik.
-              final rawChecked =
-                  rows.where((r) => r.markedOutOfStock).toList();
+              final rawChecked = rows.where((r) => r.markedOutOfStock).toList();
               if (rawChecked.isEmpty) return const SizedBox.shrink();
-              final visibleChecked = rawChecked
-                  .where((r) => !_isExcludedFromOutput(r))
-                  .toList();
+              final visibleChecked =
+                  rawChecked.where((r) => !_isExcludedFromOutput(r)).toList();
               return _OrderTextPanel(
                 itemCount: visibleChecked.length,
                 namedGroups: namedGroups,
@@ -639,13 +633,12 @@ class _CekStokScreenState extends ConsumerState<CekStokScreen> {
   bool _isKnownUnit(String s) {
     final n = _norm(s);
     if (_genericUnits.any((g) => _norm(g) == n)) return true;
-    return _unitOptions.values
-        .any((opts) => opts.any((o) => _norm(o) == n));
+    return _unitOptions.values.any((opts) => opts.any((o) => _norm(o) == n));
   }
 
-  String _norm(String s) => s.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+  String _norm(String s) =>
+      s.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
 }
-
 
 class _GroupChip extends StatelessWidget {
   const _GroupChip(
@@ -660,10 +653,10 @@ class _GroupChip extends StatelessWidget {
       padding: const EdgeInsets.only(right: 6),
       child: ChoiceChip(
         label: Text(label,
-          style: const TextStyle(fontSize: 12),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          textAlign: TextAlign.center),
+            style: const TextStyle(fontSize: 12),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center),
         selected: selected,
         onSelected: (_) => onTap(),
         visualDensity: VisualDensity.compact,
@@ -722,16 +715,16 @@ class _StockRow extends StatelessWidget {
       badgeBg = AppTheme.changeBg(isDark);
     }
 
-    final stockLabel =
-        row.stock % 1 == 0 ? row.stock.toInt().toString() : row.stock.toString();
+    final stockLabel = row.stock % 1 == 0
+        ? row.stock.toInt().toString()
+        : row.stock.toString();
 
     // Redesain 25 Juli (mockup, Opsi A dipilih user): dulu baris tercentang
     // memakai `badgeBg`/`badgeFg` — warna KEPARAHAN STOK — utk menandai
     // "terpilih". Efeknya produk kritis (merah) yang dicentang jadi
     // merah-di-atas-merah, dua makna berbeda berbagi satu warna. Sekarang
     // "terpilih" SELALU accent terracotta, badge stok tetap independen.
-    final cardColor =
-        Theme.of(context).cardTheme.color ?? scheme.surface;
+    final cardColor = Theme.of(context).cardTheme.color ?? scheme.surface;
     final selBg = Color.alphaBlend(
         AppTheme.accent.withOpacity(isDark ? 0.16 : 0.07), cardColor);
     final selBorder = AppTheme.accent.withOpacity(isDark ? 0.55 : 0.45);
@@ -881,29 +874,16 @@ class _QtyUnitStepper extends StatelessWidget {
             onTap: () => onQtyDelta(1),
           ),
           divider(),
-          PopupMenuButton<String>(
-            tooltip: 'Ganti satuan',
+          // Item 72 — dulu `PopupMenuButton` TANPA `constraints`: daftar
+          // satuan (produk + nama umum `unit_types`, bisa 15-25 entri)
+          // bikin menu tumbuh nyaris seluruh tinggi layar, menimpa AppBar
+          // & konten lain (screenshot user). `UnitDropdown` generik yg
+          // sudah dibatasi maxHeight + scroll internal.
+          UnitDropdown<String>(
+            entries: {for (final u in unitOptions) u: u},
+            selectedKey: unit,
             onSelected: onUnitChanged,
-            itemBuilder: (_) => [
-              for (final u in unitOptions)
-                PopupMenuItem(value: u, child: Text(u)),
-            ],
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(unit,
-                      style: const TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
-                          color: AppTheme.accent)),
-                  const SizedBox(width: 3),
-                  Icon(Icons.arrow_drop_down_rounded,
-                      size: 16, color: AppTheme.accent.withOpacity(.75)),
-                ],
-              ),
-            ),
+            tooltip: 'Ganti satuan',
           ),
         ],
       ),

@@ -4,6 +4,7 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:the_pos/core/database/app_database.dart';
+import 'package:the_pos/core/widgets/unit_dropdown.dart';
 import 'package:the_pos/features/produk/stock_opname_screen.dart';
 
 import 'helpers/pump_app.dart';
@@ -88,7 +89,7 @@ void main() {
     // Pemilih satuan benar-benar terbentuk (bukan lolos karena tidak memuat
     // apa pun) — 40 produk berjenjang, dropdown-nya lazy-build di viewport
     // jadi cukup pastikan ada.
-    expect(find.byType(DropdownButton<int>), findsWidgets);
+    expect(find.byType(UnitDropdown<int>), findsWidgets);
 
     // Sebelum fix: 40 produk -> 40 getProductUnits + 80 select unit_types
     // = 120 query. Sesudah: 1 query batch (+ `watchStockOverview` yang juga

@@ -157,7 +157,7 @@ void main() {
 
     final items = tester
         .widgetList<PopupMenuItem<String>>(find.byType(PopupMenuItem<String>))
-        .map((e) => (e.child as Text).data)
+        .map((e) => e.value)
         .take(2)
         .toList();
     expect(items, ['Pcs', 'Dus'],

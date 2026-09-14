@@ -13,6 +13,7 @@ import '../../core/utils/input_formatters.dart';
 import '../../core/utils/internal_barcode.dart';
 import '../../core/widgets/inline_banner.dart';
 import '../../core/widgets/price_category_margin_sheet.dart';
+import '../../core/widgets/unit_dropdown.dart';
 
 /// Buka dialog scanner kamera untuk mengisi field barcode secara otomatis.
 /// Mengembalikan nilai barcode yang ter-scan, atau null jika dibatalkan.
@@ -619,8 +620,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
               IconButton(
                 icon: const Icon(Icons.qr_code_2_outlined),
                 tooltip: 'Barcode & Cetak Label',
-                onPressed: () =>
-                    context.push('/produk/$_productId/barcode'),
+                onPressed: () => context.push('/produk/$_productId/barcode'),
               ),
             if (_isEdit && !_readOnly)
               IconButton(
@@ -950,10 +950,9 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                                                                   fontSize:
                                                                       11)),
                                                     Expanded(
-                                                      child:
-                                                          _VariantStockLabel(
-                                                              variantProductId:
-                                                                  v.id),
+                                                      child: _VariantStockLabel(
+                                                          variantProductId:
+                                                              v.id),
                                                     ),
                                                   ],
                                                 ),
@@ -1115,7 +1114,9 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
     ];
     // Jalur "assign ke Kategori Harga" — 4 daftar paralel dgn altLabelCtrls/
     // altPriceCtrls (indeks sama), non-null berarti baris itu category-linked.
-    final altCategoryIds = <String?>[for (final a in altPrices) a.priceCategoryId];
+    final altCategoryIds = <String?>[
+      for (final a in altPrices) a.priceCategoryId
+    ];
     final altAnchors = <String?>[for (final a in altPrices) a.marginAnchor];
     final altTypes = <String?>[for (final a in altPrices) a.marginType];
     final altValues = <double?>[for (final a in altPrices) a.marginValue];
@@ -1154,28 +1155,21 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                 Row(
                   children: [
                     Expanded(
-                      child: DropdownButtonFormField<int>(
-                        value: _unitTypes.any((t) => t.id == unitType)
-                            ? unitType
-                            : null,
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                            labelText: 'Jenis Satuan', isDense: true),
-                        items: _unitTypes
-                            .map((t) => DropdownMenuItem(
-                                value: t.id, child: Text(t.name)))
-                            .toList(),
-                        onChanged: (v) {
-                          if (v != null) setDialog(() => unitType = v);
-                        },
+                      // Item 72 — sama pola fix `_UnitCard` di atas (dulu
+                      // `DropdownButtonFormField` bawaan Flutter).
+                      child: UnitDropdown<int>(
+                        entries: {for (final t in _unitTypes) t.id: t.name},
+                        selectedKey: unitType,
+                        formLabel: 'Jenis Satuan',
+                        onSelected: (v) => setDialog(() => unitType = v),
                       ),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: TextField(
                         controller: contentCtrl,
-                        keyboardType:
-                            const TextInputType.numberWithOptions(decimal: true),
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
                         decoration: const InputDecoration(
                           labelText: 'Isi per Satuan',
                           isDense: true,
@@ -1426,8 +1420,8 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
           if (altLabelCtrls[i].text.trim().isNotEmpty)
             (
               label: altLabelCtrls[i].text.trim(),
-              price: ThousandsSeparatorFormatter.parseValue(
-                  altPriceCtrls[i].text),
+              price:
+                  ThousandsSeparatorFormatter.parseValue(altPriceCtrls[i].text),
               priceCategoryId: altCategoryIds[i],
               marginAnchor: altAnchors[i],
               marginType: altTypes[i],
@@ -1441,8 +1435,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
   /// "isi per satuan" (dipakai saat saklar "Ikut harga satuan dasar"
   /// aktif). Isi tidak valid/<=0 diperlakukan sbg 1 (persis aturan simpan).
   int _followPreviewPrice(int parentBasePrice, String contentText) {
-    final content =
-        double.tryParse(contentText.trim().replaceAll(',', '.'));
+    final content = double.tryParse(contentText.trim().replaceAll(',', '.'));
     final ratio = (content == null || content <= 0) ? 1.0 : content;
     return (parentBasePrice * ratio).round();
   }
@@ -1545,7 +1538,8 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
     // relevan, bukan costPrice induk).
     var curCostPrice = 0;
     var curUnitTypeId = _units.isNotEmpty
-        ? _units.firstWhere((u) => u.isBaseUnit, orElse: () => _units.first)
+        ? _units
+            .firstWhere((u) => u.isBaseUnit, orElse: () => _units.first)
             .unitTypeId
         : 1;
     var curContent = 1.0;
@@ -1580,7 +1574,8 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
     }
     if (!mounted) return;
     final parentBase = _units.isNotEmpty
-        ? _units.firstWhere((u) => u.isBaseUnit, orElse: () => _units.first)
+        ? _units
+            .firstWhere((u) => u.isBaseUnit, orElse: () => _units.first)
             .price
         : 0;
     final res = await _variantDialog(
@@ -2188,23 +2183,17 @@ class _UnitCardState extends ConsumerState<_UnitCard> {
             ],
 
             // ── Unit type dropdown ───────────────────────────────────────────
-            DropdownButtonFormField<int>(
-              value: widget.entry.unitTypeId,
-              decoration: const InputDecoration(
-                  labelText: 'Jenis Satuan', isDense: true),
-              items: widget.unitTypes
-                  .map((u) => DropdownMenuItem(
-                        value: u.id,
-                        child: Text(u.name),
-                      ))
-                  .toList(),
-              onChanged: widget.readOnly
-                  ? null
-                  : (v) {
-                      if (v != null) {
-                        widget.onChanged(widget.entry.copyWith(unitTypeId: v));
-                      }
-                    },
+            // Item 72 — dulu `DropdownButtonFormField` bawaan Flutter: menu
+            // `unit_types` (bisa 15-25 entri) tumbuh nyaris seluruh tinggi
+            // layar, menimpa tombol Simpan & konten lain (screenshot user).
+            // `UnitDropdown` custom, dibatasi tinggi + scroll internal.
+            UnitDropdown<int>(
+              entries: {for (final u in widget.unitTypes) u.id: u.name},
+              selectedKey: widget.entry.unitTypeId,
+              formLabel: 'Jenis Satuan',
+              enabled: !widget.readOnly,
+              onSelected: (v) =>
+                  widget.onChanged(widget.entry.copyWith(unitTypeId: v)),
             ),
             const SizedBox(height: 8),
 
@@ -2304,8 +2293,8 @@ class _UnitCardState extends ConsumerState<_UnitCard> {
                                           await widget.onGenerateBarcode!();
                                       if (mounted) {
                                         _barcodeCtrl.text = bc;
-                                        widget.onChanged(widget.entry
-                                            .copyWith(barcode: bc));
+                                        widget.onChanged(
+                                            widget.entry.copyWith(barcode: bc));
                                       }
                                     },
                                   ),
@@ -2315,7 +2304,8 @@ class _UnitCardState extends ConsumerState<_UnitCard> {
                                   visualDensity: VisualDensity.compact,
                                   tooltip: 'Scan barcode',
                                   onPressed: () async {
-                                    final bc = await _scanBarcodeDialog(context);
+                                    final bc =
+                                        await _scanBarcodeDialog(context);
                                     if (bc != null && mounted) {
                                       _barcodeCtrl.text = bc;
                                       widget.onChanged(
@@ -2344,8 +2334,8 @@ class _UnitCardState extends ConsumerState<_UnitCard> {
               value: !widget.entry.isNonStock,
               onChanged: widget.readOnly
                   ? null
-                  : (v) => widget.onChanged(
-                      widget.entry.copyWith(isNonStock: !v)),
+                  : (v) =>
+                      widget.onChanged(widget.entry.copyWith(isNonStock: !v)),
               title: const Text('Lacak stok', style: TextStyle(fontSize: 14)),
               subtitle: const Text(
                   'Matikan bila satuan ini tidak perlu dihitung stok (mis. jasa)',
@@ -2359,8 +2349,8 @@ class _UnitCardState extends ConsumerState<_UnitCard> {
               value: widget.entry.requiresDeposit,
               onChanged: widget.readOnly
                   ? null
-                  : (v) => widget.onChanged(
-                      widget.entry.copyWith(requiresDeposit: v)),
+                  : (v) => widget
+                      .onChanged(widget.entry.copyWith(requiresDeposit: v)),
               title: const Text('Butuh Jaminan Fisik saat Antri',
                   style: TextStyle(fontSize: 14)),
               subtitle: const Text(
@@ -2488,8 +2478,9 @@ class _UnitCardState extends ConsumerState<_UnitCard> {
                         IconButton(
                           icon: Icon(Icons.sell_outlined,
                               size: 18,
-                              color:
-                                  linked ? scheme.primary : scheme.onSurfaceVariant),
+                              color: linked
+                                  ? scheme.primary
+                                  : scheme.onSurfaceVariant),
                           visualDensity: VisualDensity.compact,
                           tooltip: linked
                               ? 'Kategori: ${_altPrices[i].label}'

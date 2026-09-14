@@ -3,6 +3,7 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:the_pos/core/database/app_database.dart';
+import 'package:the_pos/core/widgets/unit_dropdown.dart';
 import 'package:the_pos/features/produk/stock_opname_screen.dart';
 
 import 'helpers/pump_app.dart';
@@ -74,7 +75,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Beras'), findsOneWidget);
-    expect(find.byType(DropdownButton<int>), findsNothing,
+    expect(find.byType(UnitDropdown<int>), findsNothing,
         reason: 'produk 1 satuan tidak perlu pemilih satuan sama sekali');
 
     await db.close();
@@ -93,22 +94,22 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Indomie'), findsOneWidget);
-    expect(find.byType(DropdownButton<int>), findsOneWidget,
+    expect(find.byType(UnitDropdown<int>), findsOneWidget,
         reason: 'produk berjenjang harus dapat pemilih satuan');
 
     await tester.enterText(find.byType(TextField).first, '10');
-    // Pilih satuan "Dus" — panggil langsung callback `onChanged` (bukan
+    // Pilih satuan "Dus" — panggil langsung callback `onSelected` (bukan
     // tap buka popup lalu tap opsi) supaya test TIDAK bergantung pada
-    // timing Overlay/Route milik popup `DropdownButton` (ditemukan flaky
-    // sesekali di full-suite: popup yg belum sempat settle bisa
-    // menghalangi tap "Simpan" di layar berikutnya). Ini tetap menguji
-    // wiring `onChanged` sungguhan (state + konversi), cuma tidak
-    // menguji mekanik popup Flutter sendiri (sudah teruji framework).
+    // timing Overlay/Route milik popup menu (ditemukan flaky sesekali di
+    // full-suite: popup yg belum sempat settle bisa menghalangi tap
+    // "Simpan" di layar berikutnya). Ini tetap menguji wiring `onSelected`
+    // sungguhan (state + konversi), cuma tidak menguji mekanik popup
+    // Flutter sendiri (sudah teruji framework).
     final dropdown =
-        tester.widget<DropdownButton<int>>(find.byType(DropdownButton<int>));
-    final dusIdx = dropdown.items!
-        .indexWhere((item) => (item.child as Text).data == 'Dus');
-    dropdown.onChanged!(dusIdx);
+        tester.widget<UnitDropdown<int>>(find.byType(UnitDropdown<int>));
+    final dusKey =
+        dropdown.entries.entries.firstWhere((e) => e.value == 'Dus').key;
+    dropdown.onSelected(dusKey);
     await tester.pump();
 
     await tester.tap(find.text('Review Selisih'));
