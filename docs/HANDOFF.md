@@ -6,61 +6,60 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 14 September 2026, sesi keenam puluh enam — Item 70+71
-SELESAI, Item 72 (UI dropdown) SEDANG DISKUSI (lihat "Pending" di bawah).
-Commit `e665f23` (Item 70) + `3b82116` (Item 71). Versi kerja
-**2.66.0+139** (MINOR — 2 fitur baru terlihat pengguna, PATCH direset 0,
-ADA entri PATCHNOTES.md). schemaVersion TETAP **44** (tidak ada migrasi
-di keduanya).
+_Update sesi 15 September 2026, sesi keenam puluh tujuh — Item 72
+SELESAI (redesain 3 dropdown pilih satuan). Commit `f71c97b`. Versi
+kerja **2.66.1+140** (PATCH — bugfix/redesain UI, ADA entri
+PATCHNOTES.md). schemaVersion TETAP **44** (murni UI, tidak ada migrasi).
 
-**Item 70** — rata-rata penjualan produk (harian/mingguan/bulanan) di
-`ProductStatsScreen` (Laporan → tab Produk → tap baris produk). Dihitung
-dari qtySold / jumlah HARI dalam rentang (inclusive, hari kosong ikut
-menurunkan angka — mencerminkan kecepatan jual sungguhan). Mingguan =
-harian×7, bulanan = harian×30 (pendekatan, bukan kalender). Test:
-`test/product_stats_avg_sales_test.dart` (2 test, revert-verify OK).
+**Item 72** — 3 screenshot user (SEBELUMNYA gagal terkirim 2x krn ukuran/
+format file, akhirnya berhasil dgn resize manual via Python/PIL —
+`ImageFile.LOAD_TRUNCATED_IMAGES=True` diperlukan krn file JPEG upload-nya
+truncated) menunjukkan dropdown pilih satuan bawaan Flutter
+(`DropdownButton`/`DropdownButtonFormField`/`PopupMenuButton` TANPA
+`constraints`) menutupi hampir SELURUH layar begitu daftar `unit_types`
+panjang (toko real bisa 15-25 entri) — menimpa AppBar, tombol Simpan, &
+baris produk lain. Ditemukan juga: teks hardcode `Colors.black87` di
+Hitung Fisik Opname (tak terbaca dark mode) & bug tampilan 2 satuan
+bernama sama ("Biji"/"Biji", dulu keyed by nama bukan indeks).
 
-**Item 71** — screening keamanan (permintaan user eksplisit: "coba
-screening dulu apa saja yang harus diguard"): ditemukan "Backup &
-Restore" DAN "Alihkan Owner" di `pengaturan_screen.dart` TIDAK PERNAH
-digate sama sekali (padahal "Import/Export CSV Produk" di sebelahnya
-sudah owner-only) — Kasir/Asisten bisa buka & pakai keduanya tanpa syarat
-apa pun. Setelah didiskusikan (user tanya "bisa dibuat partial permission
-kayak override harga? mungkin utk asisten saja" → lalu "atau kasir butuh
-juga?" → user pilih **ya, keduanya**): "Alihkan Owner" TETAP owner-only
-murni tanpa toggle (beda kelas risiko — menimpa TOTAL identitas+data
-device, bukan cuma data). "Backup & Restore" & "Import/Export CSV
-Produk" jadi opsional per-toko lewat toggle baru di kedua layar izin:
-`akses_backup`/`akses_csv_produk` (Kasir, `kKasirPermissionKeys`) dan
-`asisten_akses_backup`/`asisten_akses_csv_produk` (Asisten,
-`kAsistenPermissionKeys` — key TERPISAH total, tidak saling nyasar).
-Providers baru `_canAccessBackupProvider`/`_canAccessCsvProvider` di
-`pengaturan_screen.dart` (owner selalu true, else cek
-`isPermissionEnabled` sesuai `deviceRole`). Test:
-`test/pengaturan_backup_csv_guard_test.dart` (8 test, revert-verify OK,
-7/8 gagal sensible saat di-revert).
+Fix: widget baru `lib/core/widgets/unit_dropdown.dart`
+(`UnitDropdown<T>`, generik atas tipe key — `int` utk unit_type id,
+`String` utk nama satuan mentah) — desain sendiri (permintaan user
+eksplisit: "jangan pakai default template dari flutter"), pola sama
+`ProductPickerDropdown` (laci_meja): `PopupMenuButton` dgn `constraints`
+(`maxHeight: 320`, Flutter otomatis bikin scroll internal di atas itu),
+baris menu radio+tint terpilih, 2 gaya tampilan (chip ringkas utk
+stepper inline / field ber-label `InputDecorator` utk form). Dipakai di
+3 tempat: `cek_stok_screen.dart` ("Ganti Satuan", key String),
+`stock_opname_screen.dart` ("Hitung Fisik", key int = INDEKS pilihan
+BUKAN nama — supaya 2 satuan bernama sama tidak collide),
+`produk_form_screen.dart` ("Jenis Satuan" di `_UnitCard` DAN dialog
+varian, key int = unit_type id).
 
-**Item 72 (BELUM DIKERJAKAN, masih tahap klarifikasi saat hand-off ini
-ditulis)** — user kirim 3 screenshot yang GAGAL diproses (file corrupt/
-lebih besar dari limit 2000×2000px, 2x percobaan kirim ulang juga
-gagal) soal 3 dropdown yg UI-nya perlu diperbaiki: (1) dropdown pilih
-satuan di `cek_stok_screen.dart` (`_QtyUnitStepper`, sudah custom
-`PopupMenuButton` — BUKAN raw Flutter dropdown), (2) dropdown pilih
-satuan "Hitung Fisik" Stock Opname (`stock_opname_screen.dart` baris
-~292, `DropdownButton<int>` — MASIH raw Flutter default, style beda dari
-pola custom app lain, TEKS HARDCODE `Colors.black87` yg PASTI bermasalah
-di dark mode — bug nyata di kode, terlepas dari screenshot), (3)
-"Jenis Satuan" di edit produk (`produk_form_screen.dart`, `_UnitCard`
-sekitar baris 2191, `DropdownButtonFormField<int>` — ini yg PALING
-standar/paling kecil kemungkinan bermasalah dari 3 lokasi). SUDAH
-ditanya via `AskUserQuestion` opsi spesifik ("teks tak terbaca dark
-mode" / "menu menutupi field lain" / "kursor ketik ketiban dropdown")
-— user belum jawab spesifik, masih mau coba kirim ulang screenshot.
-**JANGAN mulai coding perbaikan dropdown sebelum screenshot BENAR-BENAR
-diterima & dilihat** (2 percobaan kirim gagal murni krn ukuran/format
-file, BUKAN krn fitur/tool bermasalah — minta user kirim ulang sbg PNG/
-JPEG ≤2000×2000px, atau deskripsi tertulis lebih detail kalau kirim ulang
-tetap gagal).
+Test baru `test/unit_dropdown_widget_test.dart` (5 test: menu dibatasi
+maxHeight walau 25 entri, onSelected benar, gaya field bukan
+DropdownButtonFormField bawaan, enabled=false tak bisa dibuka, baris
+terpilih ditandai). 4 test lama terpengaruh (assertion yg dulu cast
+`PopupMenuItem.child as Text` langsung — pecah krn child sekarang widget
+custom, bukan Text polos) diupdate baca `.value`/`.entries` langsung
+(lebih robust) — `cek_stok_order_qty_test.dart`,
+`stock_opname_unit_conversion_test.dart`,
+`stock_opname_unit_load_batch_test.dart`,
+`produk_form_variant_unit_ui_test.dart` (yg terakhir juga butuh
+`tester.ensureVisible` tambahan sebelum tap — field di dalam
+`AlertDialog` bergulir, bukan regresi nyata, cuma butuh scroll-into-view
+eksplisit yg dulu kebetulan tidak perlu). Revert-verify manual sudah
+dilakukan (lepas `maxHeight` sementara → test baru gagal sensible dgn
+`constraints.maxHeight == Infinity`, hijau lagi setelah dipulihkan).
+`flutter analyze` bersih. Full-suite background agent dispatch dalam
+proses saat hand-off ini ditulis — CEK hasilnya sebelum menganggap sesi
+ini benar-benar tuntas kalau melanjutkan dari sini.
+
+Sesi sebelumnya (66) — Item 70 (rata-rata penjualan produk
+harian/mingguan/bulanan di `ProductStatsScreen`) + Item 71 (screening
+keamanan: guard "Backup & Restore"/"Import-Export CSV" dgn toggle izin
+baru Kasir+Asisten, `akses_backup`/`akses_csv_produk` dst — "Alihkan
+Owner" TETAP owner-only murni tanpa toggle). Commit `e665f23` + `3b82116`.
 
 Sesi sebelumnya (65) — Item 69: nested dropdown varian + cascade centang
 di "Kelola Kategori" (Kategori PRODUK, `CategoryAssignProductsScreen` —

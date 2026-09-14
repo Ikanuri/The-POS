@@ -8,6 +8,17 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 15 September 2026 (sesi keenam puluh tujuh)
+
+### 🐛 Perbaikan
+- **Dropdown pilih satuan dirombak — tidak lagi menutupi layar.** Di
+  Cek Stok ("Ganti Satuan"), Stock Opname ("Hitung Fisik"), dan Edit
+  Produk ("Jenis Satuan"), dropdown pilih satuan yang daftarnya panjang
+  dulu bisa membuka menu yang menutupi hampir seluruh layar (AppBar,
+  tombol Simpan, baris produk lain ikut tertimpa). Sekarang menunya
+  dibatasi rapi dengan tampilan baru yang lebih elegan — daftar panjang
+  otomatis bisa digulir tanpa menutupi apa pun lagi.
+
 ## 14 September 2026 (sesi keenam puluh enam)
 
 ### ✨ Fitur Baru
