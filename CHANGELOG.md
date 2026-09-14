@@ -7,6 +7,11 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-15 (sesi keenam puluh delapan — tombol hapus eksplisit Kategori Harga, Item 73)
+
+- `b0f2da1` — fix(pengaturan): tambah tombol hapus eksplisit di baris
+  Kategori Harga
+
 ## 2026-09-15 (sesi keenam puluh tujuh — redesain 3 dropdown pilih satuan, Item 72)
 
 - `f71c97b` — fix(produk): redesain 3 dropdown pilih satuan, ganti dari

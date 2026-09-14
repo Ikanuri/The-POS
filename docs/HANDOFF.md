@@ -6,54 +6,44 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 15 September 2026, sesi keenam puluh tujuh — Item 72
-SELESAI (redesain 3 dropdown pilih satuan). Commit `f71c97b`. Versi
-kerja **2.66.1+140** (PATCH — bugfix/redesain UI, ADA entri
-PATCHNOTES.md). schemaVersion TETAP **44** (murni UI, tidak ada migrasi).
+_Update sesi 15 September 2026, sesi keenam puluh delapan — Item 73
+SELESAI (tombol hapus eksplisit Kategori Harga). Commit `b0f2da1`. Versi
+kerja **2.66.2+141** (PATCH — bugfix UX kecil, ADA entri PATCHNOTES.md).
+schemaVersion TETAP **44** (murni UI, `deletePriceCategory` sudah ada
+sebelumnya, tidak disentuh).
 
-**Item 72** — 3 screenshot user (SEBELUMNYA gagal terkirim 2x krn ukuran/
-format file, akhirnya berhasil dgn resize manual via Python/PIL —
-`ImageFile.LOAD_TRUNCATED_IMAGES=True` diperlukan krn file JPEG upload-nya
-truncated) menunjukkan dropdown pilih satuan bawaan Flutter
-(`DropdownButton`/`DropdownButtonFormField`/`PopupMenuButton` TANPA
-`constraints`) menutupi hampir SELURUH layar begitu daftar `unit_types`
-panjang (toko real bisa 15-25 entri) — menimpa AppBar, tombol Simpan, &
-baris produk lain. Ditemukan juga: teks hardcode `Colors.black87` di
-Hitung Fisik Opname (tak terbaca dark mode) & bug tampilan 2 satuan
-bernama sama ("Biji"/"Biji", dulu keyed by nama bukan indeks).
+**Item 73** — hapus Kategori Harga dulu HANYA bisa lewat swipe
+(`Dismissible`, `_CategoryTile` di `kategori_harga_screen.dart`) — tidak
+ada tombol terlihat, tidak mudah ditemukan pengguna yg tidak tahu gestur
+itu. Fix: `IconButton` hapus eksplisit ditambah di trailing baris (jadi
+`Row` bersama tombol "Ubah nama" yg sudah ada), dialog konfirmasi
+di-extract jadi `_confirmDelete`/`_confirmAndDelete` (dipakai bersama
+oleh tombol baru & swipe lama — SATU sumber logic, bukan duplikat).
+Swipe TETAP jalan sbg jalan pintas tambahan, tidak dihapus.
 
-Fix: widget baru `lib/core/widgets/unit_dropdown.dart`
-(`UnitDropdown<T>`, generik atas tipe key — `int` utk unit_type id,
-`String` utk nama satuan mentah) — desain sendiri (permintaan user
-eksplisit: "jangan pakai default template dari flutter"), pola sama
-`ProductPickerDropdown` (laci_meja): `PopupMenuButton` dgn `constraints`
-(`maxHeight: 320`, Flutter otomatis bikin scroll internal di atas itu),
-baris menu radio+tint terpilih, 2 gaya tampilan (chip ringkas utk
-stepper inline / field ber-label `InputDecorator` utk form). Dipakai di
-3 tempat: `cek_stok_screen.dart` ("Ganti Satuan", key String),
-`stock_opname_screen.dart` ("Hitung Fisik", key int = INDEKS pilihan
-BUKAN nama — supaya 2 satuan bernama sama tidak collide),
-`produk_form_screen.dart` ("Jenis Satuan" di `_UnitCard` DAN dialog
-varian, key int = unit_type id).
+Test baru `test/kategori_harga_delete_button_test.dart` (3 test: tombol
+tampil, tap→dialog→konfirmasi→tertombstone di DB, tap→Batal→tetap ada).
+Revert-verify manual OK (3 test gagal sensible saat di-revert, hijau
+lagi setelah dipulihkan). `flutter analyze` bersih. Full-suite
+background agent dispatch dalam proses saat hand-off ini ditulis — CEK
+hasilnya sebelum menganggap sesi ini benar-benar tuntas kalau
+melanjutkan dari sini.
 
-Test baru `test/unit_dropdown_widget_test.dart` (5 test: menu dibatasi
-maxHeight walau 25 entri, onSelected benar, gaya field bukan
-DropdownButtonFormField bawaan, enabled=false tak bisa dibuka, baris
-terpilih ditandai). 4 test lama terpengaruh (assertion yg dulu cast
-`PopupMenuItem.child as Text` langsung — pecah krn child sekarang widget
-custom, bukan Text polos) diupdate baca `.value`/`.entries` langsung
-(lebih robust) — `cek_stok_order_qty_test.dart`,
-`stock_opname_unit_conversion_test.dart`,
-`stock_opname_unit_load_batch_test.dart`,
-`produk_form_variant_unit_ui_test.dart` (yg terakhir juga butuh
-`tester.ensureVisible` tambahan sebelum tap — field di dalam
-`AlertDialog` bergulir, bukan regresi nyata, cuma butuh scroll-into-view
-eksplisit yg dulu kebetulan tidak perlu). Revert-verify manual sudah
-dilakukan (lepas `maxHeight` sementara → test baru gagal sensible dgn
-`constraints.maxHeight == Infinity`, hijau lagi setelah dipulihkan).
-`flutter analyze` bersih. Full-suite background agent dispatch dalam
-proses saat hand-off ini ditulis — CEK hasilnya sebelum menganggap sesi
-ini benar-benar tuntas kalau melanjutkan dari sini.
+Sesi sebelumnya (67) — Item 72: redesain 3 dropdown pilih satuan (Cek
+Stok/Hitung Fisik Opname/Jenis Satuan edit produk) — widget baru
+`lib/core/widgets/unit_dropdown.dart` (`UnitDropdown<T>`), pola sama
+`ProductPickerDropdown`, `PopupMenuButton` dgn `constraints` (maxHeight
+320) supaya menu daftar `unit_types` panjang (15-25 entri) tidak lagi
+menutupi seluruh layar. Commit `f71c97b`. **Susulan ditemukan SETELAH
+hand-off sesi 67 ditulis**: full-suite background agent (dispatch utk
+Item 72) melaporkan 1 kegagalan nyata (BUKAN dari Item 72) —
+`test/asisten_permissions_screen_test.dart` punya `find.byType(
+SwitchListTile)` tak ter-scope yg jadi ambigu (3 match) setelah Item 71
+(sesi 66) menambah 2 toggle baru ke layar Izin Asisten. Di-fix dgn
+scope finder ke baris spesifik "Izinkan Stok Minus" (murni perbaikan
+test, TIDAK ada perubahan kode aplikasi) — commit `7815db5`. Full-suite
+KEDUA (dispatch ulang khusus utk verifikasi fix ini) mengonfirmasi
+**1691 test semua hijau**, 0 gagal.
 
 Sesi sebelumnya (66) — Item 70 (rata-rata penjualan produk
 harian/mingguan/bulanan di `ProductStatsScreen`) + Item 71 (screening

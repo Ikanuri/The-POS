@@ -8,6 +8,14 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 15 September 2026 (sesi keenam puluh delapan)
+
+### 🐛 Perbaikan
+- **Kategori Harga kini punya tombol hapus.** Sebelumnya, menghapus
+  kategori harga hanya bisa lewat geser (swipe) — tidak ada tombol
+  terlihat sama sekali. Sekarang ada tombol hapus di samping tombol ubah
+  nama, lebih mudah ditemukan (geser tetap bisa dipakai juga).
+
 ## 15 September 2026 (sesi keenam puluh tujuh)
 
 ### 🐛 Perbaikan
