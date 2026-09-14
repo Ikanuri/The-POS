@@ -78,8 +78,7 @@ class KategoriHargaScreen extends ConsumerWidget {
 }
 
 class _CategoryTile extends ConsumerWidget {
-  const _CategoryTile(
-      {super.key, required this.category, required this.index});
+  const _CategoryTile({super.key, required this.category, required this.index});
   final PriceCategory category;
   final int index;
 
@@ -239,8 +238,9 @@ class _KategoriHargaDetailScreenState
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final members =
-        await ref.read(databaseProvider).getPriceCategoryMembers(widget.categoryId);
+    final members = await ref
+        .read(databaseProvider)
+        .getPriceCategoryMembers(widget.categoryId);
     if (!mounted) return;
     setState(() {
       _members = members;
@@ -337,7 +337,9 @@ class _KategoriHargaDetailScreenState
       ),
     );
     if (ok != true) return;
-    await ref.read(databaseProvider).removeProductFromPriceCategory(m.altPriceId);
+    await ref
+        .read(databaseProvider)
+        .removeProductFromPriceCategory(m.altPriceId);
     await _load();
   }
 
@@ -467,7 +469,10 @@ class _ProductUnitPickerScreenState
     final results = await db.searchProducts(query);
     if (!mounted) return;
     setState(() {
-      _results = results;
+      // Varian (produk anak) TIDAK ditampilkan sbg baris list terpisah di
+      // sini — nested dropdown di bawah induknya (lihat `_ProductPickTile`),
+      // konsisten dgn pola produk bervarian di halaman kasir.
+      _results = results.where((p) => p.parentProductId == null).toList();
       _loading = false;
     });
   }
@@ -556,25 +561,96 @@ class _ProductUnitPickerScreenState
                 : _results.isEmpty
                     ? Center(
                         child: Text('Tidak ada produk ditemukan',
-                            style:
-                                TextStyle(color: scheme.onSurfaceVariant)),
+                            style: TextStyle(color: scheme.onSurfaceVariant)),
                       )
                     : ListView.builder(
                         itemCount: _results.length,
-                        itemBuilder: (_, i) {
-                          final p = _results[i];
-                          return ListTile(
-                            title: Text(p.name),
-                            subtitle: p.kodeProduk != null
-                                ? Text('Kode: ${p.kodeProduk}')
-                                : null,
-                            onTap: () => _pick(p),
-                          );
-                        },
+                        itemBuilder: (_, i) => _ProductPickTile(
+                          product: _results[i],
+                          onPick: _pick,
+                        ),
                       ),
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Varian (produk anak) milik satu produk induk, utk nested dropdown
+/// `_ProductPickTile` — lihat dok di sana.
+final _productPickVariantsProvider =
+    FutureProvider.family<List<Product>, String>((ref, parentId) {
+  final db = ref.watch(databaseProvider);
+  return db.getVariants(parentId);
+});
+
+/// Satu baris produk di `_ProductUnitPickerScreen`. Kalau produk punya
+/// varian, TIDAK di-drop sbg baris list terpisah (dulu begitu — `Product`
+/// varian ikut lolos dari `db.searchProducts` mentah2, jadi kelihatan spt
+/// produk berdiri sendiri) — dibungkus nested dropdown inline yg mendorong
+/// baris di bawahnya (bukan popup), sama seperti pola produk bervarian di
+/// halaman kasir (`_ProductListTile`/`_VariantDropdown` di `kasir_screen.
+/// dart`). Ketuk badan baris induk → pilih satuan produk induk sendiri
+/// (spt sebelumnya); ketuk panah → buka/tutup daftar varian, tiap varian
+/// jadi baris pilihannya sendiri (punya satuan sendiri).
+class _ProductPickTile extends ConsumerStatefulWidget {
+  const _ProductPickTile({required this.product, required this.onPick});
+
+  final Product product;
+  final ValueChanged<Product> onPick;
+
+  @override
+  ConsumerState<_ProductPickTile> createState() => _ProductPickTileState();
+}
+
+class _ProductPickTileState extends ConsumerState<_ProductPickTile> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final variantsAsync =
+        ref.watch(_productPickVariantsProvider(widget.product.id));
+    final variants = variantsAsync.asData?.value ?? const <Product>[];
+    final hasVariants = variants.isNotEmpty;
+
+    return Column(
+      children: [
+        ListTile(
+          title: Text(widget.product.name),
+          subtitle: widget.product.kodeProduk != null
+              ? Text('Kode: ${widget.product.kodeProduk}')
+              : null,
+          onTap: () => widget.onPick(widget.product),
+          trailing: hasVariants
+              ? IconButton(
+                  icon: Icon(_expanded ? Icons.expand_less : Icons.expand_more),
+                  tooltip: 'Varian',
+                  onPressed: () => setState(() => _expanded = !_expanded),
+                )
+              : null,
+        ),
+        if (_expanded && hasVariants)
+          Container(
+            color: scheme.surfaceContainerHighest.withOpacity(0.4),
+            padding: const EdgeInsets.only(left: 32, right: 16),
+            child: Column(
+              children: [
+                for (final v in variants)
+                  ListTile(
+                    dense: true,
+                    visualDensity: VisualDensity.compact,
+                    title: Text(v.name),
+                    subtitle: v.kodeProduk != null
+                        ? Text('Kode: ${v.kodeProduk}')
+                        : null,
+                    onTap: () => widget.onPick(v),
+                  ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }
