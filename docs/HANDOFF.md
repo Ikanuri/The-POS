@@ -6,13 +6,44 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 13 September 2026, sesi keenam puluh tiga — Item 67 SELESAI:
-gabung baris "Riwayat Pembayaran" paling awal dgn nota hutang/pre-order
-di ketiga jenis struk (in-app, share/gambar, cetak). Commit `ebf623d`.
-Versi kerja **2.64.1+136** (PATCH — murni bugfix tampilan, ADA entri
-PATCHNOTES.md krn user langsung merasakan/screenshot ketidaksesuaian).
-schemaVersion TETAP **44** (tidak ada migrasi — murni perubahan tampilan
-di 3 renderer struk, `p.amount`/DB tidak disentuh sama sekali).
+_Update sesi 14 September 2026, sesi keenam puluh empat — Item 68 SELESAI:
+nested dropdown varian di layar "Tambah Produk" Kategori Harga. Commit
+`cbda798`. Versi kerja **2.64.2+137** (PATCH — bugfix tampilan, ADA
+entri PATCHNOTES.md). schemaVersion TETAP **44** (tidak ada migrasi —
+murni perubahan tampilan/filter di level UI, `db.searchProducts()`
+sendiri TIDAK diubah krn beberapa caller lain — csv_import_service.dart,
+price_match_service.dart, dll — sengaja masih butuh SEMUA produk
+termasuk varian dari fungsi itu).
+
+Bug (permintaan user): `_ProductUnitPickerScreen` (kelas privat di
+`kategori_harga_screen.dart`, dibuka dari tombol "+" AppBar di
+`KategoriHargaDetailScreen`, judul layar "Tambah Produk") memakai
+`db.searchProducts` mentah2 — beda dari `watchProducts` katalog kasir
+yg SUDAH filter `parentProductId.isNull()` — jadi varian (produk anak)
+ikut lolos sbg baris `ListTile` list TERPISAH, seolah produk berdiri
+sendiri.
+
+Fix: `_load()` filter top-level di level UI
+(`results.where((p) => p.parentProductId == null)`), lalu tiap baris
+top-level dirender via `_ProductPickTile` (widget baru) yg watch
+`_productPickVariantsProvider` (`FutureProvider.family` baru, wrap
+`db.getVariants(parentId)`) — kalau produk itu punya varian, dapat
+tombol panah (expand/collapse) yg membuka daftar varian sbg baris
+nested DI BAWAH baris induk (mendorong konten, bukan popup) — pola SAMA
+persis dgn produk bervarian di halaman kasir (`_ProductListTile`/
+`_VariantDropdown` di `kasir_screen.dart`). Ketuk badan baris induk tetap
+langsung pilih satuan produk induk sendiri (`_pick(p)` spt sebelumnya);
+ketuk salah satu baris varian nested memanggil `_pick(v)` yg sama (varian
+adalah `Product` biasa dgn `productUnits`/`priceTiers` sendiri, tidak
+perlu jalur pilih khusus). Test baru `test/kategori_harga_tambah_produk_
+varian_test.dart` (3 test: varian TIDAK lagi jadi baris terpisah sblm
+dropdown dibuka, varian muncul+bisa dipilih setelah tombol panah
+ditekan, produk TANPA varian tidak dapat tombol panah sama sekali) —
+revert-verify manual sudah dilakukan (2 test relevan gagal sensible saat
+fix di-revert via patch, hijau lagi setelah dipulihkan). `flutter
+analyze` bersih. Full-suite background agent dispatch dalam proses saat
+hand-off ini ditulis — CEK hasilnya sebelum menganggap sesi ini
+benar-benar tuntas kalau melanjutkan dari sini.
 
 Bug: "Dibayar" di Ringkasan struk sudah lama (dari fix lama) menjumlahkan
 `_debtSettlementTotal` (uang pelunasan hutang/DP-0 pre-order — dicatat

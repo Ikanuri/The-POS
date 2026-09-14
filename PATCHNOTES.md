@@ -8,6 +8,17 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 14 September 2026 (sesi keenam puluh empat)
+
+### 🐛 Perbaikan
+- **Layar "Tambah Produk" di Kategori Harga: varian tidak lagi tampil
+  sbg produk berdiri sendiri.** Sebelumnya, produk yang punya varian
+  (mis. warna/ukuran berbeda) ikut menampilkan tiap variannya sbg baris
+  list terpisah di hasil pencarian, seolah-olah varian itu produk
+  sendiri. Sekarang varian dibungkus jadi dropdown di bawah produk
+  induknya (ketuk panah utk buka/tutup), sama seperti tampilan produk
+  bervarian di halaman kasir.
+
 ## 13 September 2026 (sesi keenam puluh tiga)
 
 ### 🐛 Perbaikan
