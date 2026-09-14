@@ -22,7 +22,12 @@ void main() {
     await pumpWithFakeApp(tester, db: db, child: const AsistenPermissionsScreen());
 
     expect(find.text('Izinkan Stok Minus'), findsOneWidget);
-    final switchFinder = find.byType(SwitchListTile);
+    // Item 71 menambah 2 toggle lain ("Backup & Restore", "Import/Export
+    // CSV Produk") ke layar ini -- finder WAJIB discope ke baris ini
+    // spesifik, `find.byType(SwitchListTile)` polos sekarang ambigu (3
+    // match).
+    final switchFinder =
+        find.widgetWithText(SwitchListTile, 'Izinkan Stok Minus');
     expect(switchFinder, findsOneWidget);
     expect(tester.widget<SwitchListTile>(switchFinder).value, isFalse);
 
