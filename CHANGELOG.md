@@ -7,6 +7,11 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-14 (sesi keenam puluh lima — nested dropdown varian + cascade centang di Kategori Produk, Item 69)
+
+- `8934f07` — feat(produk): nested dropdown varian + cascade centang di
+  "Kelola Kategori" (Kategori Produk)
+
 ## 2026-09-14 (sesi keenam puluh empat — nested dropdown varian di "Tambah Produk" Kategori Harga, Item 68)
 
 - `cbda798` — fix(pengaturan): nested dropdown varian di layar "Tambah

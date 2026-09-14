@@ -8,6 +8,23 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 14 September 2026 (sesi keenam puluh lima)
+
+### ✨ Fitur Baru
+- **Centang produk induk di "Kelola Kategori" -> semua variannya ikut
+  masuk kategori otomatis.** Kalau sebuah produk punya varian (mis.
+  warna/ukuran berbeda) dan induknya dicentang masuk suatu kategori,
+  semua variannya sekarang otomatis ikut masuk kategori yang sama —
+  tidak perlu dicentang satu per satu lagi. Uncentang induk tidak ikut
+  mengeluarkan varian (varian bisa tetap dipertahankan di kategori itu
+  kalau memang sengaja).
+
+### 🐛 Perbaikan
+- **"Kelola Kategori" (Kategori Produk): varian tidak lagi tampil sbg
+  produk berdiri sendiri.** Sama seperti perbaikan di Kategori Harga —
+  varian sekarang dibungkus jadi dropdown di bawah produk induknya
+  (ketuk panah utk buka/tutup), bukan baris terpisah yang membingungkan.
+
 ## 14 September 2026 (sesi keenam puluh empat)
 
 ### 🐛 Perbaikan
