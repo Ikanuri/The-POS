@@ -76,6 +76,19 @@ class _ProductStatsScreenState extends ConsumerState<ProductStatsScreen> {
                 }
                 final d = snap.data!;
                 final s = d.summary;
+                // Rentang selalu start=00:00 s/d end=23:59:59.999 (lihat
+                // `dateRangeProvider`/`StatsRangeBar._pick`) -> inclusive
+                // day count aman dihitung begini (bukan cuma hari yang ADA
+                // penjualannya — biar mencerminkan KECEPATAN jual sungguhan,
+                // hari kosong ikut menurunkan rata-rata, bukan diabaikan).
+                final rangeDays =
+                    _range.end.difference(_range.start).inDays + 1;
+                final avgDaily = s.qtySold / rangeDays;
+                final avgWeekly = avgDaily * 7;
+                // Bulan pakai pendekatan 30 hari (bukan kalender sungguhan)
+                // — cukup utk "rata-rata kecepatan jual", bukan laporan
+                // akuntansi presisi per-bulan-kalender.
+                final avgMonthly = avgDaily * 30;
                 if (s.txCount == 0) {
                   return Center(
                     child: Text('Belum ada penjualan di rentang ini',
@@ -93,8 +106,7 @@ class _ProductStatsScreenState extends ConsumerState<ProductStatsScreen> {
                             Expanded(
                                 child: StatTile(
                                     label: 'Terjual',
-                                    value:
-                                        '${fmtQty(s.qtySold)} ${s.unitName}',
+                                    value: '${fmtQty(s.qtySold)} ${s.unitName}',
                                     caption: s.unitBreakdown.isEmpty
                                         ? null
                                         : 'dari itu: ${s.unitBreakdown.map((b) => '${fmtQty(b.qty)} ${b.unitName}').join(', ')}')),
@@ -140,12 +152,34 @@ class _ProductStatsScreenState extends ConsumerState<ProductStatsScreen> {
                         ],
                       ),
                     ),
+                    const StatsSectionTitle('Rata-rata penjualan'),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Row(children: [
+                        Expanded(
+                            child: StatTile(
+                          label: 'Per hari',
+                          value: '${_fmtAvg(avgDaily)} ${s.unitName}',
+                        )),
+                        const SizedBox(width: 8),
+                        Expanded(
+                            child: StatTile(
+                          label: 'Per minggu',
+                          value: '${_fmtAvg(avgWeekly)} ${s.unitName}',
+                        )),
+                        const SizedBox(width: 8),
+                        Expanded(
+                            child: StatTile(
+                          label: 'Per bulan',
+                          value: '${_fmtAvg(avgMonthly)} ${s.unitName}',
+                        )),
+                      ]),
+                    ),
                     if (d.daily.isNotEmpty) ...[
                       const StatsSectionTitle('Tren penjualan (qty)'),
                       StatsTrendChart(
                         points: [
-                          for (final p in d.daily)
-                            (date: p.date, value: p.qty),
+                          for (final p in d.daily) (date: p.date, value: p.qty),
                         ],
                         color: scheme.primary,
                         valueLabel: (v) =>
@@ -179,4 +213,9 @@ class _ProductStatsScreenState extends ConsumerState<ProductStatsScreen> {
       ),
     );
   }
+
+  /// Bulatkan ke 1 desimal, buang ".0" kalau kebetulan bulat (pola sama
+  /// `fmtQty`) — rata-rata biasanya pecahan, tapi jangan tampilkan angka
+  /// desimal panjang tak berguna (mis. "3.3333333...").
+  static String _fmtAvg(double v) => fmtQty(((v * 10).round()) / 10);
 }
