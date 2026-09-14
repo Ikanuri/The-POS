@@ -98,13 +98,28 @@ class _CategoryTile extends ConsumerWidget {
         // `watchPriceCategories` sudah filter `name IS NOT NULL`
         // (kategori ditombstone tidak pernah masuk sini).
         title: Text(category.name!),
-        trailing: IconButton(
-          icon: const Icon(Icons.edit_outlined, size: 20),
-          tooltip: 'Ubah nama',
-          onPressed: () => showDialog<void>(
-            context: context,
-            builder: (_) => _NameDialog(existing: category),
-          ),
+        // Susulan (permintaan user): hapus dulu HANYA lewat swipe
+        // (Dismissible) — tidak terlihat/tidak bisa ditemukan pengguna yang
+        // tidak tahu gestur itu. Tombol hapus eksplisit ditambah di sini,
+        // di samping tombol ubah nama yang sudah ada; swipe TETAP berfungsi
+        // sbg jalan pintas tambahan (bukan diganti).
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.edit_outlined, size: 20),
+              tooltip: 'Ubah nama',
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (_) => _NameDialog(existing: category),
+              ),
+            ),
+            IconButton(
+              icon: Icon(Icons.delete_outline, size: 20, color: scheme.error),
+              tooltip: 'Hapus kategori',
+              onPressed: () => _confirmAndDelete(context, ref),
+            ),
+          ],
         ),
         onTap: () => Navigator.of(context).push(MaterialPageRoute(
           builder: (_) => KategoriHargaDetailScreen(
@@ -122,32 +137,40 @@ class _CategoryTile extends ConsumerWidget {
         padding: const EdgeInsets.only(right: 20),
         child: Icon(Icons.delete_outline, color: scheme.error),
       ),
-      confirmDismiss: (_) async {
-        final ok = await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: Text('Hapus ${category.name}?'),
-            content: const Text(
-                'Kategori ini akan dihapus. Produk anggotanya TIDAK ikut '
-                'terhapus — harganya jadi harga manual biasa (beku di nilai '
-                'terakhir), tidak lagi ikut kategori ini.'),
-            actions: [
-              TextButton(
-                  onPressed: () => Navigator.pop(ctx, false),
-                  child: const Text('Batal')),
-              FilledButton(
-                  onPressed: () => Navigator.pop(ctx, true),
-                  child: const Text('Hapus')),
-            ],
-          ),
-        );
-        return ok ?? false;
-      },
+      confirmDismiss: (_) => _confirmDelete(context),
       onDismissed: (_) async {
         await ref.read(databaseProvider).deletePriceCategory(category.id);
       },
       child: tile,
     );
+  }
+
+  Future<bool> _confirmDelete(BuildContext context) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Hapus ${category.name}?'),
+        content: const Text(
+            'Kategori ini akan dihapus. Produk anggotanya TIDAK ikut '
+            'terhapus — harganya jadi harga manual biasa (beku di nilai '
+            'terakhir), tidak lagi ikut kategori ini.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Batal')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Hapus')),
+        ],
+      ),
+    );
+    return ok ?? false;
+  }
+
+  Future<void> _confirmAndDelete(BuildContext context, WidgetRef ref) async {
+    if (await _confirmDelete(context)) {
+      await ref.read(databaseProvider).deletePriceCategory(category.id);
+    }
   }
 }
 
