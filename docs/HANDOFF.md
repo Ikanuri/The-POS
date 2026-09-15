@@ -6,28 +6,54 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 15 September 2026, sesi keenam puluh delapan — Item 73
-SELESAI (tombol hapus eksplisit Kategori Harga). Commit `b0f2da1`. Versi
-kerja **2.66.2+141** (PATCH — bugfix UX kecil, ADA entri PATCHNOTES.md).
-schemaVersion TETAP **44** (murni UI, `deletePriceCategory` sudah ada
-sebelumnya, tidak disentuh).
+_Update sesi 15 September 2026, sesi keenam puluh sembilan — Item 74
+SELESAI (kategori produk baru tidak lagi mewarisi produk lama secara
+diam-diam). Commit `25e8049`. Versi kerja **2.66.3+142** (PATCH —
+bugfix, ADA entri PATCHNOTES.md). schemaVersion TETAP **44** (tidak ada
+migrasi, murni ubah logic alokasi id di `addProductGroup`).
 
-**Item 73** — hapus Kategori Harga dulu HANYA bisa lewat swipe
-(`Dismissible`, `_CategoryTile` di `kategori_harga_screen.dart`) — tidak
-ada tombol terlihat, tidak mudah ditemukan pengguna yg tidak tahu gestur
-itu. Fix: `IconButton` hapus eksplisit ditambah di trailing baris (jadi
-`Row` bersama tombol "Ubah nama" yg sudah ada), dialog konfirmasi
-di-extract jadi `_confirmDelete`/`_confirmAndDelete` (dipakai bersama
-oleh tombol baru & swipe lama — SATU sumber logic, bukan duplikat).
-Swipe TETAP jalan sbg jalan pintas tambahan, tidak dihapus.
+**Item 74** — bug dilaporkan user: "beberapa produk otomatis ter-add
+sendiri dan muncul di kategori halaman kasir". Investigasi (BUKAN
+langsung dikasih fix, user diminta jelaskan dulu, baru minta perbaiki
+stlh paham akar masalahnya) menemukan `addProductGroup` (`app_database.
+dart`) dulu mendaur ulang baris `product_groups` dgn `name IS NULL`
+PERTAMA yg ditemukan — termasuk 18 slot placeholder legacy (id 3-20,
+`_seedDefaults`, utk kompatibilitas CSV Griyo POS yg pakai id kategori
+angka mentah, lihat `csv_import_service.dart` yg MATCH id mentah dari
+kolom "kategori" CSV thd `allGroupIds`). Slot itu TIDAK DIJAMIN kosong
+dari produk — kalau CSV import (device ini ATAU device lain via sync)
+pernah menempelkan `productGroupId` ke id itu SEBELUM diberi nama,
+produk itu diam-diam sudah menempel (tak terlihat di mana pun krn semua
+layar filter `name IS NOT NULL`). Begitu owner bikin kategori baru lewat
+"Tambah Kategori"/"Tambah Massal" & kebetulan slot itu yg didaur ulang,
+produk² itu LANGSUNG "muncul" jadi anggota — padahal user tidak pernah
+menambahkannya secara sadar.
 
-Test baru `test/kategori_harga_delete_button_test.dart` (3 test: tombol
-tampil, tap→dialog→konfirmasi→tertombstone di DB, tap→Batal→tetap ada).
-Revert-verify manual OK (3 test gagal sensible saat di-revert, hijau
-lagi setelah dipulihkan). `flutter analyze` bersih. Full-suite
-background agent dispatch dalam proses saat hand-off ini ditulis — CEK
-hasilnya sebelum menganggap sesi ini benar-benar tuntas kalau
-melanjutkan dari sini.
+Fix: `addProductGroup` SELALU alokasikan id baru (`MAX(id)+1`), TIDAK
+PERNAH mendaur ulang baris manapun (kosong ATAU sudah dihapus bersih via
+`deleteProductGroup`) — kategori baru dijamin benar-benar kosong. Test
+baru `test/product_group_no_slot_reuse_test.dart` (3 test: kategori
+baru tidak mewarisi produk legacy, id kategori baru selalu >20/tidak
+pernah didaur ulang, kategori yg sudah dihapus bersih pun tetap dapat id
+baru). Revert-verify manual OK (2/3 test relevan gagal sensible saat
+di-revert, hijau lagi setelah dipulihkan). `flutter analyze` bersih.
+Full-suite background agent dispatch dalam proses saat hand-off ini
+ditulis — CEK hasilnya sebelum menganggap sesi ini benar-benar tuntas
+kalau melanjutkan dari sini.
+
+**Catatan penting utk sesi lanjutan**: fix ini HANYA mencegah kejadian
+BARU ke depan — kategori yg SUDAH terlanjur dibuat lewat mekanisme daur-
+ulang lama (sebelum fix ini) MUNGKIN MASIH punya anggota "hantu" yg
+terwarisi diam-diam. Belum ada cleanup otomatis utk data lama (sengaja
+tidak disentuh — tidak bisa dibedakan scr aman mana keanggotaan yg
+sengaja dicentang user vs warisan bug lama). Kalau user melapor lagi
+soal kategori TERTENTU yg masih terasa salah, arahkan buka "Kelola
+Kategori" → kategori itu → tinjau manual satu-satu baris yg tercentang,
+uncentang yg tidak seharusnya ada.
+
+Sesi sebelumnya (68) — Item 73: tombol hapus eksplisit Kategori Harga
+(dulu HANYA bisa lewat swipe `Dismissible`, tidak terlihat). Commit
+`b0f2da1`.
 
 Sesi sebelumnya (67) — Item 72: redesain 3 dropdown pilih satuan (Cek
 Stok/Hitung Fisik Opname/Jenis Satuan edit produk) — widget baru

@@ -8,6 +8,16 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 15 September 2026 (sesi keenam puluh sembilan)
+
+### 🐛 Perbaikan
+- **Kategori produk baru tidak lagi tiba-tiba sudah berisi produk yang
+  tidak pernah ditambahkan.** Sebelumnya, membuat kategori produk baru
+  kadang bisa langsung punya anggota produk yang tidak pernah dicentang
+  siapa pun — sisa data lama yang diam-diam menempel sebelum kategori
+  itu diberi nama. Sekarang kategori baru dijamin selalu kosong, hanya
+  berisi produk yang benar-benar dicentang.
+
 ## 15 September 2026 (sesi keenam puluh delapan)
 
 ### 🐛 Perbaikan
