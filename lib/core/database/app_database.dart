@@ -2853,22 +2853,25 @@ class AppDatabase extends _$AppDatabase {
             .getSingleOrNull();
     final nextOrder = (maxOrderRow?.data['mx'] as int? ?? -1) + 1;
 
-    final emptySlot = await (select(productGroups)
-          ..where((t) => t.name.isNull())
-          ..limit(1))
+    // Bug nyata dilaporkan user (screenshot + investigasi): versi lama daur
+    // ulang baris `name IS NULL` PERTAMA yang ditemukan (id 3-20, slot
+    // placeholder legacy dari `_seedDefaults` utk kompatibilitas CSV
+    // Griyo POS yg pakai id kategori angka mentah — lihat komentar
+    // `csv_import_service.dart`). Slot itu TIDAK DIJAMIN kosong dari
+    // produk — kalau pernah ada CSV import (di device ini ATAU device lain
+    // yg datanya masuk lewat sync) yg menempelkan produk ke id itu SEBELUM
+    // slotnya diberi nama, produk itu diam-diam ikut menempel (tidak
+    // terlihat di mana pun krn semua layar filter `name IS NOT NULL`).
+    // Begitu slot itu akhirnya diberi nama di sini, produk² itu LANGSUNG
+    // "muncul" jadi anggota kategori baru — padahal user tidak pernah
+    // menambahkannya. Fix: SELALU alokasikan id baru, jangan pernah daur
+    // ulang baris manapun (kosong atau tidak) — kategori baru dijamin
+    // benar-benar kosong.
+    final rows = await customSelect('SELECT MAX(id) as mx FROM product_groups')
         .getSingleOrNull();
-    if (emptySlot != null) {
-      await (update(productGroups)..where((t) => t.id.equals(emptySlot.id)))
-          .write(ProductGroupsCompanion(
-              name: Value(name), sortOrder: Value(nextOrder)));
-    } else {
-      final rows =
-          await customSelect('SELECT MAX(id) as mx FROM product_groups')
-              .getSingleOrNull();
-      final nextId = (rows?.data['mx'] as int? ?? 20) + 1;
-      await into(productGroups).insert(ProductGroupsCompanion.insert(
-          id: Value(nextId), name: Value(name), sortOrder: Value(nextOrder)));
-    }
+    final nextId = (rows?.data['mx'] as int? ?? 20) + 1;
+    await into(productGroups).insert(ProductGroupsCompanion.insert(
+        id: Value(nextId), name: Value(name), sortOrder: Value(nextOrder)));
   }
 
   /// Tambah banyak kategori sekaligus (satu nama per baris di UI). Nama
