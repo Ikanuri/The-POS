@@ -892,6 +892,10 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
           paid: const Value(true),
           depositQty: requiresDeposit ? Value(depositQty) : const Value(0),
           note: Value(note.isEmpty ? null : note),
+          // Item 75: tanpa ini, baris pre-order yang dibuat lewat fitur ini
+          // di device non-owner TIDAK PERNAH tersinkron ke host — hanya
+          // baris locally_modified=1 yang diambil dumpLaciMejaProposals().
+          locallyModified: Value(ref.read(laciMejaLocallyModifiedProvider)),
         ));
     await _load();
     if (mounted) {

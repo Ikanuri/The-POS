@@ -3,6 +3,7 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:the_pos/core/database/app_database.dart';
+import 'package:the_pos/core/providers/device_provider.dart';
 import 'package:the_pos/features/kasir/receipt_screen.dart';
 
 import 'helpers/pump_app.dart';
@@ -184,6 +185,42 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Jumlah jaminan dititip'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+  });
+
+  testWidgets(
+      'Item 75: device KASIR (bukan owner) -> "Jadikan Pre-order" harus '
+      'menandai baris locallyModified=true, kalau tidak baris ini TIDAK '
+      'PERNAH tersinkron ke host (dumpLaciMejaProposals filter '
+      'locally_modified=1)', (tester) async {
+    await seedTx('lunas');
+    await pumpWithFakeApp(
+      tester,
+      db: db,
+      child: const ReceiptScreen(transactionId: txId),
+      device: const DeviceIdentity(
+        storeUuid: 'test-store-uuid',
+        storeKey: 'test-store-key',
+        storeName: 'Toko Uji',
+        deviceName: 'Kasir 2',
+        deviceCode: 'K2',
+        deviceRole: 'kasir',
+      ),
+    );
+
+    await tester.tap(find.text('LPG 3kg'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Jadikan Pre-order'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Jadikan Pre-order').last);
+    await tester.pumpAndSettle();
+
+    final rows = await db.select(db.preorderEntries).get();
+    expect(rows.single.locallyModified, isTrue,
+        reason: 'device non-owner wajib menandai baris ini supaya '
+            'ikut diusulkan ke host lewat dumpLaciMejaProposals');
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));
