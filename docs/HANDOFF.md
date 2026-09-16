@@ -6,50 +6,59 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 15 September 2026, sesi keenam puluh sembilan — Item 74
-SELESAI (kategori produk baru tidak lagi mewarisi produk lama secara
-diam-diam). Commit `25e8049`. Versi kerja **2.66.3+142** (PATCH —
-bugfix, ADA entri PATCHNOTES.md). schemaVersion TETAP **44** (tidak ada
-migrasi, murni ubah logic alokasi id di `addProductGroup`).
+_Update sesi 16 September 2026, sesi ketujuh puluh — Item 75 SELESAI
+(fix sync "Jadikan Pre-order" di device kasir). Commit `1d346ca`. Versi
+kerja **2.66.4+143** (PATCH — bugfix, ADA entri PATCHNOTES.md).
+schemaVersion TETAP **44** (tidak ada migrasi, murni tambah 1 field ke
+insert yang sudah ada).
 
-**Item 74** — bug dilaporkan user: "beberapa produk otomatis ter-add
-sendiri dan muncul di kategori halaman kasir". Investigasi (BUKAN
-langsung dikasih fix, user diminta jelaskan dulu, baru minta perbaiki
-stlh paham akar masalahnya) menemukan `addProductGroup` (`app_database.
-dart`) dulu mendaur ulang baris `product_groups` dgn `name IS NULL`
-PERTAMA yg ditemukan — termasuk 18 slot placeholder legacy (id 3-20,
-`_seedDefaults`, utk kompatibilitas CSV Griyo POS yg pakai id kategori
-angka mentah, lihat `csv_import_service.dart` yg MATCH id mentah dari
-kolom "kategori" CSV thd `allGroupIds`). Slot itu TIDAK DIJAMIN kosong
-dari produk — kalau CSV import (device ini ATAU device lain via sync)
-pernah menempelkan `productGroupId` ke id itu SEBELUM diberi nama,
-produk itu diam-diam sudah menempel (tak terlihat di mana pun krn semua
-layar filter `name IS NOT NULL`). Begitu owner bikin kategori baru lewat
-"Tambah Kategori"/"Tambah Massal" & kebetulan slot itu yg didaur ulang,
-produk² itu LANGSUNG "muncul" jadi anggota — padahal user tidak pernah
-menambahkannya secara sadar.
+**Item 75** — ditemukan SAAT menjawab pertanyaan investigasi user
+("apakah edit pre-order jadi pre-order di client, setelah sync ke host
+lalu sync lagi, ikut terbawa?"), BUKAN dari laporan bug langsung. Root
+cause: `_showJadikanPreorderDialog` (`receipt_screen.dart`, fitur
+"Jadikan Pre-order" dari struk in-app — Item 3 lama) melakukan raw
+`PreorderEntriesCompanion.insert(...)` TANPA field `locallyModified` —
+default `false` per schema. Karena `masterData` (termasuk
+`preorder_entries`) SENGAJA dilewati saat klien push ke atas
+(`dumpSince(includeMasterData: false)`), SATU-SATUNYA jalur baris
+`preorder_entries` dari device non-owner sampai ke host adalah
+`dumpLaciMejaProposals()` yang filter `WHERE locally_modified = 1`.
+Baris dari fitur ini yang dibuat di device kasir/asisten (bukan owner)
+karenanya TIDAK PERNAH tersinkron ke host, walau sync diulang berkali-
+kali — stuck permanen di device asal. ~11 titik panggil lain di
+`receipt_screen.dart`/`laci_meja_dashboard_screen.dart` sudah benar
+menyambungkan `locallyModified: Value(ref.read(
+laciMejaLocallyModifiedProvider))`; titik ini kelewatan.
 
-Fix: `addProductGroup` SELALU alokasikan id baru (`MAX(id)+1`), TIDAK
-PERNAH mendaur ulang baris manapun (kosong ATAU sudah dihapus bersih via
-`deleteProductGroup`) — kategori baru dijamin benar-benar kosong. Test
-baru `test/product_group_no_slot_reuse_test.dart` (3 test: kategori
-baru tidak mewarisi produk legacy, id kategori baru selalu >20/tidak
-pernah didaur ulang, kategori yg sudah dihapus bersih pun tetap dapat id
-baru). Revert-verify manual OK (2/3 test relevan gagal sensible saat
-di-revert, hijau lagi setelah dipulihkan). `flutter analyze` bersih.
-Full-suite background agent dispatch dalam proses saat hand-off ini
-ditulis — CEK hasilnya sebelum menganggap sesi ini benar-benar tuntas
-kalau melanjutkan dari sini.
+Fix: tambah `locallyModified: Value(ref.read(
+laciMejaLocallyModifiedProvider))` ke insert yang sama (pola persis
+titik-titik lain, bukan pola baru). Test baru: 1 test ditambahkan ke
+`test/receipt_jadikan_preorder_test.dart` — device `deviceRole: 'kasir'`
+(non-owner via `pumpWithFakeApp(..., device: DeviceIdentity(...))`)
+lakukan alur "Jadikan Pre-order" penuh, assert baris hasil
+`locallyModified == true`. Revert-verified (fix di-revert sementara,
+test baru gagal `Expected: true, Actual: false` — persis prediksi bug,
+5 test lain di file yang sama tetap hijau karena tidak menyentuh flag
+ini; restore, hijau lagi). `flutter analyze` 0 issue. Full-suite
+background agent dispatch dalam proses saat hand-off ini ditulis — CEK
+hasilnya sebelum menganggap sesi ini benar-benar tuntas kalau
+melanjutkan dari sini.
 
-**Catatan penting utk sesi lanjutan**: fix ini HANYA mencegah kejadian
-BARU ke depan — kategori yg SUDAH terlanjur dibuat lewat mekanisme daur-
-ulang lama (sebelum fix ini) MUNGKIN MASIH punya anggota "hantu" yg
-terwarisi diam-diam. Belum ada cleanup otomatis utk data lama (sengaja
-tidak disentuh — tidak bisa dibedakan scr aman mana keanggotaan yg
-sengaja dicentang user vs warisan bug lama). Kalau user melapor lagi
-soal kategori TERTENTU yg masih terasa salah, arahkan buka "Kelola
-Kategori" → kategori itu → tinjau manual satu-satu baris yg tercentang,
-uncentang yg tidak seharusnya ada.
+**Investigasi terkait (Q1, TIDAK butuh fix)**: status "penuhi"/DP
+pre-order sudah tersinkron BENAR antar host-client — `fulfillPreorderEntry`,
+`collectPreorderDeposit`, `_reconcileTransactionTotals` semua sudah
+menstempel `updatedAt` dgn benar & `preorder_entries` sudah ada di
+`dumpSince` masterData/`laciMejaWithTx`.
+
+Sesi sebelumnya (69) — Item 74: kategori produk baru tidak lagi
+mewarisi produk lama secara diam-diam. Commit `25e8049`. **Catatan
+penting utk sesi lanjutan**: fix Item 74 HANYA mencegah kejadian BARU
+ke depan — kategori yg SUDAH terlanjur dibuat lewat mekanisme daur-
+ulang lama (sebelum fix itu) MUNGKIN MASIH punya anggota "hantu" yg
+terwarisi diam-diam. Belum ada cleanup otomatis utk data lama. Kalau
+user melapor lagi soal kategori TERTENTU yg masih terasa salah, arahkan
+buka "Kelola Kategori" → kategori itu → tinjau manual satu-satu baris
+yg tercentang, uncentang yg tidak seharusnya ada.
 
 Sesi sebelumnya (68) — Item 73: tombol hapus eksplisit Kategori Harga
 (dulu HANYA bisa lewat swipe `Dismissible`, tidak terlihat). Commit

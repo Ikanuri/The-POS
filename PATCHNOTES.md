@@ -8,6 +8,15 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 16 September 2026 (sesi ketujuh puluh)
+
+### 🐛 Perbaikan
+- **Pre-order yang dibuat lewat tombol "Jadikan Pre-order" di struk, di HP
+  kasir (bukan HP utama/owner), sekarang ikut tersinkron ke perangkat lain.**
+  Sebelumnya, kalau kasir menandai barang jadi pre-order lewat fitur ini di
+  HP-nya sendiri, catatan itu bisa tersimpan HANYA di HP itu dan tidak
+  pernah muncul di HP owner/perangkat lain walau sudah sinkron berkali-kali.
+
 ## 15 September 2026 (sesi keenam puluh sembilan)
 
 ### 🐛 Perbaikan
