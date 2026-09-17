@@ -8,6 +8,19 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 17 September 2026 (sesi ketujuh puluh satu)
+
+### 🐛 Perbaikan
+- **Pre-order dari nota yang sudah dibatalkan (void) sekarang berhenti
+  muncul sebagai "DP masih terhutang" di keranjang.** Sebelumnya, kalau
+  sebuah nota berisi pre-order lalu dibatalkan, sisa DP-nya tetap
+  nyangkut selamanya di pengingat "Pelunasi Pre-order" keranjang —
+  padahal nota sumbernya sendiri sudah tidak berlaku.
+- **Nominal "Total" di keranjang sekarang selalu sesuai dengan uang yang
+  benar-benar harus diterima**, termasuk saat ada tambahan "Lunasi
+  Hutang" atau "Pelunasi Pre-order" yang sedang aktif. Sebelumnya angka
+  di bagian atas keranjang bisa lebih kecil dari yang seharusnya.
+
 ## 16 September 2026 (sesi ketujuh puluh)
 
 ### 🐛 Perbaikan

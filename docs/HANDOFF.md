@@ -6,49 +6,66 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 16 September 2026, sesi ketujuh puluh — Item 75 SELESAI
-(fix sync "Jadikan Pre-order" di device kasir). Commit `1d346ca`. Versi
-kerja **2.66.4+143** (PATCH — bugfix, ADA entri PATCHNOTES.md).
-schemaVersion TETAP **44** (tidak ada migrasi, murni tambah 1 field ke
-insert yang sudah ada).
+_Update sesi 17 September 2026, sesi ketujuh puluh satu — Item 76
+SELESAI (pre-order dari nota void nyangkut selamanya + Total cart bar
+tidak ikut hutang/DP aktif). Commit `9ed34ab`. Versi kerja **2.66.5+144**
+(PATCH — bugfix, ADA entri PATCHNOTES.md). schemaVersion TETAP **44**
+(tidak ada migrasi, murni tambah filter WHERE ke query + rumus total UI).
 
-**Item 75** — ditemukan SAAT menjawab pertanyaan investigasi user
-("apakah edit pre-order jadi pre-order di client, setelah sync ke host
-lalu sync lagi, ikut terbawa?"), BUKAN dari laporan bug langsung. Root
-cause: `_showJadikanPreorderDialog` (`receipt_screen.dart`, fitur
-"Jadikan Pre-order" dari struk in-app — Item 3 lama) melakukan raw
-`PreorderEntriesCompanion.insert(...)` TANPA field `locallyModified` —
-default `false` per schema. Karena `masterData` (termasuk
-`preorder_entries`) SENGAJA dilewati saat klien push ke atas
-(`dumpSince(includeMasterData: false)`), SATU-SATUNYA jalur baris
-`preorder_entries` dari device non-owner sampai ke host adalah
-`dumpLaciMejaProposals()` yang filter `WHERE locally_modified = 1`.
-Baris dari fitur ini yang dibuat di device kasir/asisten (bukan owner)
-karenanya TIDAK PERNAH tersinkron ke host, walau sync diulang berkali-
-kali — stuck permanen di device asal. ~11 titik panggil lain di
-`receipt_screen.dart`/`laci_meja_dashboard_screen.dart` sudah benar
-menyambungkan `locallyModified: Value(ref.read(
-laciMejaLocallyModifiedProvider))`; titik ini kelewatan.
+**Item 76** — 2 bug dilaporkan user via screenshot ("Pilih Pre-order
+untuk Dilunasi" masih menampilkan LPG Rp36.000 padahal pelunasan+
+pengambilan sudah terlaksana & sudah tidak ada di Laci Meja; cart bar
+Total tidak sinkron dgn jumlah real saat ada penuhi DP/hutang aktif).
 
-Fix: tambah `locallyModified: Value(ref.read(
-laciMejaLocallyModifiedProvider))` ke insert yang sama (pola persis
-titik-titik lain, bukan pola baru). Test baru: 1 test ditambahkan ke
-`test/receipt_jadikan_preorder_test.dart` — device `deviceRole: 'kasir'`
-(non-owner via `pumpWithFakeApp(..., device: DeviceIdentity(...))`)
-lakukan alur "Jadikan Pre-order" penuh, assert baris hasil
-`locallyModified == true`. Revert-verified (fix di-revert sementara,
-test baru gagal `Expected: true, Actual: false` — persis prediksi bug,
-5 test lain di file yang sama tetap hijau karena tidak menyentuh flag
-ini; restore, hijau lagi). `flutter analyze` 0 issue. Full-suite
-background agent dispatch dalam proses saat hand-off ini ditulis — CEK
-hasilnya sebelum menganggap sesi ini benar-benar tuntas kalau
-melanjutkan dari sini.
+Bug 1 root cause (ditemukan lewat clue user: "nota tersebut pernah
+divoid, jadi id tidak match namun transaksi refer ke situ") —
+`getPreorderSettlementCandidates`/`getCustomerOutstandingPreorderDeposit`
+(`app_database.dart`) tidak pernah cek `cancelledAt`/status nota induk,
+cuma filter `paid = false`. `voidTransaction` SUDAH BENAR membatalkan
+pre-order pending saat nota di-void (`cancelPreorderEntry`, `cancelledAt`
+ter-stamp) — makanya sudah hilang dari Laci Meja (dashboard filter
+`cancelledAt.isNull()`) — tapi 2 query settlement ini tidak diberi tahu,
+jadi entrinya nyangkut SELAMANYA sbg "kandidat pelunasan". Diverifikasi
+(bukan cuma dugaan baca kode): `voidTransaction` adalah SATU-SATUNYA
+tempat di app yang men-set `status = 'void'` (grep seluruh
+app_database.dart), "Batalkan & Susun Ulang" sendiri MEMANGGIL
+`voidTransaction` dulu (bukan jalur bypass terpisah) — jadi fix ini
+otomatis berlaku ke SEMUA nota void, lama maupun baru, TANPA migrasi
+data (beda dari Item 75 kemarin yg cuma cegah kejadian baru — di sini
+kolom `cancelledAt` SUDAH benar ter-stamp sejak awal, cuma query-nya yg
+lupa cek). Direproduksi empiris pakai DB in-memory SEBELUM dianggap
+pasti: kandidat 1/Rp36.000 sebelum void, tetap 1/Rp36.000 setelah void
+di kode lama — baru dipercaya sbg root cause. Fix: tambah filter
+`cancelledAt IS NULL` + `transactions.status != 'void'` (pola sama 14
+query lain di file yg sudah benar).
 
-**Investigasi terkait (Q1, TIDAK butuh fix)**: status "penuhi"/DP
-pre-order sudah tersinkron BENAR antar host-client — `fulfillPreorderEntry`,
-`collectPreorderDeposit`, `_reconcileTransactionTotals` semua sudah
-menstempel `updatedAt` dgn benar & `preorder_entries` sudah ada di
-`dumpSince` masterData/`laciMejaWithTx`.
+Bug 2 root cause — `_CartBar` (`kasir_screen.dart`) menampilkan
+`total: cartNotifier.totalAmount` (murni item keranjang), TIDAK ikut
+`debtSettlementTotal`/`preorderSettlementTotal` dari entri "Lunasi
+Hutang"/"Pelunasi Pre-order" yg aktif — beda dari footer sheet
+keranjang (`cart_sheet.dart`) yg sudah benar. Kelas bug SAMA dgn Sesi 60
+(`_grandTotal` di `payment_screen.dart`), cuma fix itu dulu tidak
+menyentuh cart bar layar Kasir ini. Fix: `total` ditambah kedua
+provider itu.
+
+Test baru: `test/preorder_settlement_void_exclusion_test.dart` (DB-level,
+2 test: kandidat ADA sebelum void, HILANG setelah void),
+`test/cart_bar_settlement_total_test.dart` (widget, 2 test: Total naik
+sesuai saat entri hutang/DP settlement aktif). Revert-verify manual OK
+utk keduanya (gagal sensible saat fix di-revert, hijau lagi setelah
+dipulihkan). `flutter analyze` 0 issue, 17 test terkait (baru + lama)
+dijalankan bareng tanpa regresi. Full-suite background agent dispatch
+dalam proses saat hand-off ini ditulis — CEK hasilnya sebelum
+menganggap sesi ini benar-benar tuntas kalau melanjutkan dari sini.
+
+Sesi sebelumnya (70) — Item 75: fix sync "Jadikan Pre-order" di device
+kasir. Commit `1d346ca`.
+
+**Item 75 root cause (ringkas)**: `_showJadikanPreorderDialog` melakukan
+raw insert TANPA field `locallyModified` — baris dari fitur ini yg
+dibuat di device kasir/asisten (bukan owner) TIDAK PERNAH tersinkron ke
+host. Fix: tambah `locallyModified: Value(ref.read(
+laciMejaLocallyModifiedProvider))`, pola sama ~11 titik lain.
 
 Sesi sebelumnya (69) — Item 74: kategori produk baru tidak lagi
 mewarisi produk lama secara diam-diam. Commit `25e8049`. **Catatan

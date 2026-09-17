@@ -7,10 +7,17 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-17 (sesi ketujuh puluh satu — pre-order nota void nyangkut selamanya + Total cart bar, Item 76)
+
+- `9ed34ab` — fix(kasir): pre-order dari nota void nyangkut selamanya +
+  Total cart bar tidak ikut hutang/DP aktif
+
 ## 2026-09-16 (sesi ketujuh puluh — fix sync "Jadikan Pre-order" di device kasir, Item 75)
 
 - `1d346ca` — fix(kasir): "Jadikan Pre-order" dari struk tidak tersinkron
   ke host di device kasir
+- `a94f826` — docs: catat hash commit 1d346ca & bump versi 2.66.4+143
+  utk fix sync Jadikan Pre-order
 
 ## 2026-09-15 (sesi keenam puluh sembilan — kategori produk baru tidak lagi mewarisi produk lama, Item 74)
 
