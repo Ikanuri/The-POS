@@ -5008,6 +5008,14 @@ class AppDatabase extends _$AppDatabase {
   /// chip pengingat", pola sama persis `cartCustomerDebtProvider`). Query
   /// agregat SQL langsung (bukan iterasi [getPreorderSettlementCandidates]
   /// di Dart) — cukup angka total, tidak perlu detail per-baris di sini.
+  ///
+  /// Bug ditemukan (laporan user, screenshot chip "hantu" nyangkut di cart
+  /// bar): pre-order yang notanya sudah DI-VOID (`voidTransaction` sudah
+  /// benar membatalkan entri pending-nya, `cancelledAt` ter-stamp) TETAP
+  /// terhitung terhutang di sini — query ini tidak pernah dibuat tahu soal
+  /// nota void, cuma cek `paid = 0`. Fix: JOIN ke `transactions` + filter
+  /// `po.cancelled_at IS NULL` DAN `t.status != 'void'` (pola sama persis 14
+  /// query lain di file ini yang sudah benar filter status void).
   Future<(int total, int count)> getCustomerOutstandingPreorderDeposit(
       String customerId) async {
     final row = await customSelect(
@@ -5015,10 +5023,12 @@ class AppDatabase extends _$AppDatabase {
       '  AS total, COUNT(*) AS cnt '
       'FROM preorder_entries po '
       'INNER JOIN transaction_items ti ON ti.id = po.transaction_item_id '
-      'WHERE po.customer_id = ? AND po.paid = 0 '
+      'INNER JOIN transactions t ON t.id = po.transaction_id '
+      'WHERE po.customer_id = ? AND po.paid = 0 AND po.cancelled_at IS NULL '
+      "  AND t.status != 'void' "
       '  AND (ti.original_price * ti.qty - ti.subtotal) > 0',
       variables: [Variable.withString(customerId)],
-      readsFrom: {preorderEntries, transactionItems},
+      readsFrom: {preorderEntries, transactionItems, transactions},
     ).getSingleOrNull();
     final total = (row?.data['total'] as num?)?.toInt() ?? 0;
     final cnt = (row?.data['cnt'] as int?) ?? 0;
@@ -8782,6 +8792,14 @@ class AppDatabase extends _$AppDatabase {
   /// tanpa beli apa pun, atau entri lama sebelum `transactionItemId` ada) —
   /// tidak ada apa pun yg bisa "dilunasi" via keranjang utk kasus itu, sama
   /// seperti [getPreorderDepositOwed] balikin null utk kasus yg sama.
+  ///
+  /// Bug ditemukan (laporan user, terbukti reproduksi DB): pre-order dari
+  /// nota yang sudah DI-VOID (`voidTransaction` sudah benar membatalkan
+  /// entri pending-nya lewat `cancelPreorderEntry`, `cancelledAt` ter-stamp)
+  /// TETAP muncul sbg kandidat pelunasan selamanya — filter di sini cuma cek
+  /// `paid = false`, tidak pernah cek `cancelledAt`/status nota. Fix: filter
+  /// tambahan `cancelledAt.isNull()` + `transactions.status != 'void'`
+  /// (pola sama 14 query lain di file ini yang sudah benar).
   Future<List<PreorderSettlementCandidate>> getPreorderSettlementCandidates(
       String customerId) async {
     final rows = await (select(preorderEntries).join([
@@ -8795,7 +8813,9 @@ class AppDatabase extends _$AppDatabase {
       leftOuterJoin(unitTypes, unitTypes.id.equalsExp(productUnits.unitTypeId)),
     ])
           ..where(preorderEntries.customerId.equals(customerId) &
-              preorderEntries.paid.equals(false)))
+              preorderEntries.paid.equals(false) &
+              preorderEntries.cancelledAt.isNull() &
+              transactions.status.isNotValue('void')))
         .get();
     final out = <PreorderSettlementCandidate>[];
     for (final row in rows) {

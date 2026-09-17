@@ -2280,7 +2280,21 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
                         }
                       },
                       child: _CartBar(
-                        total: cartNotifier.totalAmount,
+                        // Bug ditemukan (laporan user): Total di cart bar
+                        // TIDAK ikut menjumlahkan "Lunasi Hutang"/"Pelunasi
+                        // Pre-order" yang sedang aktif di keranjang ini —
+                        // beda dari footer sheet keranjang (`cart_sheet.
+                        // dart`) yang SUDAH benar menjumlahkan ketiganya,
+                        // pola sama fix Sesi 60 (`_grandTotal` di
+                        // `payment_screen.dart`) yang dulu tidak menyentuh
+                        // cart bar layar ini.
+                        total: cartNotifier.totalAmount +
+                            ref
+                                .watch(cartDebtSettlementProvider(_cartId))
+                                .fold<int>(0, (s, e) => s + e.amount) +
+                            ref
+                                .watch(cartPreorderSettlementProvider(_cartId))
+                                .fold<int>(0, (s, e) => s + e.amount),
                         count: cart.length,
                         lastItem:
                             _isAddMode ? null : cartNotifier.lastTouchedItem,
