@@ -8,6 +8,16 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 18 September 2026 (sesi ketujuh puluh dua)
+
+### 🐛 Perbaikan
+- **Angka "Sisa" di ringkasan Pra-Bayar (keranjang & layar Bayar) sekarang
+  ikut memperhitungkan "Lunasi Hutang"/"Pelunasi Pre-order" yang sedang
+  aktif.** Sebelumnya angka "Sisa" bisa jauh lebih kecil dari uang yang
+  sebenarnya masih harus diterima dari pelanggan, membingungkan kasir
+  saat menyiapkan kembalian. Sistem penerimaan uang saat checkout tetap
+  aman sepanjang waktu — ini murni memperbaiki angka yang ditampilkan.
+
 ## 17 September 2026 (sesi ketujuh puluh satu)
 
 ### 🐛 Perbaikan

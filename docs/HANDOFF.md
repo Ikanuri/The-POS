@@ -6,57 +6,48 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 17 September 2026, sesi ketujuh puluh satu — Item 76
-SELESAI (pre-order dari nota void nyangkut selamanya + Total cart bar
-tidak ikut hutang/DP aktif). Commit `9ed34ab`. Versi kerja **2.66.5+144**
-(PATCH — bugfix, ADA entri PATCHNOTES.md). schemaVersion TETAP **44**
-(tidak ada migrasi, murni tambah filter WHERE ke query + rumus total UI).
+_Update sesi 18 September 2026, sesi ketujuh puluh dua — Item 77
+SELESAI ("Sisa" Pra-Bayar mengabaikan Lunasi Hutang/Pelunasi Pre-order
+aktif). Commit `0f7b517`. Versi kerja **2.66.6+145** (PATCH — bugfix,
+ADA entri PATCHNOTES.md). schemaVersion TETAP **44** (murni ubah rumus
+tampilan, tidak ada migrasi).
 
-**Item 76** — 2 bug dilaporkan user via screenshot ("Pilih Pre-order
-untuk Dilunasi" masih menampilkan LPG Rp36.000 padahal pelunasan+
-pengambilan sudah terlaksana & sudah tidak ada di Laci Meja; cart bar
-Total tidak sinkron dgn jumlah real saat ada penuhi DP/hutang aktif).
+**Item 77** — bug dilaporkan user via screenshot nyata: baris "Sisa
+Rp8.950" di footer keranjang (item Rp13.200, Pra-Bayar Rp4.250) sama
+sekali tidak menghitung Hutang Rp29.400 yg sedang aktif dilunasi (jelas
+salah: 13.200-4.250=8.950, harusnya kasir masih perlu terima total
+38.350). Root cause di 2 tempat SEKALIGUS, sama-sama pakai basis total
+ITEM KERANJANG mentah, bukan gabungan (item + Lunasi Hutang + Pelunasi
+Pre-order):
+1. `cart_sheet.dart` — `_PrabayarFooterSummary` dikirimi `total` polos
+   (bukan `total + debtSettlementTotal + preorderSettlementTotal`).
+2. `payment_screen.dart` — kartu Pra-Bayar "Sisa yang perlu dibayar"
+   pakai `_total - _prabayarPool` (bukan `_grandTotal - _prabayarPool`).
 
-Bug 1 root cause (ditemukan lewat clue user: "nota tersebut pernah
-divoid, jadi id tidak match namun transaksi refer ke situ") —
-`getPreorderSettlementCandidates`/`getCustomerOutstandingPreorderDeposit`
-(`app_database.dart`) tidak pernah cek `cancelledAt`/status nota induk,
-cuma filter `paid = false`. `voidTransaction` SUDAH BENAR membatalkan
-pre-order pending saat nota di-void (`cancelPreorderEntry`, `cancelledAt`
-ter-stamp) — makanya sudah hilang dari Laci Meja (dashboard filter
-`cancelledAt.isNull()`) — tapi 2 query settlement ini tidak diberi tahu,
-jadi entrinya nyangkut SELAMANYA sbg "kandidat pelunasan". Diverifikasi
-(bukan cuma dugaan baca kode): `voidTransaction` adalah SATU-SATUNYA
-tempat di app yang men-set `status = 'void'` (grep seluruh
-app_database.dart), "Batalkan & Susun Ulang" sendiri MEMANGGIL
-`voidTransaction` dulu (bukan jalur bypass terpisah) — jadi fix ini
-otomatis berlaku ke SEMUA nota void, lama maupun baru, TANPA migrasi
-data (beda dari Item 75 kemarin yg cuma cegah kejadian baru — di sini
-kolom `cancelledAt` SUDAH benar ter-stamp sejak awal, cuma query-nya yg
-lupa cek). Direproduksi empiris pakai DB in-memory SEBELUM dianggap
-pasti: kandidat 1/Rp36.000 sebelum void, tetap 1/Rp36.000 setelah void
-di kode lama — baru dipercaya sbg root cause. Fix: tambah filter
-`cancelledAt IS NULL` + `transactions.status != 'void'` (pola sama 14
-query lain di file yg sudah benar).
+**PENTING, dicek eksplisit sebelum dianggap "aman"**: TIDAK ada
+kebocoran uang sungguhan — gerbang penerimaan uang di keypad/QRIS
+(`_onBayarPressed`) SUDAH BENAR mewajibkan tendered >= `_grandTotal`
+sejak Item 65, & jalan pintas "Selesaikan Transaksi" sudah digerbang
+`_settlementTotal == 0`. Bug ini MURNI salah tampilan (bisa
+membingungkan kasir siapkan kembalian/nominal ke pelanggan), bukan
+celah yg meloloskan checkout kurang bayar.
 
-Bug 2 root cause — `_CartBar` (`kasir_screen.dart`) menampilkan
-`total: cartNotifier.totalAmount` (murni item keranjang), TIDAK ikut
-`debtSettlementTotal`/`preorderSettlementTotal` dari entri "Lunasi
-Hutang"/"Pelunasi Pre-order" yg aktif — beda dari footer sheet
-keranjang (`cart_sheet.dart`) yg sudah benar. Kelas bug SAMA dgn Sesi 60
-(`_grandTotal` di `payment_screen.dart`), cuma fix itu dulu tidak
-menyentuh cart bar layar Kasir ini. Fix: `total` ditambah kedua
-provider itu.
-
-Test baru: `test/preorder_settlement_void_exclusion_test.dart` (DB-level,
-2 test: kandidat ADA sebelum void, HILANG setelah void),
-`test/cart_bar_settlement_total_test.dart` (widget, 2 test: Total naik
-sesuai saat entri hutang/DP settlement aktif). Revert-verify manual OK
-utk keduanya (gagal sensible saat fix di-revert, hijau lagi setelah
-dipulihkan). `flutter analyze` 0 issue, 17 test terkait (baru + lama)
+Fix: kedua tempat ditambah komponen hutang/pre-order settlement ke
+basis perhitungan. Test baru: 1 test ditambahkan ke
+`test/cart_sheet_prabayar_test.dart`,
+`test/payment_screen_prabayar_debt_sisa_test.dart` (baru). Revert-verify
+manual OK utk keduanya (gagal sensible saat fix di-revert, hijau lagi
+setelah dipulihkan). `flutter analyze` 0 issue, 35 test terkait
 dijalankan bareng tanpa regresi. Full-suite background agent dispatch
 dalam proses saat hand-off ini ditulis — CEK hasilnya sebelum
 menganggap sesi ini benar-benar tuntas kalau melanjutkan dari sini.
+
+Sesi sebelumnya (71) — Item 76: 2 bug (pre-order dari nota void
+nyangkut selamanya di "Pelunasi Pre-order" — fix filter `cancelledAt
+IS NULL` + `status != 'void'` di `getPreorderSettlementCandidates`/
+`getCustomerOutstandingPreorderDeposit`, berlaku ke SEMUA nota void tanpa
+migrasi data; Total `_CartBar` tidak ikut hutang/DP aktif). Commit
+`9ed34ab`.
 
 Sesi sebelumnya (70) — Item 75: fix sync "Jadikan Pre-order" di device
 kasir. Commit `1d346ca`.
