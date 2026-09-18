@@ -8,6 +8,15 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 18 September 2026 (sesi ketujuh puluh tiga)
+
+### 🐛 Perbaikan
+- **Pre-order yang dilunasi DP-nya atau dipenuhi lewat keranjang/struk di
+  HP kasir (bukan HP utama/owner) sekarang ikut tersinkron ke perangkat
+  lain.** Sebelumnya, perubahan itu bisa tersimpan HANYA di HP kasir itu
+  sendiri dan tidak pernah muncul di HP owner/perangkat lain walau sudah
+  sinkron berkali-kali.
+
 ## 18 September 2026 (sesi ketujuh puluh dua)
 
 ### 🐛 Perbaikan

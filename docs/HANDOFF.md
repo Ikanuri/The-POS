@@ -6,41 +6,49 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 18 September 2026, sesi ketujuh puluh dua — Item 77
-SELESAI ("Sisa" Pra-Bayar mengabaikan Lunasi Hutang/Pelunasi Pre-order
-aktif). Commit `0f7b517`. Versi kerja **2.66.6+145** (PATCH — bugfix,
-ADA entri PATCHNOTES.md). schemaVersion TETAP **44** (murni ubah rumus
-tampilan, tidak ada migrasi).
+_Update sesi 18 September 2026, sesi ketujuh puluh tiga — Item 78
+SELESAI (pre-order yang dilunasi/dipenuhi di device kasir tidak
+tersinkron ke host). Commit `5a1dfc6`. Versi kerja **2.66.7+146**
+(PATCH — bugfix, ADA entri PATCHNOTES.md). schemaVersion TETAP **44**
+(murni tambah parameter fungsi, tidak ada migrasi).
 
-**Item 77** — bug dilaporkan user via screenshot nyata: baris "Sisa
-Rp8.950" di footer keranjang (item Rp13.200, Pra-Bayar Rp4.250) sama
-sekali tidak menghitung Hutang Rp29.400 yg sedang aktif dilunasi (jelas
-salah: 13.200-4.250=8.950, harusnya kasir masih perlu terima total
-38.350). Root cause di 2 tempat SEKALIGUS, sama-sama pakai basis total
-ITEM KERANJANG mentah, bukan gabungan (item + Lunasi Hutang + Pelunasi
-Pre-order):
-1. `cart_sheet.dart` — `_PrabayarFooterSummary` dikirimi `total` polos
-   (bukan `total + debtSettlementTotal + preorderSettlementTotal`).
-2. `payment_screen.dart` — kartu Pra-Bayar "Sisa yang perlu dibayar"
-   pakai `_total - _prabayarPool` (bukan `_grandTotal - _prabayarPool`).
+**Item 78** — ditemukan SAAT user bertanya "untuk entitas laci meja
+lain?" (susulan dari investigasi Item 75/77): dicek SEMUA fungsi mutasi
+Titip/Ketinggalan & Pinjaman — SEMUANYA AMAN, sudah benar wire
+`locallyModified` di tiap titik panggil. Tapi 2 titik pre-order
+bermasalah:
+1. `collectPreorderDeposit` (app_database.dart) sebelumnya TIDAK PUNYA
+   parameter `locallyModified` SAMA SEKALI (beda dari SEMUA fungsi Laci
+   Meja lain yang sudah punya sejak awal) — baris `preorder_entries.
+   paid = true` dari device manapun tidak pernah ditandai utk
+   diusulkan ke host.
+2. `saveTransactionWithDebtSettlements` (checkout "Pelunasi Pre-order"
+   via keranjang) juga tidak punya parameter ini — baik panggilan ke
+   `collectPreorderDeposit` maupun `fulfillPreorderEntry` (opsi
+   "Sekaligus penuhi") SELALU pakai default false; sudah ada komentar
+   lama di kode yang MENGAKUI celah ini scr eksplisit ("cart checkout
+   ini memang belum membedakan device owner/asisten"), tapi belum
+   pernah diperbaiki sampai sekarang.
 
-**PENTING, dicek eksplisit sebelum dianggap "aman"**: TIDAK ada
-kebocoran uang sungguhan — gerbang penerimaan uang di keypad/QRIS
-(`_onBayarPressed`) SUDAH BENAR mewajibkan tendered >= `_grandTotal`
-sejak Item 65, & jalan pintas "Selesaikan Transaksi" sudah digerbang
-`_settlementTotal == 0`. Bug ini MURNI salah tampilan (bisa
-membingungkan kasir siapkan kembalian/nominal ke pelanggan), bukan
-celah yg meloloskan checkout kurang bayar.
+Fix: tambah param `locallyModified` ke kedua fungsi, teruskan dari 3
+titik panggil (`laci_meja_dashboard_screen.dart`, `receipt_screen.
+dart`, `payment_screen.dart` — yang terakhir perlu import baru
+`laci_meja_provider.dart`) memakai `laciMejaLocallyModifiedProvider`,
+pola sama semua fungsi Laci Meja lain. Test baru: 2 test di
+`test/preorder_settlement_checkout_test.dart` (checkout non-owner ->
+locallyModified=true, baik DP saja maupun DP+fulfillOnSettle), 1 test
+di `test/receipt_preorder_fulfill_button_test.dart` (tombol Penuhi
+struk non-owner). Revert-verify manual OK utk keduanya. `flutter
+analyze` 0 issue, 41 test terkait dijalankan bareng tanpa regresi.
+Full-suite background agent dispatch dalam proses saat hand-off ini
+ditulis — CEK hasilnya sebelum menganggap sesi ini benar-benar tuntas
+kalau melanjutkan dari sini.
 
-Fix: kedua tempat ditambah komponen hutang/pre-order settlement ke
-basis perhitungan. Test baru: 1 test ditambahkan ke
-`test/cart_sheet_prabayar_test.dart`,
-`test/payment_screen_prabayar_debt_sisa_test.dart` (baru). Revert-verify
-manual OK utk keduanya (gagal sensible saat fix di-revert, hijau lagi
-setelah dipulihkan). `flutter analyze` 0 issue, 35 test terkait
-dijalankan bareng tanpa regresi. Full-suite background agent dispatch
-dalam proses saat hand-off ini ditulis — CEK hasilnya sebelum
-menganggap sesi ini benar-benar tuntas kalau melanjutkan dari sini.
+Sesi sebelumnya (72) — Item 77: "Sisa" Pra-Bayar mengabaikan Lunasi
+Hutang/Pelunasi Pre-order aktif di 2 tempat (`cart_sheet.dart`
+`_PrabayarFooterSummary`, `payment_screen.dart` kartu Pra-Bayar) —
+DIKONFIRMASI murni bug tampilan, gerbang penerimaan uang keypad/QRIS
+tetap aman (mewajibkan `_grandTotal` sejak Item 65). Commit `0f7b517`.
 
 Sesi sebelumnya (71) — Item 76: 2 bug (pre-order dari nota void
 nyangkut selamanya di "Pelunasi Pre-order" — fix filter `cancelledAt

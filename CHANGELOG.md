@@ -7,10 +7,17 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-18 (sesi ketujuh puluh tiga — pre-order dilunasi/dipenuhi di device kasir tidak tersinkron, Item 78)
+
+- `5a1dfc6` — fix(sync): pre-order yang dilunasi/dipenuhi di device
+  kasir tidak tersinkron ke host
+
 ## 2026-09-18 (sesi ketujuh puluh dua — "Sisa" Pra-Bayar mengabaikan Lunasi Hutang/Pelunasi Pre-order, Item 77)
 
 - `0f7b517` — fix(kasir): "Sisa" Pra-Bayar mengabaikan Lunasi Hutang/
   Pelunasi Pre-order aktif
+- `b05ee15` — docs: catat hash commit 0f7b517 & bump versi 2.66.6+145
+  utk fix Sisa Pra-Bayar
 
 ## 2026-09-17 (sesi ketujuh puluh satu — pre-order nota void nyangkut selamanya + Total cart bar, Item 76)
 
