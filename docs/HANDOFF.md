@@ -6,7 +6,66 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 18 September 2026, sesi ketujuh puluh tiga — Item 78
+_Update sesi 18 September 2026, sesi ketujuh puluh empat — Item 79
+(redesain UX katalog HTML `order_page_service.dart`) SEMUA 4 MILESTONE
+SELESAI, di branch **`feature/katalog-html-ux-redesign`** (BUKAN
+`main`/`claude/kategori-produk-qty-harga-mqjh21` — user eksplisit minta
+kerja di branch terpisah, JANGAN merge/push sampai diminta)._
+
+**Konteks singkat**: brainstorming blueprint Mini App Telegram
+(DurgerKingBot) → ternyata app ini SUDAH punya sistem serupa
+(`order_page_service.dart`, katalog HTML self-contained tanpa
+CDN/backend, submit via `wa.me` + kode mesin `#PSN:` dibaca
+`OrderParserService`). 2 prototipe demo dikirim sbg file mentah (BUKAN
+bagian app, referensi smoothness saja). User setuju port ke produksi via
+4 milestone, semua sekarang SELESAI di branch ini:
+
+1. **M1 — Auto-match ikon produk** (commit `91147a6`): field `category`
+   baru di catalog JSON (`db.getCategoryNamesForProducts`, reuse
+   fungsi yg sudah ada), JS `pickIcon(name, category)` — kamus kata
+   kunci nama (Bahasa Indonesia, toko kelontong) → fallback kategori →
+   fallback ikon generik. TANPA config manual per produk.
+2. **M2 — Toggle layout List ↔ Tile** (commit `189f88f`): tombol
+   `layoutBtn` di topbar, `localStorage` key `posOrderLayout` TERPISAH
+   dari `posOrderTheme`, murni CSS grid di atas markup `.prow` yang
+   SAMA (`renderList()`/`setQty()` TIDAK disentuh).
+3. **M3 — Qty control desimal sesuai unit_type — TERNYATA SUDAH BENAR,
+   TANPA perubahan kode**: diverifikasi ulang ke `kasir_screen.dart`
+   sungguhan (`_incrementVariant`/`_decrementVariant`), stepper +/-
+   app SELALU step bulat `±1` apa pun tipe satuannya — TIDAK ADA logic
+   desimal per unit_type di mana pun. Katalog HTML sudah persis pola
+   ini. Asumsi awal brainstorming ("perlu step 0.1 utk satuan timbang")
+   SALAH, sudah dikoreksi ke user secara eksplisit.
+4. **M4 — Transisi/animasi smooth** (commit `fb1bb26`): scrim &
+   confirm-overlay dari `display:none/block` instan → fade
+   opacity+visibility (tetap tidak menangkap klik/fokus saat
+   tersembunyi via `pointer-events`/`visibility`), confirm-box pop-in
+   scale, qty +/- dapat animasi bump/pop CSS murni (leverage
+   `buildProwControls()` yang SELALU bikin elemen DOM baru tiap qty
+   berubah — tidak perlu trik JS restart animasi), hormat
+   `prefers-reduced-motion`, toggle List↔Tile fade opacity sebelum
+   reflow grid (TANPA menyentuh `initLayout()` saat load pertama,
+   hindari flash kosong).
+
+Test: `test/order_page_service_test.dart` (28 test, +2 baru M4; M1/M2
+juga py test masing²), semua revert-verified (git stash push/pop pada
+`order_page_service.dart`, test baru gagal sensible, restore, hijau
+lagi). `flutter analyze` 0 issue. Regression check bareng
+`order_page_service_cart_delete_test.dart` +
+`order_page_service_cart_persist_test.dart` — 31 test total, 0 gagal.
+
+**BELUM dilakukan**: full `flutter test` suite (seluruh proyek, bukan
+cuma file katalog) belum dijalankan sesi ini — kalau melanjutkan dari
+sini, jalankan dulu sebelum menganggap branch ini "siap tanya user utk
+merge". PATCHNOTES.md TIDAK diupdate (fitur belum dirilis/di-merge,
+belum user-facing sampai merge disetujui). Versi (`pubspec.yaml`) TIDAK
+di-bump di branch ini — tunggu keputusan merge, MINOR bump nanti
+(fitur baru terlihat pengguna) sekaligus saat digabung.
+
+_Ringkasan sesi-sesi sebelumnya di bawah ini dipertahankan sbg histori
+teknis:_
+
+Sesi ketujuh puluh tiga — Item 78
 SELESAI (pre-order yang dilunasi/dipenuhi di device kasir tidak
 tersinkron ke host). Commit `5a1dfc6`. Versi kerja **2.66.7+146**
 (PATCH — bugfix, ADA entri PATCHNOTES.md). schemaVersion TETAP **44**

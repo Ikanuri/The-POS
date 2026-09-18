@@ -7,6 +7,15 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-18 (sesi ketujuh puluh empat — redesain UX katalog HTML, Item 79, branch `feature/katalog-html-ux-redesign`, BELUM merge ke main)
+
+- `fb1bb26` — feat(katalog): transisi & animasi smooth di katalog HTML
+  (Item 79 M4)
+- `189f88f` — feat(katalog): toggle layout List <-> Tile di katalog HTML
+  (Item 79 M2)
+- `91147a6` — feat(katalog): auto-pilih ikon produk di katalog HTML tanpa
+  config manual (Item 79 M1)
+
 ## 2026-09-18 (sesi ketujuh puluh tiga — pre-order dilunasi/dipenuhi di device kasir tidak tersinkron, Item 78)
 
 - `5a1dfc6` — fix(sync): pre-order yang dilunasi/dipenuhi di device
