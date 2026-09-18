@@ -696,4 +696,78 @@ void main() {
 
     await db.close();
   });
+
+  test(
+      'Item 79 M4 — scrim & confirm-overlay pakai fade opacity/visibility '
+      '(bukan display:none/block instan lagi), tetap tidak menangkap '
+      'klik/fokus saat tersembunyi', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    final result = await OrderPageService.generateHtml(
+        db: db, storeName: 'Toko Berkah');
+
+    expect(
+        result.html.contains(
+            '.scrim{position:fixed;inset:0;background:rgba(20,16,10,.42);z-index:20;\n'
+            '  opacity:0;visibility:hidden;'),
+        isTrue);
+    expect(result.html.contains('.scrim.show{opacity:1;visibility:visible;'),
+        isTrue);
+    expect(
+        result.html.contains(
+            'opacity:0;visibility:hidden;pointer-events:none;'),
+        isTrue,
+        reason: 'confirm-overlay harus fade & tidak menangkap klik saat '
+            'tersembunyi');
+    expect(
+        result.html.contains(
+            '.confirm-overlay.show{opacity:1;visibility:visible;pointer-events:auto;'),
+        isTrue);
+    expect(result.html.contains('transform:scale(.94)'), isTrue,
+        reason: 'confirm-box harus punya pop-in scale');
+    expect(result.html.contains('.confirm-overlay.show .confirm-box{transform:scale(1);}'),
+        isTrue);
+
+    await db.close();
+  });
+
+  test(
+      'Item 79 M4 — qty stepper (+/-) punya animasi bump/pop, hormat '
+      'prefers-reduced-motion, dan toggle List<->Tile fade sebelum reflow',
+      () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    final result = await OrderPageService.generateHtml(
+        db: db, storeName: 'Toko Berkah');
+
+    expect(result.html.contains('@keyframes prow-bump'), isTrue);
+    expect(result.html.contains('@keyframes prow-pop'), isTrue);
+    expect(
+        result.html
+            .contains('.prow-circle-qty{animation:prow-bump .28s'),
+        isTrue);
+    expect(result.html.contains('.prow-minus{animation:prow-pop .18s'),
+        isTrue);
+    expect(
+        result.html.contains('@media (prefers-reduced-motion: reduce){\n'
+            '  .prow-circle-qty,.prow-minus{animation:none;}\n'
+            '}'),
+        isTrue);
+
+    // Toggle list<->tile: fade opacity out, ganti mode, fade in -- bukan
+    // reflow instan.
+    expect(result.html.contains("list.style.opacity = '0';"), isTrue);
+    expect(result.html.contains("list.style.opacity = '1';"), isTrue);
+    expect(result.html.contains('setTimeout(function(){\n'
+        '    applyLayout(next);'), isTrue);
+    // initLayout() saat load TIDAK boleh ikut fade (hindari flash kosong
+    // di render pertama) -- applyLayout dipanggil langsung tanpa opacity
+    // trick di initLayout().
+    expect(
+        result.html.contains(
+            'function initLayout(){\n'
+            '  var saved = null;'),
+        isTrue,
+        reason: 'initLayout tetap sederhana, tidak ikut disentuh trik fade');
+
+    await db.close();
+  });
 }

@@ -283,7 +283,7 @@ body{
 .search input{flex:1;border:none;background:transparent;font-size:16px;
   color:var(--ink);outline:none;font-family:var(--font);}
 .search svg{flex-shrink:0;opacity:.6;}
-.list{flex:1;overflow-y:auto;padding:0 16px 100px;}
+.list{flex:1;overflow-y:auto;padding:0 16px 100px;transition:opacity .12s ease;}
 .prow{background:var(--card);border:1px solid var(--line);border-radius:var(--r-card);
   margin-bottom:9px;overflow:hidden;}
 .prow-main{display:flex;align-items:center;gap:12px;padding:13px;cursor:pointer;}
@@ -307,6 +307,17 @@ body{
 .prow-minus{width:36px;height:36px;border:none;border-radius:999px;cursor:pointer;
   background:#D64545;color:#fff;font-size:19px;font-weight:700;flex-shrink:0;
   display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.15);}
+/* Item 79 M4 — buildProwControls() SELALU bikin elemen baru tiap qty
+   berubah (replaceWith, bukan update in-place), jadi animasi cukup
+   ditempel di kelasnya langsung (tanpa trik ganti-nama animasi) --
+   browser otomatis memutarnya tiap kali node baru ini masuk DOM. */
+@keyframes prow-bump{0%{transform:scale(1);}45%{transform:scale(1.22);}100%{transform:scale(1);}}
+@keyframes prow-pop{0%{transform:scale(0);}100%{transform:scale(1);}}
+.prow-circle-qty{animation:prow-bump .28s cubic-bezier(.3,1.4,.5,1);}
+.prow-minus{animation:prow-pop .18s cubic-bezier(.3,1.4,.5,1);}
+@media (prefers-reduced-motion: reduce){
+  .prow-circle-qty,.prow-minus{animation:none;}
+}
 
 /* Item 79 M2 — mode Tile: grid 2 kolom, kartu vertikal. Murni CSS di
    atas markup .prow yang SAMA PERSIS (icon/info/controls) — renderList()
@@ -337,9 +348,13 @@ body{
   border-radius:var(--r-btn);padding:11px 18px;font-size:15px;font-weight:600;
   cursor:pointer;flex-shrink:0;}
 .cb-view:disabled{opacity:.4;}
+/* Item 79 M4 — scrim & overlay dulu instan display:none/block (pop
+   tiba-tiba), sekarang fade konsisten dgn timing .sheet (.22s) yang sudah
+   ada. `visibility` dipakai supaya tetap tidak menangkap klik/tab-focus
+   saat tersembunyi, TANPA display:none yang mencegah transisi opacity. */
 .scrim{position:fixed;inset:0;background:rgba(20,16,10,.42);z-index:20;
-  display:none;}
-.scrim.show{display:block;}
+  opacity:0;visibility:hidden;transition:opacity .2s ease,visibility 0s linear .2s;}
+.scrim.show{opacity:1;visibility:visible;transition:opacity .2s ease;}
 .sheet{position:fixed;left:0;right:0;bottom:0;max-width:480px;margin:0 auto;
   background:var(--panel);border-radius:18px 18px 0 0;z-index:21;
   max-height:86vh;display:flex;flex-direction:column;
@@ -376,10 +391,15 @@ body{
 .ci-delete svg{width:17px;height:17px;}
 .ci-delete:hover{background:var(--danger-bg);color:var(--danger);}
 .confirm-overlay{position:fixed;inset:0;background:rgba(20,16,10,.42);z-index:40;
-  display:none;align-items:center;justify-content:center;}
-.confirm-overlay.show{display:flex;}
+  display:flex;align-items:center;justify-content:center;
+  opacity:0;visibility:hidden;pointer-events:none;
+  transition:opacity .2s ease,visibility 0s linear .2s;}
+.confirm-overlay.show{opacity:1;visibility:visible;pointer-events:auto;
+  transition:opacity .2s ease;}
 .confirm-box{background:var(--card);border-radius:16px;padding:20px;width:280px;
-  max-width:calc(100vw - 40px);box-shadow:0 12px 30px rgba(0,0,0,.25);}
+  max-width:calc(100vw - 40px);box-shadow:0 12px 30px rgba(0,0,0,.25);
+  transform:scale(.94);transition:transform .18s cubic-bezier(.3,1.4,.5,1);}
+.confirm-overlay.show .confirm-box{transform:scale(1);}
 .confirm-title{font-size:16px;font-weight:700;color:var(--ink);margin-bottom:8px;}
 .confirm-body{font-size:14px;color:var(--ink-2);line-height:1.5;margin-bottom:18px;}
 .confirm-actions{display:flex;gap:10px;}
@@ -576,9 +596,17 @@ function initLayout(){
   applyLayout(saved);
 }
 document.getElementById('layoutBtn').addEventListener('click', function(){
-  var cur = document.getElementById('list').classList.contains('tile-mode') ? 'tile' : 'list';
+  var list = document.getElementById('list');
+  var cur = list.classList.contains('tile-mode') ? 'tile' : 'list';
   var next = cur === 'tile' ? 'list' : 'tile';
-  applyLayout(next);
+  // Item 79 M4 — fade singkat sebelum reflow grid<->list, supaya baris
+  // tidak "melompat" instan. Cuma di jalur klik (bukan initLayout() saat
+  // load) supaya tidak ada flash kosong yang tidak perlu di render pertama.
+  list.style.opacity = '0';
+  setTimeout(function(){
+    applyLayout(next);
+    list.style.opacity = '1';
+  }, 120);
   try { localStorage.setItem('posOrderLayout', next); } catch (e) {}
 });
 initLayout();
