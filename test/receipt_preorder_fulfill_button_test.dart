@@ -2,6 +2,7 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:the_pos/core/database/app_database.dart';
+import 'package:the_pos/core/providers/device_provider.dart';
 import 'package:the_pos/features/kasir/receipt_screen.dart';
 
 import 'helpers/pump_app.dart';
@@ -219,6 +220,67 @@ void main() {
     expect(find.text('Penuhi'), findsNothing);
     expect(find.text('Pinjaman Barang'), findsOneWidget);
     expect(find.text('Titip/Ketinggalan (di luar nota)'), findsOneWidget);
+
+    await drain(tester);
+  });
+
+  testWidgets(
+      'Item 78: device KASIR (bukan owner) -> tap Penuhi lalu bayar DP di '
+      'sheet -> baris preorderEntries HARUS locallyModified=true, kalau '
+      'tidak baris ini tidak pernah tersinkron ke host', (tester) async {
+    // Harga dikunci Rp 0 di baris nota -> DP/jaminan masih terhutang, sheet
+    // pembayaran akan ditawarkan begitu Penuhi ditap.
+    await db.into(db.transactionItems).insert(TransactionItemsCompanion.insert(
+        id: 'i1',
+        transactionId: txId,
+        productId: 'P0',
+        productUnitId: 'U0',
+        qty: 1,
+        priceAtSale: 0,
+        originalPrice: 15000,
+        subtotal: 0));
+    await db.addPreorderEntry(
+        id: 'p1',
+        productId: 'P0',
+        productUnitId: 'U0',
+        customerName: 'Warung Sari',
+        qtyOrdered: 1,
+        depositQty: 0,
+        transactionId: txId,
+        transactionItemId: 'i1');
+
+    await pumpWithFakeApp(
+      tester,
+      db: db,
+      child: const ReceiptScreen(transactionId: txId),
+      device: const DeviceIdentity(
+        storeUuid: 'test-store-uuid',
+        storeKey: 'test-store-key',
+        storeName: 'Toko Uji',
+        deviceName: 'Kasir 2',
+        deviceCode: 'K2',
+        deviceRole: 'kasir',
+      ),
+    );
+
+    await tester.tap(find.text('Penuhi'));
+    await tester.pumpAndSettle();
+
+    // Sheet DP/jaminan muncul -> "Uang Pas" lalu tombol Bayar (satu-satunya
+    // FilledButton di sheet) mengumpulkan DP sepenuhnya.
+    await tester.tap(find.text('Uang Pas'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(FilledButton).last);
+    await tester.pumpAndSettle();
+
+    final entry = await (db.select(db.preorderEntries)
+          ..where((t) => t.id.equals('p1')))
+        .getSingle();
+    expect(entry.paid, isTrue);
+    expect(entry.fulfilledAt, isNotNull);
+    expect(entry.locallyModified, isTrue,
+        reason: 'device non-owner wajib menandai baris ini supaya ikut '
+            'diusulkan ke host lewat dumpLaciMejaProposals');
 
     await drain(tester);
   });

@@ -12,6 +12,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/database/app_database.dart';
 import '../../core/models/cart_item.dart';
 import '../../core/providers/device_provider.dart';
+import '../../core/providers/laci_meja_provider.dart';
 import '../../core/providers/low_stock_alert_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/input_formatters.dart';
@@ -993,6 +994,11 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         kasirId: device.deviceCode,
         now: now,
         loyaltyEntry: loyaltyEntry,
+        // Item 78: sebelumnya tidak diisi sama sekali -- baris
+        // preorder_entries yang disentuh checkout keranjang ini
+        // (collectPreorderDeposit/fulfillPreorderEntry) dari device
+        // non-owner tidak pernah tersinkron ke host.
+        locallyModified: ref.read(laciMejaLocallyModifiedProvider),
       );
       // Item 55 — nomor sudah "dikonsumsi" jadi transaction.local_id
       // sungguhan, lepaskan dari reservasi (kalau memang berasal dari

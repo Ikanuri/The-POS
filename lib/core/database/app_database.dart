@@ -3425,6 +3425,14 @@ class AppDatabase extends _$AppDatabase {
     required String kasirId,
     DateTime? now,
     LoyaltyPointLedgerCompanion? loyaltyEntry,
+    // Item 78: dulu TIDAK ADA sama sekali ("cart checkout ini memang
+    // belum membedakan device owner/asisten utk event Laci Meja") --
+    // baris `preorder_entries` yang disentuh checkout ini (via
+    // collectPreorderDeposit/fulfillPreorderEntry di bawah) dari device
+    // non-owner TIDAK PERNAH tersinkron ke host. Pemanggil (payment_
+    // screen.dart) WAJIB mengisi dari `laciMejaLocallyModifiedProvider`,
+    // pola sama semua fungsi Laci Meja lain.
+    bool locallyModified = false,
   }) async {
     final ts = now ?? DateTime.now();
     await transaction(() async {
@@ -3467,6 +3475,7 @@ class AppDatabase extends _$AppDatabase {
           method: ps.method,
           methodName: ps.methodName,
           kasirId: kasirId,
+          locallyModified: locallyModified,
         );
         // null = tidak ada apa pun yg perlu dikumpulkan LAGI utk entri ini
         // (sudah terkumpul lewat jalur lain di antara pilih & bayar) —
@@ -3476,12 +3485,10 @@ class AppDatabase extends _$AppDatabase {
         // terkumpul barusan (owed != null), jadi kalau kasir centang
         // "Sekaligus penuhi", langsung penuhi qty PENUH entri ini di
         // transaksi atomik yang sama (`fulfillPreorderEntry` sendiri
-        // sudah urus stok/log Laci Meja — tidak diulang di sini). TIDAK
-        // memakai `locallyModified` (default false), sama persis pola
-        // `collectPreorderDeposit` di atas — cart checkout ini memang
-        // belum membedakan device owner/asisten utk event Laci Meja.
+        // sudah urus stok/log Laci Meja — tidak diulang di sini).
         if (ps.fulfillOnSettle) {
-          await fulfillPreorderEntry(ps.preorderEntryId, deviceCode: kasirId);
+          await fulfillPreorderEntry(ps.preorderEntryId,
+              locallyModified: locallyModified, deviceCode: kasirId);
         }
         detail.add({
           'invoiceId': ps.invoiceId,
@@ -8622,6 +8629,12 @@ class AppDatabase extends _$AppDatabase {
     required String method,
     String? methodName,
     required String kasirId,
+    // Item 78: sebelumnya parameter ini TIDAK ADA sama sekali -- baris
+    // `paid = true` yang ditulis dari device non-owner TIDAK PERNAH
+    // ditandai utk diusulkan ke host (dumpLaciMejaProposals filter
+    // locally_modified=1), beda dari fungsi Laci Meja lain yang semua
+    // sudah punya param ini sejak awal.
+    bool locallyModified = false,
   }) async {
     return transaction(() async {
       final entry = await (select(preorderEntries)
@@ -8660,6 +8673,7 @@ class AppDatabase extends _$AppDatabase {
           .write(PreorderEntriesCompanion(
         paid: const Value(true),
         updatedAt: Value(now),
+        locallyModified: Value(locallyModified),
       ));
       await recordLaciMejaEvent(
         id: '$preorderEntryId-bayar-${now.microsecondsSinceEpoch}',
@@ -8669,6 +8683,7 @@ class AppDatabase extends _$AppDatabase {
         qty: 0,
         note: 'DP dibayar ${_fmtRupiahPlain(amount)}',
         deviceCode: kasirId,
+        locallyModified: locallyModified,
       );
       return owed;
     });

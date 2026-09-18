@@ -456,4 +456,97 @@ void main() {
         .get();
     expect(ledgerRows, isEmpty);
   });
+
+  test(
+      'Item 78: locallyModified=true dari checkout (device non-owner) WAJIB '
+      'diteruskan ke baris preorderEntries.paid=true yang dihasilkan '
+      'collectPreorderDeposit -- kalau tidak, baris itu tidak pernah '
+      'diusulkan ke host (dumpLaciMejaProposals filter locally_modified=1)',
+      () async {
+    await seedPreorderSource(
+        txId: 'po_src8',
+        preorderId: 'po8',
+        customerId: 'c8',
+        customerName: 'Wati');
+
+    await db.saveTransactionWithDebtSettlements(
+      tx: newSaleCompanion('newtx8', total: 25000),
+      items: const [],
+      payments: const [],
+      stockItems: const [],
+      debtSettlements: const [],
+      preorderSettlements: [
+        (
+          preorderEntryId: 'po8',
+          invoiceId: 'po_src8',
+          invoiceLocalId: 'po_src8',
+          invoiceDate: DateTime.now().subtract(const Duration(days: 2)),
+          customerName: 'Wati',
+          amount: 30000,
+          method: 'tunai',
+          methodName: null,
+          fulfillOnSettle: false,
+        ),
+      ],
+      kasirId: 'K2',
+      locallyModified: true,
+    );
+
+    final entry = await (db.select(db.preorderEntries)
+          ..where((t) => t.id.equals('po8')))
+        .getSingle();
+    expect(entry.paid, isTrue);
+    expect(entry.locallyModified, isTrue,
+        reason: 'device non-owner wajib menandai baris ini supaya ikut '
+            'diusulkan ke host lewat dumpLaciMejaProposals');
+
+    // Baris ini HARUS ikut terambil oleh dumpLaciMejaProposals sekarang.
+    final proposals = await db.dumpLaciMejaProposals();
+    expect(
+        (proposals['preorder_entries'] ?? const [])
+            .any((r) => r['id'] == 'po8'),
+        isTrue);
+  });
+
+  test(
+      'Item 78: locallyModified=true + fulfillOnSettle=true WAJIB diteruskan '
+      'juga ke fulfillPreorderEntry (fulfilledAt), bukan cuma paid',
+      () async {
+    await seedPreorderSource(
+        txId: 'po_src9',
+        preorderId: 'po9',
+        customerId: 'c9',
+        customerName: 'Nur');
+
+    await db.saveTransactionWithDebtSettlements(
+      tx: newSaleCompanion('newtx9', total: 25000),
+      items: const [],
+      payments: const [],
+      stockItems: const [],
+      debtSettlements: const [],
+      preorderSettlements: [
+        (
+          preorderEntryId: 'po9',
+          invoiceId: 'po_src9',
+          invoiceLocalId: 'po_src9',
+          invoiceDate: DateTime.now().subtract(const Duration(days: 2)),
+          customerName: 'Nur',
+          amount: 30000,
+          method: 'tunai',
+          methodName: null,
+          fulfillOnSettle: true,
+        ),
+      ],
+      kasirId: 'K2',
+      locallyModified: true,
+    );
+
+    final entry = await (db.select(db.preorderEntries)
+          ..where((t) => t.id.equals('po9')))
+        .getSingle();
+    expect(entry.fulfilledAt, isNotNull);
+    expect(entry.locallyModified, isTrue,
+        reason: 'baris yg SEKALIGUS dipenuhi via checkout kasir non-owner '
+            'juga wajib nyangkut sbg locallyModified, bukan cuma paid=true');
+  });
 }

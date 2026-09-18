@@ -1432,6 +1432,7 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
             method: result.method,
             methodName: result.methodName,
             kasirId: deviceCode,
+            locallyModified: locallyModified,
           );
         },
         child: const Text('Penuhi'),

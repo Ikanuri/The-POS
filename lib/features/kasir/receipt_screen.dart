@@ -4431,6 +4431,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
           method: result.method,
           methodName: result.methodName,
           kasirId: deviceCode,
+          locallyModified: locallyModified,
         );
       }
     }
