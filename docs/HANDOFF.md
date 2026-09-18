@@ -54,13 +54,16 @@ lagi). `flutter analyze` 0 issue. Regression check bareng
 `order_page_service_cart_delete_test.dart` +
 `order_page_service_cart_persist_test.dart` — 31 test total, 0 gagal.
 
-**BELUM dilakukan**: full `flutter test` suite (seluruh proyek, bukan
-cuma file katalog) belum dijalankan sesi ini — kalau melanjutkan dari
-sini, jalankan dulu sebelum menganggap branch ini "siap tanya user utk
-merge". PATCHNOTES.md TIDAK diupdate (fitur belum dirilis/di-merge,
-belum user-facing sampai merge disetujui). Versi (`pubspec.yaml`) TIDAK
-di-bump di branch ini — tunggu keputusan merge, MINOR bump nanti
-(fitur baru terlihat pengguna) sekaligus saat digabung.
+Full-suite background run SUDAH dilakukan (1709 test): **1 gagal**
+(`sync_screen_proposal_layout_test.dart`, TIDAK terkait file yang
+disentuh sesi ini — lulus bersih 1/1 saat diisolasi, flake
+resource-contention environment yang sudah berulang kali
+didokumentasikan sesi-sesi sebelumnya). Branch ini **siap ditanyakan ke
+user apakah mau di-merge** kapan pun diminta. PATCHNOTES.md TIDAK
+diupdate (fitur belum dirilis/di-merge, belum user-facing sampai merge
+disetujui). Versi (`pubspec.yaml`) TIDAK di-bump di branch ini — tunggu
+keputusan merge, MINOR bump nanti (fitur baru terlihat pengguna)
+sekaligus saat digabung.
 
 _Ringkasan sesi-sesi sebelumnya di bawah ini dipertahankan sbg histori
 teknis:_
