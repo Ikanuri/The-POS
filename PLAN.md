@@ -63,6 +63,43 @@ sekarang, TIDAK ada rencana eksekusi._
 
 ---
 
+## Item 79 — Redesain UX katalog HTML (`order_page_service.dart`), branch terpisah `feature/katalog-html-ux-redesign`
+
+**Konteks**: brainstorming panjang soal blueprint DurgerKingBot (Mini App
+Telegram) memicu penemuan bahwa app ini SUDAH punya sistem serupa
+(`order_page_service.dart`, HTML self-contained tanpa CDN/backend, submit
+via `wa.me` + kode mesin `#PSN:` yang dibaca `OrderParserService`). User
+setuju smoothness 2 prototipe demo (dikirim sbg file mentah, BUKAN bagian
+app) dijadikan acuan redesain sungguhan. **User eksplisit: kerjakan di
+branch terpisah, JANGAN merge/push ke `main` atau
+`claude/kategori-produk-qty-harga-mqjh21` sampai diminta.**
+
+**4 milestone (disetujui user, urutan maraton)**:
+1. **Auto-match ikon produk** — kamus kata kunci nama produk → emoji/ikon
+   (Bahasa Indonesia, toko kelontong), fallback ke kategori produk
+   (`product_groups`, SUDAH ada di data, tanpa config baru), fallback
+   terakhir ikon generik. Perlu tambah field `category` ke catalog JSON
+   di `OrderPageService` (reuse `db.getCategoryNamesForProducts`, pola
+   sama `catalog_share.dart`).
+2. **Toggle layout List ↔ Tile** — persist `localStorage`, pola sama
+   toggle tema yang sudah ada. Cart state tidak berubah, cuma template
+   render kartu (2 versi kartu sudah pernah didemokan).
+3. **Qty control desimal sesuai unit_type** — kontrol +/- demo cuma step
+   bilangan bulat; produksi butuh step desimal utk satuan timbang +
+   input angka manual. TIDAK boleh menyentuh logika resolve harga (tetap
+   di Dart, `PriceService`).
+4. **Transisi/animasi smooth** — mode-toggle via CSS `max-height`/
+   `opacity` (bukan modal) atau accordion inline utk varian/satuan,
+   badge bump animation, morph tombol +/-, DIPORTING ke template HTML
+   produksi sungguhan, tetap prinsip self-contained/tanpa CDN
+   (`order_page_service.dart` — BEDA dari 2 file demo yang boleh pakai
+   Google Fonts/Lottie CDN karena eksplisit demo, bukan produksi).
+
+**Setelah semua milestone stabil & full test hijau di branch ini** — baru
+tanya user apakah siap merge, jangan lakukan sendiri.
+
+---
+
 ## Item 48 — Kotak warna avatar produk di kasir dibuat soft/pastel (18 Juli, BELUM dieksekusi — user setuju, siap eksekusi)
 
 **Konteks**: BUKAN aksen fungsional bermakna (beda dari kerjaan Item

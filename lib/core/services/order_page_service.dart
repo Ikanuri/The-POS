@@ -129,6 +129,14 @@ class OrderPageService {
         .where((p) => p.parentProductId == null)
         .toList();
 
+    // Item 79 — kategori produk (SUDAH dikurasi owner lewat "Kelola
+    // Kategori", tidak butuh input baru) dikirim ke katalog HTML supaya
+    // JS bisa auto-pilih ikon per produk (kata kunci nama -> fallback
+    // kategori -> ikon generik), tanpa config manual per produk. Satu
+    // query agregat (bukan N+1), pola sama `catalog_share.dart`.
+    final categoryByProduct =
+        await db.getCategoryNamesForProducts(parents.map((p) => p.id).toList());
+
     final out = <Map<String, Object?>>[];
     for (final p in parents) {
       final unitsOut = await unitsJsonFor(p.id);
@@ -165,6 +173,8 @@ class OrderPageService {
         // "Izinkan Stok Minus" OFF) — Katalog HTML statis: tombol tambah
         // dinonaktifkan + badge kalau salah satu true.
         'outOfStock': p.markedOutOfStock || isRealOutOfStock(p.id),
+        // Item 79 — dipakai JS utk fallback ikon per kategori.
+        'category': categoryByProduct[p.id] ?? '',
       });
     }
     return out;
@@ -270,6 +280,8 @@ body{
 .prow{background:var(--card);border:1px solid var(--line);border-radius:var(--r-card);
   margin-bottom:9px;overflow:hidden;}
 .prow-main{display:flex;align-items:center;gap:12px;padding:13px;cursor:pointer;}
+.prow-icon{width:40px;height:40px;flex-shrink:0;border-radius:999px;background:var(--field);
+  display:flex;align-items:center;justify-content:center;font-size:19px;line-height:1;}
 .prow-info{flex:1;min-width:0;}
 .prow-name{font-size:17px;font-weight:600;}
 .prow-meta{font-size:14px;color:var(--ink-2);margin-top:3px;font-family:var(--serif);}
@@ -647,6 +659,65 @@ function rp(n){
   return 'Rp ' + out;
 }
 
+// Item 79 — auto-pilih ikon produk TANPA config manual per produk:
+// (1) kata kunci nama produk (kasus umum toko kelontong Indonesia),
+// (2) fallback ke kategori produk (SUDAH dikurasi owner, gratis dari data
+//     yang ada, lihat field `category` di `_buildCatalogJson`),
+// (3) fallback terakhir ikon generik. Kamus kata kunci sengaja DATA
+// STATIS (bukan model/ML) — murah, dapat diaudit, mudah ditambah kalau
+// ada laporan "ikon salah/generik" utk produk tertentu.
+var ICON_KEYWORDS = [
+  [['beras','rojolele','pandan wangi'], '🌾'],
+  [['minyak goreng','minyak kelapa'], '🫙'],
+  [['gula pasir','gula merah','gula aren'], '🧂'],
+  [['telur'], '🥚'],
+  [['indomie','mie instan','mie goreng','mie ayam','sedaap'], '🍜'],
+  [['kopi'], '☕'],
+  [['teh celup','teh tubruk','teh '], '🍵'],
+  [['aqua','air mineral','air minum'], '💧'],
+  [['gas','lpg','tabung'], '🔥'],
+  [['sabun mandi','sabun cuci','lifebuoy','deterjen','rinso'], '🧼'],
+  [['rokok'], '🚬'],
+  [['susu'], '🥛'],
+  [['roti'], '🍞'],
+  [['gula-gula','permen','coklat','cokelat'], '🍬'],
+  [['kerupuk'], '🍘'],
+  [['sampo','shampo'], '🧴'],
+  [['pasta gigi','odol'], '🪥'],
+  [['popok','diapers','pembalut'], '🧷'],
+  [['beras','tepung terigu','tepung beras'], '🌾'],
+  [['saus','kecap','sambal'], '🫙'],
+  [['garam'], '🧂']
+];
+// Kategori (product_groups) -> ikon generik. Nama kategori bebas diisi
+// owner sendiri, jadi cocokkan case-insensitive & substring, bukan exact.
+var CATEGORY_ICONS = [
+  [['sembako'], '🌾'],
+  [['minuman'], '🥤'],
+  [['makanan','snack','camilan'], '🍪'],
+  [['mandi','cuci','kebersihan','rumah tangga'], '🧼'],
+  [['rokok'], '🚬'],
+  [['bayi'], '🍼'],
+  [['bumbu','dapur'], '🧂'],
+  [['gas','bahan bakar'], '🔥']
+];
+var ICON_DEFAULT = '🛒';
+function matchDict(dict, text){
+  var t = (text||'').toLowerCase();
+  for (var i=0;i<dict.length;i++){
+    var keywords = dict[i][0];
+    for (var j=0;j<keywords.length;j++){
+      if (t.indexOf(keywords[j]) >= 0) return dict[i][1];
+    }
+  }
+  return null;
+}
+function pickIcon(name, category){
+  return matchDict(ICON_KEYWORDS, name) ||
+    matchDict(CATEGORY_ICONS, category) ||
+    ICON_DEFAULT;
+}
+
 function fmtQty(q){
   return (q % 1 === 0) ? String(q) : String(q);
 }
@@ -772,6 +843,7 @@ function renderList(){
       ? totalOptionsFor(p) + ' pilihan · mulai ' + rp(minPriceForProduct(p))
       : rp(p.price) + ' /' + esc(p.unit);
     main.innerHTML =
+      '<div class="prow-icon" aria-hidden="true">'+pickIcon(p.name, p.category)+'</div>' +
       '<div class="prow-info"><div class="prow-name">'+esc(p.name)+'</div>' +
         '<div class="prow-meta">'+metaHtml+'</div></div>';
 

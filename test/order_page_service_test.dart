@@ -601,4 +601,65 @@ void main() {
 
     await db.close();
   });
+
+  test(
+      'Item 79 — kategori produk (product_groups, sudah dikurasi owner) '
+      'ikut ter-embed di katalog HTML sbg field `category`, dipakai JS utk '
+      'fallback pemilihan ikon otomatis', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    final id = await _addProduct(db, name: 'Beras Rojolele', price: 15000);
+    await db.addProductGroup('Sembako');
+    final groups = await db.getAllProductGroups();
+    final groupId = groups.firstWhere((g) => g.name == 'Sembako').id;
+    await (db.update(db.products)..where((t) => t.id.equals(id)))
+        .write(ProductsCompanion(productGroupId: Value(groupId)));
+
+    final result = await OrderPageService.generateHtml(
+        db: db, storeName: 'Toko Berkah');
+    final data = _extractEmbeddedData(result.html);
+    final p = (data['products'] as List)
+        .firstWhere((p) => p['name'] == 'Beras Rojolele');
+    expect(p['category'], 'Sembako');
+    await db.close();
+  });
+
+  test(
+      'Item 79 — produk TANPA kategori -> field `category` string kosong '
+      '(bukan null), aman dipakai JS tanpa cek null tambahan', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    await _addProduct(db, name: 'Produk Tanpa Kategori', price: 5000);
+
+    final result = await OrderPageService.generateHtml(
+        db: db, storeName: 'Toko Berkah');
+    final data = _extractEmbeddedData(result.html);
+    final p = (data['products'] as List)
+        .firstWhere((p) => p['name'] == 'Produk Tanpa Kategori');
+    expect(p['category'], '');
+    await db.close();
+  });
+
+  test(
+      'Item 79 — JS punya mekanisme auto-pilih ikon produk (kata kunci nama '
+      '-> fallback kategori -> fallback generik) TANPA butuh config manual '
+      'per produk, dan dipanggil saat render baris', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    final result = await OrderPageService.generateHtml(
+        db: db, storeName: 'Toko Berkah');
+
+    expect(result.html.contains('function pickIcon(name, category)'), isTrue);
+    expect(result.html.contains('var ICON_KEYWORDS'), isTrue);
+    expect(result.html.contains('var CATEGORY_ICONS'), isTrue);
+    expect(result.html.contains('var ICON_DEFAULT'), isTrue);
+    // Kata kunci umum toko kelontong Indonesia harus ada di kamus.
+    expect(result.html.contains("'beras'"), isTrue);
+    expect(result.html.contains("'sembako'"), isTrue);
+    // Dipanggil saat membangun baris produk, membaca field `category` yg
+    // baru ditambahkan.
+    expect(
+        result.html.contains("pickIcon(p.name, p.category)"),
+        isTrue);
+    expect(result.html.contains('class="prow-icon"'), isTrue);
+
+    await db.close();
+  });
 }
