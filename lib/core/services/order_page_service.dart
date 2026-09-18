@@ -270,6 +270,13 @@ body{
   background:var(--field);color:var(--ink-2);border-radius:999px;cursor:pointer;
   display:flex;align-items:center;justify-content:center;}
 .theme-btn svg{width:19px;height:19px;}
+.topbar-btns{display:flex;gap:8px;flex-shrink:0;}
+/* Item 79 M2 — toggle List/Tile, gaya sama persis .theme-btn (lingkaran
+   38px, sebelahan di topbar). */
+.layout-btn{flex-shrink:0;width:38px;height:38px;border:1px solid var(--line);
+  background:var(--field);color:var(--ink-2);border-radius:999px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;}
+.layout-btn svg{width:18px;height:18px;}
 .search-wrap{padding:10px 16px;}
 .search{display:flex;align-items:center;gap:8px;background:var(--field);
   border-radius:var(--r-btn);padding:11px 14px;}
@@ -300,6 +307,21 @@ body{
 .prow-minus{width:36px;height:36px;border:none;border-radius:999px;cursor:pointer;
   background:#D64545;color:#fff;font-size:19px;font-weight:700;flex-shrink:0;
   display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.15);}
+
+/* Item 79 M2 — mode Tile: grid 2 kolom, kartu vertikal. Murni CSS di
+   atas markup .prow yang SAMA PERSIS (icon/info/controls) — renderList()
+   JS TIDAK berubah sama sekali, jadi tidak ada logic baru yang bisa
+   regresi, cuma re-flow tampilan lewat class `tile-mode` di #list. */
+.list.tile-mode{display:grid;grid-template-columns:1fr 1fr;gap:9px;
+  padding:0 16px 100px;align-content:start;}
+.list.tile-mode .prow{margin-bottom:0;}
+.list.tile-mode .prow-main{flex-direction:column;align-items:stretch;gap:8px;}
+.list.tile-mode .prow-icon{width:44px;height:44px;font-size:21px;align-self:flex-start;}
+.list.tile-mode .prow-name{font-size:14.5px;}
+.list.tile-mode .prow-meta{font-size:12.5px;}
+.list.tile-mode .prow-controls{width:100%;justify-content:flex-end;}
+.list.tile-mode .oos-badge{align-self:flex-start;}
+.list.tile-mode .empty{grid-column:1/-1;}
 .cartbar{position:fixed;left:0;right:0;bottom:0;max-width:480px;margin:0 auto;
   background:var(--card);border-top:1px solid var(--line);padding:12px 14px;
   display:flex;align-items:center;gap:10px;box-shadow:0 -4px 18px rgba(0,0,0,.08);}
@@ -414,7 +436,10 @@ textarea.tfield{resize:none;min-height:64px;}
       <div class="tb-store" id="storeName"></div>
       <div class="tb-sub" id="storeSub"></div>
     </div>
-    <button class="theme-btn" id="themeBtn" type="button" aria-label="Ganti tampilan terang/gelap"></button>
+    <div class="topbar-btns">
+      <button class="layout-btn" id="layoutBtn" type="button" aria-label="Ganti tampilan daftar/kotak"></button>
+      <button class="theme-btn" id="themeBtn" type="button" aria-label="Ganti tampilan terang/gelap"></button>
+    </div>
   </div>
   <div class="search-wrap">
     <div class="search">
@@ -529,6 +554,34 @@ document.getElementById('themeBtn').addEventListener('click', function(){
   try { localStorage.setItem('posOrderTheme', next); } catch (e) {}
 });
 initTheme();
+
+// ── Item 79 M2 — toggle List/Tile, pola sama persis toggle tema di atas
+// (localStorage per-browser, default 'list' kalau belum pernah dipilih).
+// Murni CSS (class `tile-mode` di #list) -- renderList()/setQty()/dst
+// TIDAK disentuh sama sekali, jadi tidak ada logic keranjang baru yang
+// bisa regresi lewat perubahan ini.
+var ICON_LIST = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>';
+var ICON_TILE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>';
+function applyLayout(mode){
+  var list = document.getElementById('list');
+  list.classList.toggle('tile-mode', mode === 'tile');
+  // Ikon tombol menunjukkan mode TUJUAN (apa yang akan terjadi kalau
+  // ditekan), sama konvensi ikon matahari/bulan di atas.
+  document.getElementById('layoutBtn').innerHTML = mode === 'tile' ? ICON_LIST : ICON_TILE;
+}
+function initLayout(){
+  var saved = null;
+  try { saved = localStorage.getItem('posOrderLayout'); } catch (e) {}
+  if (saved !== 'list' && saved !== 'tile') saved = 'list';
+  applyLayout(saved);
+}
+document.getElementById('layoutBtn').addEventListener('click', function(){
+  var cur = document.getElementById('list').classList.contains('tile-mode') ? 'tile' : 'list';
+  var next = cur === 'tile' ? 'list' : 'tile';
+  applyLayout(next);
+  try { localStorage.setItem('posOrderLayout', next); } catch (e) {}
+});
+initLayout();
 
 // ── Persist keranjang lewat localStorage — permintaan user: katalog HTML
 // ini statis (bukan app), refresh/reload browser HILANGKAN state JS murni

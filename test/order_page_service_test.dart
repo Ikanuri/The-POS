@@ -662,4 +662,38 @@ void main() {
 
     await db.close();
   });
+
+  test(
+      'Item 79 M2 — toggle List/Tile ter-embed: tombol layoutBtn, class '
+      'tile-mode murni CSS di atas markup .prow yang sama (renderList() '
+      'TIDAK berubah), persist localStorage terpisah dari tema', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    final result = await OrderPageService.generateHtml(
+        db: db, storeName: 'Toko Berkah');
+
+    expect(result.html.contains('id="layoutBtn"'), isTrue);
+    expect(result.html.contains('function applyLayout(mode)'), isTrue);
+    expect(result.html.contains('function initLayout()'), isTrue);
+    expect(
+        result.html.contains(
+            "list.classList.toggle('tile-mode', mode === 'tile')"),
+        isTrue);
+    expect(result.html.contains("localStorage.getItem('posOrderLayout')"),
+        isTrue);
+    expect(result.html.contains("localStorage.setItem('posOrderLayout'"),
+        isTrue);
+    // Kunci localStorage HARUS beda dari tema, supaya preferensi layout &
+    // tema tidak saling menimpa satu sama lain.
+    expect(result.html.contains("localStorage.getItem('posOrderTheme')"),
+        isTrue,
+        reason: 'kunci tema lama harus tetap ada, terpisah dari layout');
+    expect(result.html.contains('.list.tile-mode{'), isTrue);
+
+    // renderList()/setQty() tidak boleh ikut disentuh logic barunya --
+    // fungsi lama tetap ada apa adanya (regresi guard murah).
+    expect(result.html.contains('function renderList('), isTrue);
+    expect(result.html.contains('function setQty(unitId, qty)'), isTrue);
+
+    await db.close();
+  });
 }
