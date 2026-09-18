@@ -7,6 +7,7 @@ import 'package:the_pos/core/database/app_database.dart';
 import 'package:the_pos/core/models/cart_item.dart';
 import 'package:the_pos/core/providers/device_provider.dart';
 import 'package:the_pos/core/theme/app_theme.dart';
+import 'package:the_pos/features/kasir/cart_debt_settlement_provider.dart';
 import 'package:the_pos/features/kasir/cart_prabayar_provider.dart';
 import 'package:the_pos/features/kasir/cart_provider.dart';
 import 'package:the_pos/features/kasir/widgets/add_control.dart';
@@ -514,6 +515,53 @@ void main() {
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(milliseconds: 10));
     });
+  });
+
+  testWidgets(
+      'Bug ditemukan (laporan user, screenshot): "Sisa" Pra-Bayar WAJIB '
+      'ikut menjumlahkan Lunasi Hutang aktif, bukan cuma total item '
+      'keranjang', (tester) async {
+    final r = await pumpCartSheetOpen(tester, deviceRole: 'owner');
+    addTearDown(() async => r.db.close());
+
+    // Total item keranjang = 30000 (qty 2 x 15000). Kunci Pra-Bayar 4250,
+    // lalu aktifkan Lunasi Hutang 29400 (mirror angka nyata di laporan
+    // user: item Rp13.200, Pra-Bayar Rp4.250, Hutang Rp29.400).
+    r.container.read(cartPrabayarProvider(kMainCartId).notifier).add(
+          PrabayarEntry(
+            id: 'e1',
+            amount: 4250,
+            method: 'tunai',
+            lockedAt: DateTime.now(),
+          ),
+        );
+    r.container.read(cartDebtSettlementProvider(kMainCartId).notifier).add(
+          DebtSettlementEntry(
+            id: 'ds1',
+            invoiceId: 'tx1',
+            invoiceLocalId: 'K1-1',
+            invoiceDate: DateTime.now(),
+            customerId: 'c1',
+            customerName: 'Buk Artia',
+            amount: 29400,
+            createdAt: DateTime.now(),
+          ),
+        );
+    await tester.pumpAndSettle();
+
+    // Sisa yang BENAR = (item 30000 + hutang 29400) - pra-bayar 4250 =
+    // 55150 -- BUKAN (item 30000) - 4250 = 25750 (bug lama, mengabaikan
+    // Lunasi Hutang sama sekali).
+    expect(find.text('Sisa ${formatRupiah(55150)}'), findsOneWidget,
+        reason: '"Sisa" wajib menghitung dari total gabungan (item + '
+            'Lunasi Hutang aktif), sama seperti nominal "Total" besar di '
+            'atasnya');
+    expect(find.text('Sisa ${formatRupiah(25750)}'), findsNothing,
+        reason: 'nominal lama yang mengabaikan Lunasi Hutang tidak boleh '
+            'muncul lagi');
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
   });
 
   testWidgets(

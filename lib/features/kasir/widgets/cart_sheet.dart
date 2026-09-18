@@ -1495,7 +1495,16 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                           if (canPrabayar && prabayarEntries.isNotEmpty)
                             _PrabayarFooterSummary(
                               cartId: widget.cartId,
-                              total: total,
+                              // Bug ditemukan (laporan user, screenshot
+                              // "Sisa" tidak termasuk Lunasi Hutang aktif):
+                              // WAJIB pakai total gabungan (persis nominal
+                              // "Total" besar di atas), bukan `total` item
+                              // mentah -- kalau tidak, "Sisa"/"Kembalian" di
+                              // sini menghitung dari basis yang lebih kecil
+                              // drpd uang yg sungguhan harus diterima kasir.
+                              total: total +
+                                  debtSettlementTotal +
+                                  preorderSettlementTotal,
                               prabayarTotal: prabayarTotal,
                               changeTakenTotal: changeTakenTotal,
                               onShowChangeTakenHistory: () =>

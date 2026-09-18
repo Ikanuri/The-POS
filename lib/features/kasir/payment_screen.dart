@@ -1435,7 +1435,17 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                                     style: TextStyle(
                                         fontSize: 12,
                                         color: scheme.onSurfaceVariant)),
-                                Text(formatRupiah(_total - _prabayarPool),
+                                // Bug ditemukan (laporan user): WAJIB
+                                // _grandTotal (item + hutang + pre-order),
+                                // bukan _total polos -- kalau tidak, kartu
+                                // ini menampilkan sisa yang lebih kecil drpd
+                                // uang yg sungguhan harus diterima kasir
+                                // saat Lunasi Hutang/Pelunasi Pre-order
+                                // sedang aktif (gerbang keypad di bawah
+                                // sudah benar pakai _grandTotal -- ini
+                                // murni perbaikan tampilan supaya konsisten).
+                                Text(
+                                    formatRupiah(_grandTotal - _prabayarPool),
                                     style: const TextStyle(
                                         fontSize: 12, fontWeight: FontWeight.w600)),
                               ],
