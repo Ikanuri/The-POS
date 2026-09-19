@@ -259,10 +259,35 @@ body{
   font-family:var(--font); background:var(--canvas); color:var(--ink);
   -webkit-font-smoothing:antialiased; display:flex; justify-content:center;
 }
-#app{width:100%;max-width:480px;min-height:100vh;background:var(--panel);
-  display:flex;flex-direction:column;position:relative;}
+/* Blueprint §2 — SATU halaman, DUA mode. Kedua <section> ada di DOM sejak
+   awal (BUKAN lazy-render), yang berubah cuma class `order-mode` di #app,
+   dianimasikan murni CSS. Tidak ada navigasi/reload, jadi state keranjang,
+   isian nama/HP, dan posisi scroll daftar tidak pernah hilang saat pindah
+   mode — sekaligus bikin transisinya bebas flicker. */
+#app{width:100%;max-width:480px;height:100vh;background:var(--panel);
+  position:relative;overflow:hidden;}
+@supports (height:100dvh){ #app{height:100dvh;} }
+.page{position:absolute;inset:0;display:flex;flex-direction:column;
+  background:var(--panel);
+  transition:transform .34s cubic-bezier(.22,.61,.36,1),opacity .24s ease,
+             visibility 0s linear .34s;}
+/* Halaman yang TERLIHAT selalu dapat `visibility 0s` (tanpa delay), yang
+   TERSEMBUNYI dapat delay .34s — kalau delay ini ikut terpasang di state
+   terlihat, halaman tujuan baru muncul setelah animasi selesai (terasa
+   patah). Makanya keempat state ditulis eksplisit, bukan diwarisi. */
+.page-menu{transform:translateX(0);opacity:1;visibility:visible;
+  transition:transform .34s cubic-bezier(.22,.61,.36,1),opacity .24s ease,visibility 0s;}
+.page-order{transform:translateX(100%);opacity:0;visibility:hidden;}
+#app.order-mode .page-menu{transform:translateX(-12%);opacity:0;visibility:hidden;
+  transition:transform .34s cubic-bezier(.22,.61,.36,1),opacity .24s ease,
+             visibility 0s linear .34s;}
+#app.order-mode .page-order{transform:translateX(0);opacity:1;visibility:visible;
+  transition:transform .34s cubic-bezier(.22,.61,.36,1),opacity .24s ease,visibility 0s;}
+/* Blueprint §6 — state "tutup": katalog tanpa produk sama sekali tampil
+   grayscale + redup, bukan layar kosong/error generik. */
+#app.closed .list{filter:grayscale(1);opacity:.45;pointer-events:none;}
 .topbar{padding:16px 16px 12px;border-bottom:1px solid var(--line);
-  background:var(--panel);position:sticky;top:0;z-index:5;
+  background:var(--panel);flex-shrink:0;
   display:flex;align-items:flex-start;justify-content:space-between;gap:10px;}
 .tb-store{font-family:var(--serif);font-size:22px;font-weight:600;}
 .tb-sub{font-size:13px;color:var(--ink-3);margin-top:3px;}
@@ -295,28 +320,51 @@ body{
 .oos-badge{background:var(--warn);color:#fff;border-radius:999px;
   padding:8px 13px;font-size:13px;font-weight:700;flex-shrink:0;}
 .empty{text-align:center;color:var(--ink-3);padding:50px 20px;font-size:15px;}
-/* Kontrol tambah/kurang di daftar produk — meniru _AddControl di app kasir:
-   lingkaran "+" oranye saat belum ada di keranjang, berubah jadi lingkaran
-   ANGKA hijau + tombol minus merah terpisah begitu ada qty > 0. */
-.prow-controls{display:flex;align-items:center;gap:7px;flex-shrink:0;}
-.prow-circle{width:40px;height:40px;border:none;border-radius:999px;cursor:pointer;
-  display:flex;align-items:center;justify-content:center;font-weight:700;
-  flex-shrink:0;box-shadow:0 2px 6px rgba(0,0,0,.15);}
-.prow-circle-add{background:var(--accent);color:#fff;font-size:24px;}
-.prow-circle-qty{background:var(--ok);color:#fff;font-size:16px;font-family:var(--serif);}
-.prow-minus{width:36px;height:36px;border:none;border-radius:999px;cursor:pointer;
-  background:#D64545;color:#fff;font-size:19px;font-weight:700;flex-shrink:0;
-  display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.15);}
-/* Item 79 M4 — buildProwControls() SELALU bikin elemen baru tiap qty
-   berubah (replaceWith, bukan update in-place), jadi animasi cukup
-   ditempel di kelasnya langsung (tanpa trik ganti-nama animasi) --
-   browser otomatis memutarnya tiap kali node baru ini masuk DOM. */
-@keyframes prow-bump{0%{transform:scale(1);}45%{transform:scale(1.22);}100%{transform:scale(1);}}
-@keyframes prow-pop{0%{transform:scale(0);}100%{transform:scale(1);}}
-.prow-circle-qty{animation:prow-bump .28s cubic-bezier(.3,1.4,.5,1);}
-.prow-minus{animation:prow-pop .18s cubic-bezier(.3,1.4,.5,1);}
+/* Blueprint §4 — "expanded pill" yang MEMECAH. Satu pill lebar bertuliskan
+   "Tambah" (84px) menyusut jadi lingkaran angka (40px) begitu qty >= 1,
+   sementara tombol minus merah tumbuh keluar dari width 0 + scale(.7).
+   Supaya transisi `width` ini benar-benar jalan, node kontrol WAJIB
+   dipertahankan & di-mutate di tempat (lihat syncProwControls) — kalau
+   node-nya diganti baru tiap qty berubah, browser tidak punya nilai awal
+   untuk ditransisikan dan efek "memecah"-nya hilang total. */
+.prow-controls{display:flex;align-items:center;flex-shrink:0;}
+.pc-minus{width:0;height:38px;padding:0;border:none;border-radius:999px;
+  background:#D64545;color:#fff;font-size:19px;font-weight:700;cursor:pointer;
+  flex-shrink:0;overflow:hidden;opacity:0;transform:scale(.7);
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 2px 6px rgba(0,0,0,.15);
+  transition:width .26s cubic-bezier(.3,1.25,.45,1),opacity .18s ease,
+             transform .26s cubic-bezier(.3,1.25,.45,1),margin-right .26s ease;}
+.prow-controls.selected .pc-minus{width:38px;opacity:1;transform:scale(1);margin-right:7px;}
+.pc-add{position:relative;width:84px;height:38px;border:none;border-radius:999px;
+  background:var(--accent);color:#fff;font-size:14.5px;font-weight:700;cursor:pointer;
+  flex-shrink:0;overflow:hidden;font-family:var(--font);
+  box-shadow:0 2px 6px rgba(0,0,0,.15);
+  transition:width .26s cubic-bezier(.3,1.25,.45,1),background-color .22s ease;}
+.prow-controls.selected .pc-add{width:40px;background:var(--ok);}
+.pc-label,.pc-qty{position:absolute;inset:0;display:flex;align-items:center;
+  justify-content:center;white-space:nowrap;transition:opacity .16s ease;}
+.pc-qty{opacity:0;font-family:var(--serif);font-size:16px;}
+.prow-controls.selected .pc-label{opacity:0;}
+.prow-controls.selected .pc-qty{opacity:1;}
+/* Blueprint §4 — badge di-retrigger tiap qty berubah dgn trik nama animasi
+   BERGANTIAN: node-nya persisten (tidak diganti), jadi menambahkan kembali
+   nama animasi yang SAMA tidak akan memutar ulang apa pun. Dua nama identik
+   yang dipakai selang-seling memaksa browser mendeteksi perubahan. */
+@keyframes badge-incr{0%{transform:scale(1);}40%{transform:scale(1.34);}100%{transform:scale(1);}}
+@keyframes badge-incr2{0%{transform:scale(1);}40%{transform:scale(1.34);}100%{transform:scale(1);}}
+.pc-qty.badge-incr{animation:badge-incr .3s cubic-bezier(.3,1.4,.5,1);}
+.pc-qty.badge-incr2{animation:badge-incr2 .3s cubic-bezier(.3,1.4,.5,1);}
+/* Blueprint §3/§6 — micro-interaction ikon: memantul sekali saat qty
+   produknya berubah. Murni delight, tidak fungsional (Lottie di blueprint
+   diganti animasi CSS sederhana, sesuai saran blueprint sendiri untuk
+   project tanpa infrastruktur Lottie — di sini juga wajib, karena katalog
+   ini self-contained tanpa CDN). */
+@keyframes icon-pop{0%{transform:scale(1);}35%{transform:scale(1.18) rotate(-6deg);}100%{transform:scale(1);}}
+.prow-icon.icon-pop{animation:icon-pop .34s cubic-bezier(.3,1.4,.5,1);}
 @media (prefers-reduced-motion: reduce){
-  .prow-circle-qty,.prow-minus{animation:none;}
+  .pc-qty.badge-incr,.pc-qty.badge-incr2,.prow-icon.icon-pop{animation:none;}
+  .pc-minus,.pc-add,.page{transition:none;}
 }
 
 /* Item 79 M2 — mode Tile: grid 2 kolom, kartu vertikal. Murni CSS di
@@ -324,7 +372,16 @@ body{
    JS TIDAK berubah sama sekali, jadi tidak ada logic baru yang bisa
    regresi, cuma re-flow tampilan lewat class `tile-mode` di #list. */
 .list.tile-mode{display:grid;grid-template-columns:1fr 1fr;gap:9px;
-  padding:0 16px 100px;align-content:start;}
+  padding:0 16px 130px;align-content:start;
+  /* WAJIB min-content, JANGAN dikembalikan ke `auto` (default). `.prow`
+     punya overflow:hidden sehingga jadi scroll container, dan scroll
+     container automatic-minimum-size-nya NOL. Dengan grid-auto-rows:auto,
+     track lalu tidak punya tinggi minimum dari isi, sementara container
+     (#list) tingginya DEFINITE karena `flex:1` — sisa ruang dibagi rata ke
+     semua track, tiap kartu kolaps jadi ~6px dan isinya dipotong
+     overflow:hidden. Gejalanya: kartu tampil sebagai GARIS TIPIS saja
+     (bug nyata, dilaporkan user dari HP). */
+  grid-auto-rows:min-content;}
 .list.tile-mode .prow{margin-bottom:0;}
 .list.tile-mode .prow-main{flex-direction:column;align-items:stretch;gap:8px;}
 .list.tile-mode .prow-icon{width:44px;height:44px;font-size:21px;align-self:flex-start;}
@@ -333,21 +390,41 @@ body{
 .list.tile-mode .prow-controls{width:100%;justify-content:flex-end;}
 .list.tile-mode .oos-badge{align-self:flex-start;}
 .list.tile-mode .empty{grid-column:1/-1;}
-.cartbar{position:fixed;left:0;right:0;bottom:0;max-width:480px;margin:0 auto;
-  background:var(--card);border-top:1px solid var(--line);padding:12px 14px;
-  display:flex;align-items:center;gap:10px;box-shadow:0 -4px 18px rgba(0,0,0,.08);}
-.cb-count{width:40px;height:40px;min-width:40px;min-height:40px;aspect-ratio:1;
-  align-self:center;border-radius:999px;background:var(--accent);
-  color:#fff;display:flex;align-items:center;justify-content:center;line-height:1;
-  font-weight:700;font-size:16px;flex-shrink:0;}
-.cb-count.empty{background:var(--ink-3);}
-.cb-info{flex:1;min-width:0;}
-.cb-lbl{font-size:13px;color:var(--ink-3);}
-.cb-total{font-size:24px;font-weight:700;font-family:var(--serif);}
-.cb-view{border:1px solid var(--line);background:transparent;color:var(--ink);
-  border-radius:var(--r-btn);padding:11px 18px;font-size:15px;font-weight:600;
-  cursor:pointer;flex-shrink:0;}
-.cb-view:disabled{opacity:.4;}
+/* Blueprint §5 — pengganti Telegram MainButton. Katalog ini dibuka di
+   browser biasa (bukan Mini App), jadi tombol native Telegram TIDAK ada
+   dan harus disediakan sendiri: satu tombol mengambang, sembunyi total
+   saat keranjang kosong, dan — sesuai permintaan user — nominal totalnya
+   menyatu DI DALAM tombol yang sama (bukan bar terpisah seperti dulu). */
+.mainbtn-wrap{position:fixed;left:0;right:0;bottom:0;max-width:480px;margin:0 auto;
+  padding:14px 16px calc(14px + env(safe-area-inset-bottom));z-index:15;
+  pointer-events:none;
+  background:linear-gradient(to top,var(--panel) 58%,rgba(0,0,0,0));
+  transition:opacity .26s ease,transform .3s cubic-bezier(.22,.61,.36,1);}
+.mainbtn-wrap>*{pointer-events:auto;}
+.mainbtn-wrap.hidden{opacity:0;transform:translateY(130%);pointer-events:none;}
+.mainbtn{width:100%;border:none;border-radius:999px;background:var(--accent);
+  color:#fff;padding:15px 16px;font-size:16px;font-weight:700;cursor:pointer;
+  font-family:var(--font);display:flex;align-items:center;gap:10px;
+  box-shadow:0 8px 22px rgba(0,0,0,.22);
+  transition:background-color .24s ease,transform .14s ease;}
+.mainbtn:active{transform:scale(.985);}
+.mainbtn.wa{background:#25D366;}
+.mainbtn:disabled{opacity:.6;cursor:default;}
+.mb-badge{min-width:26px;height:26px;padding:0 8px;border-radius:999px;
+  background:rgba(255,255,255,.24);display:flex;align-items:center;
+  justify-content:center;font-size:14px;flex-shrink:0;line-height:1;}
+.mb-label{flex:1;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.mb-total{font-family:var(--serif);font-size:18px;white-space:nowrap;flex-shrink:0;}
+/* Halaman 2 (Pesanan) — header sendiri dgn tombol kembali ("Edit" di
+   blueprint §6), body scroll sendiri. */
+.order-top{align-items:center;gap:12px;}
+.back-btn{width:38px;height:38px;flex-shrink:0;border:1px solid var(--line);
+  background:var(--field);color:var(--ink);border-radius:999px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;}
+.back-btn svg{width:19px;height:19px;}
+.order-title{flex:1;min-width:0;}
+.order-body{flex:1;overflow-y:auto;padding:0 16px 150px;}
+.order-body .grand{margin-top:16px;}
 /* Item 79 M4 — scrim & overlay dulu instan display:none/block (pop
    tiba-tiba), sekarang fade konsisten dgn timing .sheet (.22s) yang sudah
    ada. `visibility` dipakai supaya tetap tidak menangkap klik/tab-focus
@@ -435,70 +512,80 @@ textarea.tfield{resize:none;min-height:64px;}
   margin-bottom:12px;}
 .grand .gl{font-size:15px;color:var(--ink-2);}
 .grand .gv{font-size:30px;font-weight:700;font-family:var(--serif);}
-.wa-btn{width:100%;border:none;background:#25D366;color:#fff;border-radius:var(--r-btn);
-  padding:15px;font-size:16.5px;font-weight:700;cursor:pointer;
-  display:flex;align-items:center;justify-content:center;gap:8px;}
-.wa-btn:disabled{opacity:.4;}
 .copy-btn{width:100%;border:1px solid var(--line);background:transparent;
   color:var(--ink);border-radius:var(--r-btn);padding:12px;font-size:15px;
   font-weight:600;cursor:pointer;margin-top:9px;}
-.toast{position:fixed;left:50%;bottom:100px;transform:translateX(-50%);
-  background:var(--ink);color:var(--panel);padding:10px 18px;border-radius:999px;
+/* Blueprint §7 — toast fixed di bawah viewport (di ATAS tombol utama),
+   muncul dgn slide-up, auto-hilang 2,5 detik, bisa juga ditutup manual
+   dgn tap. Beda dari blueprint: warna merah HANYA untuk pesan error.
+   Blueprint memakai merah untuk semua status karena di sana toast memang
+   cuma dipakai untuk error; katalog ini juga memakai toast untuk pesan
+   informatif ("teks pesanan disalin"), dan mewarnainya merah akan terbaca
+   sebagai kegagalan oleh pelanggan. */
+.toast{position:fixed;left:50%;bottom:104px;
+  transform:translateX(-50%) translateY(14px);
+  background:var(--ink);color:var(--panel);padding:11px 18px;border-radius:999px;
   font-size:14.5px;font-weight:600;z-index:30;opacity:0;pointer-events:none;
-  transition:opacity .2s;}
-.toast.show{opacity:1;}
+  max-width:calc(100% - 40px);text-align:center;cursor:pointer;
+  box-shadow:0 6px 18px rgba(0,0,0,.22);
+  transition:opacity .22s ease,transform .22s cubic-bezier(.22,.61,.36,1);}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);pointer-events:auto;}
+.toast.err{background:#e64d44;color:#fff;}
 </style>
 </head>
 <body>
 <div id="app">
-  <div class="topbar">
-    <div>
-      <div class="tb-store" id="storeName"></div>
-      <div class="tb-sub" id="storeSub"></div>
+  <!-- Halaman 1 — daftar produk (mode browse). -->
+  <section class="page page-menu" id="pageMenu">
+    <div class="topbar">
+      <div>
+        <div class="tb-store" id="storeName"></div>
+        <div class="tb-sub" id="storeSub"></div>
+      </div>
+      <div class="topbar-btns">
+        <button class="layout-btn" id="layoutBtn" type="button" aria-label="Ganti tampilan daftar/kotak"></button>
+        <button class="theme-btn" id="themeBtn" type="button" aria-label="Ganti tampilan terang/gelap"></button>
+      </div>
     </div>
-    <div class="topbar-btns">
-      <button class="layout-btn" id="layoutBtn" type="button" aria-label="Ganti tampilan daftar/kotak"></button>
-      <button class="theme-btn" id="themeBtn" type="button" aria-label="Ganti tampilan terang/gelap"></button>
+    <div class="search-wrap">
+      <div class="search">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <input id="q" type="text" placeholder="Cari produk…" autocomplete="off" />
+      </div>
     </div>
-  </div>
-  <div class="search-wrap">
-    <div class="search">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-      <input id="q" type="text" placeholder="Cari produk…" autocomplete="off" />
-    </div>
-  </div>
-  <div class="list" id="list"></div>
+    <div class="list" id="list"></div>
+  </section>
 
-  <div class="cartbar">
-    <div class="cb-count empty" id="cbCount">0</div>
-    <div class="cb-info">
-      <div class="cb-lbl" id="cbLbl">Belum ada barang dipilih</div>
-      <div class="cb-total" id="cbTotal">Rp 0</div>
+  <!-- Halaman 2 — ringkasan pesanan. Ada di DOM sejak awal (blueprint §2). -->
+  <section class="page page-order" id="pageOrder">
+    <div class="topbar order-top">
+      <button class="back-btn" id="backBtn" type="button" aria-label="Kembali ke daftar produk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+      <div class="order-title">
+        <div class="tb-store">Pesanan Anda</div>
+        <div class="tb-sub" id="orderSub">0 barang dipilih</div>
+      </div>
+      <button class="clear-cart-btn" id="clearCartBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>Kosongkan</button>
     </div>
-    <button class="cb-view" id="cbView" disabled>Lihat Pesanan</button>
-  </div>
-</div>
+    <div class="order-body">
+      <div id="cartItems"></div>
+      <div class="grand"><span class="gl">Total</span><span class="gv" id="sheetTotal">Rp 0</span></div>
+      <div class="field-label">Nama</div>
+      <input class="tfield" id="custName" placeholder="Nama Anda" />
+      <div class="field-label">No. HP</div>
+      <input class="tfield" id="custPhone" type="tel" placeholder="08xxxxxxxxxx" />
+      <div class="field-label">Catatan (opsional)</div>
+      <textarea class="tfield" id="custNote" placeholder="mis. antar sore ya"></textarea>
+      <button class="copy-btn" id="copyBtn">Salin Teks Pesanan</button>
+    </div>
+  </section>
 
-<div class="scrim" id="scrim"></div>
-<div class="sheet" id="sheet">
-  <div class="sheet-grip"></div>
-  <div class="sheet-head"><b>Pesanan Anda</b><button class="clear-cart-btn" id="clearCartBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>Kosongkan Keranjang</button><button class="sheet-x" id="sheetClose">&times;</button></div>
-  <div class="sheet-body">
-    <div id="cartItems"></div>
-    <div class="field-label">Nama</div>
-    <input class="tfield" id="custName" placeholder="Nama Anda" />
-    <div class="field-label">No. HP</div>
-    <input class="tfield" id="custPhone" type="tel" placeholder="08xxxxxxxxxx" />
-    <div class="field-label">Catatan (opsional)</div>
-    <textarea class="tfield" id="custNote" placeholder="mis. antar sore ya"></textarea>
-  </div>
-  <div class="sheet-foot">
-    <div class="grand"><span class="gl">Total</span><span class="gv" id="sheetTotal">Rp 0</span></div>
-    <button class="wa-btn" id="waBtn">
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.28-1.38c1.44.79 3.06 1.2 4.71 1.2h.01c5.46 0 9.91-4.45 9.91-9.91C21.9 6.45 17.5 2 12.04 2z"/></svg>
-      Kirim via WhatsApp
+  <!-- Blueprint §5 — tombol aksi utama tunggal, total menyatu di dalamnya. -->
+  <div class="mainbtn-wrap hidden" id="mainBtnWrap">
+    <button class="mainbtn" id="mainBtn" type="button">
+      <span class="mb-badge" id="mbBadge">0</span>
+      <span class="mb-label" id="mbLabel">Lihat Pesanan</span>
+      <span class="mb-total" id="mbTotal">Rp 0</span>
     </button>
-    <button class="copy-btn" id="copyBtn">Salin Teks Pesanan</button>
   </div>
 </div>
 
@@ -895,9 +982,18 @@ function setQty(unitId, qty){
 function refreshProwControls(p){
   var row = document.querySelector('.prow[data-pid="'+p.id+'"]');
   if (!row) return;
-  var old = row.querySelector('.prow-controls');
-  if (!old) return; // stok habis — tidak ada kontrol qty utk diupdate
-  old.replaceWith(buildProwControls(p));
+  var wrap = row.querySelector('.prow-controls');
+  if (!wrap) return; // stok habis — tidak ada kontrol qty utk diupdate
+  syncProwControls(wrap, p, true);
+  // Blueprint §3 — ikon memantul sekali sbg umpan balik visual. Kelasnya
+  // dilepas + dipaksa reflow dulu supaya animasi benar-benar diputar ulang
+  // walau tombol ditekan berkali-kali cepat.
+  var icon = row.querySelector('.prow-icon');
+  if (icon) {
+    icon.classList.remove('icon-pop');
+    void icon.offsetWidth;
+    icon.classList.add('icon-pop');
+  }
 }
 
 function renderList(){
@@ -969,39 +1065,50 @@ function prowDecrement(p){
   }
   setQty(p.unitId, cur - 1);
 }
+// Blueprint §4 — kontrol dibangun SEKALI per baris (tombol minus + pill
+// "Tambah" selalu dua-duanya ada di DOM), lalu cuma di-mutate lewat
+// syncProwControls(). Ini syarat mutlak supaya transisi CSS `width`
+// ("pill memecah") punya nilai awal untuk dianimasikan — versi lama
+// mengganti node tiap qty berubah, yang membuat setiap perubahan tampil
+// sebagai lompatan instan, bukan transisi.
 function buildProwControls(p){
   var wrap = document.createElement('div');
   wrap.className = 'prow-controls';
-  var qty = totalQtyForProduct(p);
-  if (qty > 0) {
-    var minus = document.createElement('button');
-    minus.type = 'button';
-    minus.className = 'prow-minus';
-    minus.textContent = String.fromCharCode(8722);
-    minus.addEventListener('click', function(){ prowDecrement(p); });
-    var main = document.createElement('button');
-    main.type = 'button';
-    main.className = 'prow-circle prow-circle-qty';
-    var qtyLabel = fmtQty(qty);
-    main.textContent = qtyLabel;
-    // Lingkaran tetap bulat (bukan pill) — utk qty desimal (mis. "0.25",
-    // produk timbang) yang lebih panjang dari 1-2 digit biasa, susutkan
-    // font-nya secara proporsional supaya tetap muat, bukan meluber.
-    if (qtyLabel.length > 2) {
-      main.style.fontSize = (16 * (2 / qtyLabel.length)) + 'px';
-    }
-    main.addEventListener('click', function(){ prowQuickAdd(p); });
-    wrap.appendChild(minus);
-    wrap.appendChild(main);
-  } else {
-    var add = document.createElement('button');
-    add.type = 'button';
-    add.className = 'prow-circle prow-circle-add';
-    add.textContent = '+';
-    add.addEventListener('click', function(){ prowQuickAdd(p); });
-    wrap.appendChild(add);
-  }
+  var minus = document.createElement('button');
+  minus.type = 'button';
+  minus.className = 'pc-minus';
+  minus.textContent = String.fromCharCode(8722);
+  minus.setAttribute('aria-label', 'Kurangi ' + p.name);
+  minus.addEventListener('click', function(){ prowDecrement(p); });
+  var add = document.createElement('button');
+  add.type = 'button';
+  add.className = 'pc-add';
+  add.setAttribute('aria-label', 'Tambah ' + p.name);
+  add.innerHTML = '<span class="pc-label">Tambah</span><span class="pc-qty"></span>';
+  add.addEventListener('click', function(){ prowQuickAdd(p); });
+  wrap.appendChild(minus);
+  wrap.appendChild(add);
+  syncProwControls(wrap, p, false);
   return wrap;
+}
+
+// Update tampilan kontrol SATU baris tanpa mengganti node-nya.
+// `animate` false saat render awal (supaya daftar tidak "meletup" semua
+// sekaligus saat halaman dibuka), true saat qty benar-benar diubah user.
+function syncProwControls(wrap, p, animate){
+  var qty = totalQtyForProduct(p);
+  var qtyEl = wrap.querySelector('.pc-qty');
+  var label = fmtQty(qty);
+  qtyEl.textContent = label;
+  // Qty desimal (mis. "0.25", produk timbang) lebih panjang dari 1-2 digit
+  // biasa — susutkan font proporsional supaya tetap muat di lingkaran 40px.
+  qtyEl.style.fontSize = label.length > 2 ? (16 * (2 / label.length)) + 'px' : '';
+  wrap.classList.toggle('selected', qty > 0);
+  if (animate && qty > 0) {
+    var wasFirst = qtyEl.classList.contains('badge-incr');
+    qtyEl.classList.remove('badge-incr', 'badge-incr2');
+    qtyEl.classList.add(wasFirst ? 'badge-incr2' : 'badge-incr');
+  }
 }
 
 // Stepper inline +/- — sekarang hanya dipakai di lembar keranjang, di mana
@@ -1017,14 +1124,20 @@ function buildStepper(unitId, qty){
   return wrap;
 }
 
+// Blueprint §5 — satu tombol aksi utama yang teks/warna/aksinya mengikuti
+// konteks (browse vs ringkasan pesanan), dan SEMBUNYI total saat belum ada
+// barang dipilih. Nominal total menyatu di dalam tombol yang sama.
 function renderCartBar(){
   var n = cartCount();
-  var c = document.getElementById('cbCount');
-  c.textContent = n;
-  c.className = 'cb-count' + (n === 0 ? ' empty' : '');
-  document.getElementById('cbLbl').textContent = n === 0 ? 'Belum ada barang dipilih' : n + ' barang dipilih';
-  document.getElementById('cbTotal').textContent = rp(cartTotal());
-  document.getElementById('cbView').disabled = n === 0;
+  var orderMode = document.getElementById('app').classList.contains('order-mode');
+  document.getElementById('mainBtnWrap').classList.toggle('hidden', n === 0);
+  document.getElementById('mbBadge').textContent = fmtQty(n);
+  document.getElementById('mbTotal').textContent = rp(cartTotal());
+  document.getElementById('mbLabel').textContent =
+      orderMode ? 'Kirim via WhatsApp' : 'Lihat Pesanan';
+  document.getElementById('mainBtn').classList.toggle('wa', orderMode);
+  document.getElementById('orderSub').textContent =
+      n === 0 ? 'Belum ada barang dipilih' : fmtQty(n) + ' barang dipilih';
 }
 
 function renderCartSheet(){
@@ -1195,20 +1308,42 @@ document.getElementById('q').addEventListener('input', function(){
   searchTimer = setTimeout(renderList, 120);
 });
 
+// Blueprint §2/§6 — pindah mode, BUKAN pindah halaman: tidak ada reload,
+// tidak ada history baru, kedua section tetap hidup di DOM. `sheetOpen`
+// dipertahankan namanya sbg penanda "ringkasan pesanan sedang terlihat",
+// dipakai render() utk melewati kerja render keranjang saat tidak tampil.
+// Tombol Kembali HP harus menutup ringkasan dulu, BUKAN langsung keluar
+// dari katalog — begitu tampilannya terasa seperti dua halaman, keluar
+// total saat menekan Kembali terasa seperti kehilangan pesanan. Satu entri
+// history didorong saat masuk mode pesanan lalu dikonsumsi saat keluar,
+// jadi tidak pernah menumpuk berapa kali pun pelanggan bolak-balik.
+var _histPushed = false;
 function openSheet(){
   sheetOpen = true;
   renderCartSheet();
-  document.getElementById('scrim').classList.add('show');
-  document.getElementById('sheet').classList.add('show');
+  document.getElementById('app').classList.add('order-mode');
+  renderCartBar();
+  document.getElementById('pageOrder').scrollTop = 0;
+  if (!_histPushed) {
+    try { history.pushState({posOrder:1}, ''); _histPushed = true; } catch (e) {}
+  }
 }
-function closeSheet(){
+// `fromPop` true = dipanggil dari event popstate (history SUDAH mundur
+// sendiri, jangan panggil history.back() lagi — itu akan mundur dua kali
+// dan menutup katalognya).
+function closeSheet(fromPop){
   sheetOpen = false;
-  document.getElementById('scrim').classList.remove('show');
-  document.getElementById('sheet').classList.remove('show');
+  document.getElementById('app').classList.remove('order-mode');
+  renderCartBar();
+  if (_histPushed) {
+    _histPushed = false;
+    if (!fromPop) { try { history.back(); } catch (e) {} }
+  }
 }
-document.getElementById('cbView').addEventListener('click', openSheet);
-document.getElementById('sheetClose').addEventListener('click', closeSheet);
-document.getElementById('scrim').addEventListener('click', closeSheet);
+document.getElementById('backBtn').addEventListener('click', function(){ closeSheet(false); });
+window.addEventListener('popstate', function(){
+  if (sheetOpen) closeSheet(true);
+});
 
 function esc(s){
   var d = document.createElement('div');
@@ -1261,12 +1396,25 @@ function buildOrderText(){
   return lines.join('\n');
 }
 
-function showToast(msg){
+// Blueprint §7 — auto-hilang 2,5 detik, atau ditutup manual dgn tap.
+// `persist` true utk kondisi yang memang menetap (mis. katalog kosong),
+// yang di blueprint juga sengaja TIDAK auto-hide.
+var _toastTimer = null;
+function showToast(msg, opts){
+  opts = opts || {};
   var t = document.getElementById('toast');
   t.textContent = msg;
+  t.classList.toggle('err', !!opts.error);
   t.classList.add('show');
-  setTimeout(function(){ t.classList.remove('show'); }, 2000);
+  clearTimeout(_toastTimer);
+  if (!opts.persist) {
+    _toastTimer = setTimeout(function(){ t.classList.remove('show'); }, 2500);
+  }
 }
+document.getElementById('toast').addEventListener('click', function(){
+  clearTimeout(_toastTimer);
+  this.classList.remove('show');
+});
 
 function copyText(text){
   var ok = false;
@@ -1283,7 +1431,7 @@ function copyText(text){
   return ok;
 }
 
-document.getElementById('waBtn').addEventListener('click', function(){
+function submitOrder(){
   if (cartCount() === 0) return;
   var text = buildOrderText();
   copyText(text);
@@ -1295,6 +1443,17 @@ document.getElementById('waBtn').addEventListener('click', function(){
     : ('https://api.whatsapp.com/send?text=' + encodeURIComponent(text));
   showToast('Teks pesanan disalin — tempel bila perlu');
   window.open(url, '_blank');
+}
+
+// Blueprint §5 — satu tombol, dua aksi tergantung mode: dari daftar produk
+// membuka ringkasan, dari ringkasan mengirim pesanan.
+document.getElementById('mainBtn').addEventListener('click', function(){
+  if (cartCount() === 0) return;
+  if (document.getElementById('app').classList.contains('order-mode')) {
+    submitOrder();
+  } else {
+    openSheet();
+  }
 });
 
 document.getElementById('copyBtn').addEventListener('click', function(){
@@ -1303,8 +1462,18 @@ document.getElementById('copyBtn').addEventListener('click', function(){
   showToast(ok ? 'Teks pesanan disalin' : 'Gagal menyalin — salin manual dari WhatsApp');
 });
 
+// Blueprint §6 — katalog tanpa produk sama sekali (mis. semua produk
+// dinonaktifkan saat katalog dibuat) tampil sbg state "tutup" yang jelas:
+// daftar diredupkan + toast menetap, bukan layar kosong tanpa penjelasan.
+if (!DATA.products || DATA.products.length === 0) {
+  document.getElementById('app').classList.add('closed');
+}
+
 loadCart();
 render();
+if (!DATA.products || DATA.products.length === 0) {
+  showToast('Katalog ini sedang kosong — hubungi toko', {persist:true});
+}
 </script>
 </body>
 </html>

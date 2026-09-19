@@ -355,16 +355,18 @@ void main() {
   });
 
   test(
-      'Item 14 — daftar produk punya kontrol +/− lingkaran (meniru app '
-      'kasir), bukan cuma badge angka/chevron', () async {
+      'Item 14/80 — daftar produk punya kontrol tambah/kurang sendiri '
+      '(pill "Tambah" + tombol minus), bukan cuma badge angka/chevron',
+      () async {
     final db = AppDatabase(NativeDatabase.memory());
     final result = await OrderPageService.generateHtml(
         db: db, storeName: 'Toko Berkah');
 
-    expect(result.html.contains('prow-circle-add'), isTrue);
-    expect(result.html.contains('prow-circle-qty'), isTrue);
-    expect(result.html.contains('prow-minus'), isTrue);
+    expect(result.html.contains('pc-add'), isTrue);
+    expect(result.html.contains('pc-qty'), isTrue);
+    expect(result.html.contains('pc-minus'), isTrue);
     expect(result.html.contains('function prowQuickAdd('), isTrue);
+    expect(result.html.contains('function prowDecrement('), isTrue);
     expect(result.html.contains('prow-badge'), isFalse);
     expect(result.html.contains('prow-chevron'), isFalse);
 
@@ -738,18 +740,16 @@ void main() {
     final result = await OrderPageService.generateHtml(
         db: db, storeName: 'Toko Berkah');
 
-    expect(result.html.contains('@keyframes prow-bump'), isTrue);
-    expect(result.html.contains('@keyframes prow-pop'), isTrue);
-    expect(
-        result.html
-            .contains('.prow-circle-qty{animation:prow-bump .28s'),
+    expect(result.html.contains('@keyframes badge-incr'), isTrue);
+    expect(result.html.contains('@keyframes icon-pop'), isTrue);
+    expect(result.html.contains('.pc-qty.badge-incr{animation:badge-incr .3s'),
         isTrue);
-    expect(result.html.contains('.prow-minus{animation:prow-pop .18s'),
+    expect(result.html.contains('.prow-icon.icon-pop{animation:icon-pop .34s'),
         isTrue);
     expect(
         result.html.contains('@media (prefers-reduced-motion: reduce){\n'
-            '  .prow-circle-qty,.prow-minus{animation:none;}\n'
-            '}'),
+            '  .pc-qty.badge-incr,.pc-qty.badge-incr2,'
+            '.prow-icon.icon-pop{animation:none;}'),
         isTrue);
 
     // Toggle list<->tile: fade opacity out, ganti mode, fade in -- bukan
@@ -767,6 +767,127 @@ void main() {
             '  var saved = null;'),
         isTrue,
         reason: 'initLayout tetap sederhana, tidak ikut disentuh trik fade');
+
+    await db.close();
+  });
+
+  test(
+      'Item 80 — REGRESI BUG: grid mode Tile WAJIB grid-auto-rows:min-content. '
+      'Dengan `auto` (default), `.prow` yang overflow:hidden jadi scroll '
+      'container ber-min-content NOL, sehingga track dibagi rata dari tinggi '
+      '#list yang definite (flex:1) -> tiap kartu kolaps ~6px & isinya '
+      'terpotong (tampil sebagai garis tipis saja)', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    await _addProduct(db, name: 'Beras Rojolele', price: 15000);
+    final result = await OrderPageService.generateHtml(
+        db: db, storeName: 'Toko Berkah');
+
+    final tileBlockStart = result.html.indexOf('.list.tile-mode{');
+    expect(tileBlockStart, greaterThan(-1));
+    final tileBlock = result.html.substring(tileBlockStart, tileBlockStart + 900);
+    expect(tileBlock.contains('grid-auto-rows:min-content'), isTrue,
+        reason: 'tanpa ini kartu tile kolaps jadi garis tipis');
+    // `.prow` memang harus tetap overflow:hidden (sudut kartu membulat) --
+    // yang berarti penyebab kolapsnya tetap ada kalau auto-rows dikembalikan.
+    expect(result.html.contains('.prow{background:var(--card)'), isTrue);
+
+    await db.close();
+  });
+
+  test(
+      'Item 80 — UX dua halaman (blueprint §2): kedua section ada di DOM '
+      'sejak awal & dipindah lewat class `order-mode` di #app, BUKAN '
+      'navigasi/reload — supaya keranjang & isian form tidak pernah hilang',
+      () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    final result = await OrderPageService.generateHtml(
+        db: db, storeName: 'Toko Berkah');
+    final html = result.html;
+
+    expect(html.contains('id="pageMenu"'), isTrue);
+    expect(html.contains('id="pageOrder"'), isTrue);
+    expect(html.contains('#app.order-mode .page-menu'), isTrue);
+    expect(html.contains('#app.order-mode .page-order'), isTrue);
+    expect(html.contains("classList.add('order-mode')"), isTrue);
+    expect(html.contains("classList.remove('order-mode')"), isTrue);
+    // Pindah halaman TIDAK boleh lewat navigasi sungguhan.
+    expect(html.contains('location.href ='), isFalse);
+    expect(html.contains('location.replace('), isFalse);
+
+    // Tombol Kembali HP menutup ringkasan, bukan keluar dari katalog.
+    expect(html.contains("history.pushState({posOrder:1}"), isTrue);
+    expect(html.contains("window.addEventListener('popstate'"), isTrue);
+
+    // Field pelanggan & baris keranjang tetap ada (pindah tempat, bukan
+    // hilang) -- logika inti tidak dikorbankan oleh redesign.
+    expect(html.contains('id="custName"'), isTrue);
+    expect(html.contains('id="custPhone"'), isTrue);
+    expect(html.contains('id="custNote"'), isTrue);
+    expect(html.contains('id="cartItems"'), isTrue);
+    expect(html.contains('id="copyBtn"'), isTrue);
+
+    await db.close();
+  });
+
+  test(
+      'Item 80 — tombol aksi utama (blueprint §5): SATU tombol mengambang '
+      'yang memuat nominal total di dalamnya, sembunyi saat keranjang '
+      'kosong, dan berganti label/warna antara "Lihat Pesanan" & kirim WA',
+      () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    final result = await OrderPageService.generateHtml(
+        db: db, storeName: 'Toko Berkah');
+    final html = result.html;
+
+    expect(html.contains('id="mainBtn"'), isTrue);
+    expect(html.contains('id="mbTotal"'), isTrue,
+        reason: 'nominal total harus menyatu di dalam tombol utama');
+    expect(html.contains('id="mbBadge"'), isTrue);
+    expect(html.contains("classList.toggle('hidden', n === 0)"), isTrue,
+        reason: 'tombol sembunyi total saat belum ada barang dipilih');
+    expect(html.contains("orderMode ? 'Kirim via WhatsApp' : 'Lihat Pesanan'"),
+        isTrue);
+    expect(html.contains('.mainbtn.wa{background:#25D366;}'), isTrue);
+    // Bar keranjang lama (label+total terpisah dari tombol) sudah TIDAK ada.
+    expect(html.contains('class="cartbar"'), isFalse);
+    expect(html.contains('id="cbView"'), isFalse);
+
+    // Logika kirim pesanan tidak berubah: kode mesin & deep-link WA tetap.
+    expect(html.contains('function submitOrder()'), isTrue);
+    expect(html.contains("'https://wa.me/'"), isTrue);
+    expect(html.contains('DATA.machinePrefix'), isTrue);
+
+    await db.close();
+  });
+
+  test(
+      'Item 80 — expanded pill (blueprint §4): pill "Tambah" 84px menyusut '
+      'jadi 40px & tombol minus tumbuh dari width 0 saat qty>=1; node '
+      'kontrol di-mutate di tempat (BUKAN diganti baru) supaya transisi '
+      'width benar-benar punya nilai awal untuk dianimasikan', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    final result = await OrderPageService.generateHtml(
+        db: db, storeName: 'Toko Berkah');
+    final html = result.html;
+
+    expect(html.contains('.pc-add{position:relative;width:84px'), isTrue);
+    expect(html.contains('.prow-controls.selected .pc-add{width:40px'), isTrue);
+    expect(html.contains('.pc-minus{width:0;'), isTrue);
+    expect(html.contains('.prow-controls.selected .pc-minus{width:38px'), isTrue);
+    expect(html.contains('transition:width .26s'), isTrue);
+
+    // Mutate-in-place: refreshProwControls TIDAK boleh lagi replaceWith().
+    final refreshStart = html.indexOf('function refreshProwControls(p){');
+    expect(refreshStart, greaterThan(-1));
+    final refreshBody = html.substring(refreshStart, refreshStart + 700);
+    expect(refreshBody.contains('replaceWith'), isFalse,
+        reason: 'mengganti node mematikan transisi width pill');
+    expect(refreshBody.contains('syncProwControls(wrap, p, true)'), isTrue);
+
+    // Trik nama animasi bergantian (blueprint §4) supaya badge re-trigger
+    // walau node-nya persisten.
+    expect(html.contains("classList.add(wasFirst ? 'badge-incr2' : 'badge-incr')"),
+        isTrue);
 
     await db.close();
   });
