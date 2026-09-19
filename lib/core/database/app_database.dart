@@ -8070,6 +8070,40 @@ class AppDatabase extends _$AppDatabase {
     return out;
   }
 
+  /// Item 82 — pelengkap [getCustomerNamesForTransactions]: `customerId`
+  /// TERKINI milik nota (bukan salinan beku `customerId` di baris Laci
+  /// Meja), dipakai aksen visual "pelanggan tetap vs ad-hoc"
+  /// (`_isRegisteredCustomer`/`_customerTypeIcon` di dashboard) supaya
+  /// tetap ikut nota begitu `changeTransactionCustomer` dipakai — persis
+  /// alasan yang sama dgn nama (lihat dok di atas: "nama cukup DIBACA
+  /// HIDUP dari notanya"), TAPI utk BOOLEAN terdaftar-atau-tidak, bukan
+  /// teks nama. Tanpa ini: nama sudah benar terkoreksi (live), tapi
+  /// ikon/aksen tetap nyangkut "ad-hoc" selamanya krn `customerId` beku di
+  /// baris Laci Meja tidak pernah ikut di-update (dilaporkan user — nota
+  /// sudah pelanggan tetap, kartu pre-order-nya masih tampil ad-hoc).
+  ///
+  /// Baris hasil TIDAK diperiksa `customerId` menang atas `customerName`
+  /// spt fungsi nama (tidak relevan di sini) — cukup: nota ini SEKARANG
+  /// terhubung ke pelanggan terdaftar atau tidak. null/tidak ada di map =
+  /// TIDAK ada jawaban DEFINITIF dari nota; pemanggil WAJIB fallback ke
+  /// `customerId` beku milik entri Laci Meja itu sendiri (`?? fallback`,
+  /// BUKAN `containsKey`-check) — baris Laci Meja yang `customerId`-nya
+  /// diisi terpisah dari `transactions.customer_id` (SAH, lihat dok
+  /// `LeftBehindItems.customerId` — "SENGAJA TANPA FK", keduanya field
+  /// independen) tetap harus mempercayai salinannya sendiri kalau nota
+  /// TIDAK (atau belum) menyatakan sebaliknya, supaya entri yang customer_id
+  /// notanya kebetulan tidak diisi (data lama/import) tidak tiba-tiba
+  /// dianggap ad-hoc.
+  Future<Map<String, String>> getRegisteredCustomerIdsForTransactions(
+      List<String> transactionIds) async {
+    if (transactionIds.isEmpty) return {};
+    final rows = await (select(transactions)
+          ..where((t) =>
+              t.id.isIn(transactionIds) & t.customerId.isNotNull()))
+        .get();
+    return {for (final tx in rows) tx.id: tx.customerId!};
+  }
+
   /// Susulan (permintaan user): alamat pelanggan TERDAFTAR utk sekumpulan
   /// `customerId` — dipakai dashboard Laci Meja menampilkan alamat di bawah
   /// nama, supaya nama KEMBAR (mis. dua "Bu Sri" beda alamat) bisa

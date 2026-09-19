@@ -103,6 +103,26 @@ final laciMejaCustomerNamesProvider =
   return ref.watch(databaseProvider).getCustomerNamesForTransactions(ids);
 });
 
+/// Item 82 — pelengkap [laciMejaCustomerNamesProvider]: `customerId`
+/// TERKINI (keyed by `transactionId`) utk aksen visual "pelanggan tetap vs
+/// ad-hoc" — lihat dok `AppDatabase.getRegisteredCustomerIdsForTransactions`
+/// utk laporan bug & alasan pendekatannya (sama pola dgn nama, tapi utk
+/// ikon/aksen, bukan teks).
+final laciMejaRegisteredCustomerIdProvider =
+    FutureProvider<Map<String, String>>((ref) async {
+  final leftBehind = ref.watch(leftBehindItemsProvider).valueOrNull ?? [];
+  final borrowed = ref.watch(borrowedItemsProvider).valueOrNull ?? [];
+  final preorder = ref.watch(preorderEntriesProvider).valueOrNull ?? [];
+  final ids = <String>{
+    ...leftBehind.map((e) => e.transactionId),
+    ...borrowed.map((e) => e.transactionId),
+    ...preorder.map((e) => e.transactionId).whereType<String>(),
+  }.toList();
+  return ref
+      .watch(databaseProvider)
+      .getRegisteredCustomerIdsForTransactions(ids);
+});
+
 /// Susulan (permintaan user) — alamat pelanggan TERDAFTAR yang sedang
 /// tampil di dashboard, keyed lewat `customerId` (BUKAN `transactionId`
 /// spt `laciMejaCustomerNamesProvider` — alamat menempel ke pelanggan,
@@ -115,10 +135,18 @@ final laciMejaCustomerAddressProvider =
   final leftBehind = ref.watch(leftBehindItemsProvider).valueOrNull ?? [];
   final borrowed = ref.watch(borrowedItemsProvider).valueOrNull ?? [];
   final preorder = ref.watch(preorderEntriesProvider).valueOrNull ?? [];
+  // Item 82 — ikut ambilkan alamat utk `customerId` TERKINI (bukan cuma
+  // salinan beku entri) juga, sama alasan dgn dok
+  // `laciMejaRegisteredCustomerIdProvider` — kalau tidak, kartu yang
+  // notanya sudah dipindah ke pelanggan terdaftar lain tetap menampilkan
+  // alamat pelanggan LAMA (atau tidak menampilkan sama sekali).
+  final liveIds =
+      ref.watch(laciMejaRegisteredCustomerIdProvider).valueOrNull ?? {};
   final ids = <String>{
     ...leftBehind.map((e) => e.customerId).whereType<String>(),
     ...borrowed.map((e) => e.customerId).whereType<String>(),
     ...preorder.map((e) => e.customerId).whereType<String>(),
+    ...liveIds.values,
   }.toList();
   return ref.watch(databaseProvider).getCustomerAddressesForIds(ids);
 });

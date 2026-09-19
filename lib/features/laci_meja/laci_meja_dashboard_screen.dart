@@ -128,6 +128,28 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
     return 'Umum';
   }
 
+  /// Item 82 — pelengkap [_customerLabel]: `customerId` yang dipakai utk
+  /// ikon/aksen "pelanggan tetap vs ad-hoc" & lookup alamat, UTAMAKAN
+  /// `customerId` TERKINI dari nota rujukan (`liveIds`, lihat dok
+  /// `AppDatabase.getRegisteredCustomerIdsForTransactions`), baru jatuh ke
+  /// salinan beku yang tersimpan di baris Laci Meja itu sendiri
+  /// (`fallback`). SENGAJA `?? fallback` (bukan `containsKey`-check "nota
+  /// SEKARANG null -> pasti ad-hoc") — baris Laci Meja yang `customerId`-
+  /// nya diisi independen dari `transactions.customer_id` (SAH, field
+  /// terpisah, lihat dok `LeftBehindItems.customerId`) tetap harus
+  /// mempercayai salinannya sendiri kalau nota TIDAK menyatakan terdaftar,
+  /// supaya entri yang notanya kebetulan tidak (atau belum) diisi
+  /// `customer_id` (umum di data lama/import) tidak tiba-tiba dianggap
+  /// ad-hoc semata krn nota rujukannya sendiri belum tertaut.
+  static String? _effectiveCustomerId({
+    required String? txId,
+    required Map<String, String> liveIds,
+    required String? fallback,
+  }) {
+    final live = txId == null ? null : liveIds[txId];
+    return live ?? fallback;
+  }
+
   /// Baris ke-1 kartu (redesain permintaan user): NAMA PELANGGAN paling atas,
   /// bold & paling besar — menggantikan nama barang yang dulu di posisi ini.
   ///
@@ -582,6 +604,8 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
       List<LeftBehindItem> items, bool isDark, ColorScheme scheme) {
     final qtyUnit = ref.watch(leftBehindQtyUnitProvider).valueOrNull ?? {};
     final liveNames = ref.watch(laciMejaCustomerNamesProvider).valueOrNull ?? {};
+    final liveIds =
+        ref.watch(laciMejaRegisteredCustomerIdProvider).valueOrNull ?? {};
     final addresses =
         ref.watch(laciMejaCustomerAddressProvider).valueOrNull ?? {};
 
@@ -635,6 +659,11 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
           liveNames: liveNames,
           fallback: group.first.customerNameText,
         );
+        final effectiveCustomerId = _effectiveCustomerId(
+          txId: txIds[i],
+          liveIds: liveIds,
+          fallback: group.first.customerId,
+        );
         return Card(
           margin: EdgeInsets.zero,
           clipBehavior: Clip.antiAlias,
@@ -647,10 +676,9 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
                   onTap: () => context.push('/kasir/struk/${txIds[i]}'),
                   child: _cardHeader(
                     customerName,
-                    leading:
-                        _customerTypeIcon(group.first.customerId, isDark),
-                    accent: _isRegisteredCustomer(group.first.customerId),
-                    address: addresses[group.first.customerId],
+                    leading: _customerTypeIcon(effectiveCustomerId, isDark),
+                    accent: _isRegisteredCustomer(effectiveCustomerId),
+                    address: addresses[effectiveCustomerId],
                     isDark: isDark,
                   ),
                 ),
@@ -751,6 +779,8 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
   Widget _buildBorrowedList(BuildContext context, WidgetRef ref,
       List<BorrowedItem> items, bool isDark, ColorScheme scheme) {
     final liveNames = ref.watch(laciMejaCustomerNamesProvider).valueOrNull ?? {};
+    final liveIds =
+        ref.watch(laciMejaRegisteredCustomerIdProvider).valueOrNull ?? {};
     final addresses =
         ref.watch(laciMejaCustomerAddressProvider).valueOrNull ?? {};
 
@@ -801,6 +831,11 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
           liveNames: liveNames,
           fallback: group.first.customerNameText,
         );
+        final effectiveCustomerId = _effectiveCustomerId(
+          txId: group.first.transactionId,
+          liveIds: liveIds,
+          fallback: group.first.customerId,
+        );
         // Sematan disimpan per baris, tapi dinyalakan/dimatikan sekaligus
         // untuk seluruh grup — lihat dok `setBorrowedPinned`.
         final pinned = group.any((e) => e.pinned);
@@ -814,9 +849,9 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
               children: [
                 _cardHeader(
                   customerName,
-                  leading: _customerTypeIcon(group.first.customerId, isDark),
-                  accent: _isRegisteredCustomer(group.first.customerId),
-                  address: addresses[group.first.customerId],
+                  leading: _customerTypeIcon(effectiveCustomerId, isDark),
+                  accent: _isRegisteredCustomer(effectiveCustomerId),
+                  address: addresses[effectiveCustomerId],
                   isDark: isDark,
                   trailing: IconButton(
                     tooltip: pinned ? 'Lepas sematan' : 'Sematkan ke atas',
@@ -1231,6 +1266,8 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
       double? quota}) {
     final addresses =
         ref.watch(laciMejaCustomerAddressProvider).valueOrNull ?? {};
+    final liveIds =
+        ref.watch(laciMejaRegisteredCustomerIdProvider).valueOrNull ?? {};
     // Kartu PERTAMA yang isinya sudah melewati kuota — garis pembatas
     // disisipkan tepat di atasnya. Dihitung dari urutan kartu yang benar-benar
     // dirender, jadi ikut bergeser saat antrian berubah.
@@ -1258,6 +1295,11 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
           liveNames: liveNames,
           fallback: first.customerName,
         );
+        final effectiveCustomerId = _effectiveCustomerId(
+          txId: first.transactionId,
+          liveIds: liveIds,
+          fallback: first.customerId,
+        );
         final card = Card(
           margin: EdgeInsets.zero,
           clipBehavior: Clip.antiAlias,
@@ -1273,9 +1315,9 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
                           context.push('/kasir/struk/${first.transactionId}'),
                   child: _cardHeader(
                     customerName,
-                    leading: _customerTypeIcon(first.customerId, isDark),
-                    accent: _isRegisteredCustomer(first.customerId),
-                    address: addresses[first.customerId],
+                    leading: _customerTypeIcon(effectiveCustomerId, isDark),
+                    accent: _isRegisteredCustomer(effectiveCustomerId),
+                    address: addresses[effectiveCustomerId],
                     isDark: isDark,
                   ),
                 ),
