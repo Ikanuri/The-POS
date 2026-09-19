@@ -6,7 +6,78 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 18 September 2026, sesi ketujuh puluh empat — Item 79
+_Update sesi 19 September 2026, sesi ketujuh puluh lima — **Item 80
+SELESAI**: fix bug tile mode katalog HTML + redesain UI/UX mengikuti
+blueprint Mini App (DurgerKingBot). Commit `260488a`. Versi kerja
+**2.67.0+147** (MINOR — ada fitur baru yang terlihat pengguna, ADA entri
+PATCHNOTES.md). schemaVersion TETAP **44** (tidak menyentuh DB sama
+sekali). Semua ada di branch `claude/kategori-produk-qty-harga-mqjh21`;
+**user eksplisit: JANGAN merge ke `main`**._
+
+**Bug tile mode (dilaporkan user via screenshot HP)**: tiap kartu produk
+tampil cuma sebagai GARIS TIPIS. Akar masalah (dikonfirmasi dgn mengukur
+di browser sungguhan, bukan menebak): `.prow` punya `overflow:hidden`
+sehingga jadi scroll container, dan **scroll container automatic-minimum-
+size-nya NOL**. Dengan `grid-auto-rows:auto` (default), track jadi tidak
+punya tinggi minimum dari isi, sementara `#list` tingginya DEFINITE
+(karena `flex:1` → `flex-basis:0`) — sisa ruang dibagi rata ke semua
+track (terukur 5,6px/baris), kartu kolaps lalu isinya dipotong
+`overflow:hidden` miliknya sendiri. **Fix: `grid-auto-rows:min-content`.**
+Ada test regresi khusus utk ini; JANGAN kembalikan ke `auto`.
+
+**Redesain (blueprint → penyesuaian kaidah proyek)**:
+- §2 dua mode satu halaman → dua `<section>` (`#pageMenu`/`#pageOrder`)
+  sama-sama di DOM sejak awal, dipindah lewat class `order-mode` di
+  `#app` + transisi CSS. Keranjang PINDAH dari bottom-sheet ke halaman
+  kedua (disetujui user). Tombol Kembali HP ditangani via
+  `history.pushState` + `popstate` supaya menutup ringkasan, bukan
+  keluar dari katalog.
+- §4 "expanded pill" → pill "Tambah" 84px menyusut jadi lingkaran 40px
+  saat qty≥1, tombol minus tumbuh dari `width:0`. **Penting**:
+  `refreshProwControls` sekarang MUTATE node di tempat
+  (`syncProwControls`), TIDAK lagi `replaceWith` — mengganti node
+  mematikan transisi `width` karena tidak ada nilai awal. Badge
+  di-retrigger dgn trik nama animasi bergantian (`badge-incr`/
+  `badge-incr2`), sesuai blueprint.
+- §5 MainButton Telegram → tidak ada di browser biasa, diganti satu
+  tombol mengambang dgn nominal total MENYATU di dalamnya (permintaan
+  user), sembunyi saat keranjang kosong.
+- §3 micro-interaction ikon memantul; §6 state "tutup" saat katalog
+  kosong; §7 toast slide-up 2,5 detik + tap-dismiss.
+
+**Deviasi sadar dari blueprint (jangan dianggap kelalaian)**:
+1. **Shimmer placeholder (§3) TIDAK dibuat** — ikon di sini emoji/CSS
+   yang render seketika, tidak ada gambar remote yang perlu ditunggu;
+   skeleton hanya akan menambah jeda semu. Relevan lagi kalau nanti ikon
+   diganti foto produk sungguhan.
+2. **Toast merah hanya untuk error**, tidak semua status seperti
+   blueprint — di sana toast memang cuma dipakai utk error, sedangkan
+   katalog ini juga memakainya utk pesan informatif ("teks pesanan
+   disalin") yang akan terbaca sbg kegagalan kalau diwarnai merah.
+3. **Lottie/CDN & Telegram WebApp API** jelas tidak dipakai — katalog ini
+   wajib self-contained tanpa CDN/backend.
+
+**Logika inti DIPERTAHANKAN UTUH** (diverifikasi, bukan diasumsikan):
+harga tetap di-resolve di Dart (`PriceService`) & JS hanya menampilkan,
+modal tap-item utk ubah satuan/jumlah/catatan, kode mesin `#PSN:`,
+deep-link `wa.me`, persist keranjang localStorage, konfirmasi hapus,
+badge stok habis, pencarian, toggle tema & List/Tile.
+
+**Metode verifikasi baru yang dipakai sesi ini (berguna diulang)**:
+template HTML diekstrak dari Dart lewat skrip Python, diisi data dummy,
+lalu dirender di **Chromium headless** (`playwright-core` +
+`/opt/pw-browsers/chromium-1194/chrome-linux/chrome`) untuk MENGUKUR
+geometri sungguhan & menjalankan 20 pemeriksaan interaksi (tap baris →
+modal, pill memecah, stepper keranjang, hapus+konfirmasi, toggle layout,
+pencarian, persist reload, tombol Kembali HP). Ini yang menemukan akar
+bug tile mode secara pasti — test Dart berbasis cocok-string TIDAK bisa
+menangkap kelas bug layout seperti ini. Skrip ada di scratchpad sesi
+(tidak di-commit).
+
+_Ringkasan sesi sebelumnya di bawah ini dipertahankan sbg histori
+teknis:_
+
+Sesi ketujuh puluh empat — Item 79
 (redesain UX katalog HTML `order_page_service.dart`) SEMUA 4 MILESTONE
 SELESAI, di branch **`feature/katalog-html-ux-redesign`** (BUKAN
 `main`/`claude/kategori-produk-qty-harga-mqjh21` — user eksplisit minta

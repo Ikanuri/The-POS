@@ -8,6 +8,37 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 19 September 2026 (sesi ketujuh puluh lima)
+
+### 🐛 Perbaikan
+- **Katalog pesanan HTML: tampilan "kotak" (tile) yang tadinya cuma
+  menampilkan garis-garis tipis kini tampil normal.** Semua kartu produk
+  (ikon, nama, harga, tombol) sempat terpotong habis sehingga katalog
+  praktis tidak bisa dipakai dalam mode kotak.
+
+### ✨ Baru
+- **Katalog pesanan HTML dirombak jadi dua halaman.** Halaman pertama
+  daftar produk, halaman kedua ringkasan pesanan — berpindah dengan
+  animasi geser yang halus. Keranjang, nama, dan catatan yang sudah diisi
+  tidak pernah hilang saat bolak-balik. Tombol "Kembali" di HP menutup
+  ringkasan dulu, bukan langsung keluar dari katalog.
+- **Satu tombol besar mengambang berisi jumlah barang dan total harga
+  sekaligus**, menggantikan bar keranjang lama. Tombolnya menyembunyikan
+  diri saat belum ada barang dipilih, lalu berubah sendiri jadi "Kirim
+  via WhatsApp" begitu masuk halaman ringkasan.
+- **Tombol "Tambah" kini memanjang jadi tombol jelas bertulisan, lalu
+  menyusut jadi lingkaran angka saat barang dipilih**, dengan tombol
+  kurang yang muncul menyamping. Ikon produk ikut memantul kecil tiap
+  jumlahnya berubah, jadi lebih terasa responsif saat ditekan.
+- **Pesan singkat (toast) muncul menggeser dari bawah**, hilang sendiri
+  setelah 2,5 detik atau bisa ditutup dengan menyentuhnya.
+- **Katalog yang kosong kini menampilkan keterangan jelas**, bukan lagi
+  layar kosong tanpa penjelasan.
+
+Semua cara pakai yang lama tetap sama: sentuh baris produk untuk memilih
+satuan/varian, mengubah jumlah, atau menulis catatan; tombol salin teks
+pesanan; dan pengiriman lewat WhatsApp.
+
 ## 18 September 2026 (sesi ketujuh puluh tiga)
 
 ### 🐛 Perbaikan
