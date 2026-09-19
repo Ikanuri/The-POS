@@ -192,6 +192,63 @@ void main() {
   });
 
   testWidgets(
+      'Item 80 — bug REGRESI: "Sisa tagihan" & "Uang Pas" di sheet '
+      'Pra-Bayar WAJIB ikut menjumlahkan Lunasi Hutang aktif, bukan cuma '
+      'item keranjang -- tanpa fix, tap "Uang Pas" mengunci Pra-Bayar jauh '
+      'lebih kecil dari yang sebenarnya harus diterima', (tester) async {
+    final r = await pumpCartSheetOpen(tester, deviceRole: 'owner');
+    addTearDown(() async => r.db.close());
+
+    // Total item keranjang = 30000 (pola sama test lain di file ini).
+    // Entri "Lunasi Hutang" AKTIF Rp 50.000 disuntik langsung ke provider
+    // (skip alur sheet "Pilih Nota untuk Dilunasi" -- fokus test ini murni
+    // pembuktian angka gabungan di sheet Pra-Bayar).
+    r.container
+        .read(cartDebtSettlementProvider(kMainCartId).notifier)
+        .add(DebtSettlementEntry(
+          id: 'ds1',
+          invoiceId: 'tx-lama',
+          invoiceLocalId: 'K1-1',
+          invoiceDate: DateTime.now(),
+          customerId: 'c1',
+          customerName: 'Bu Sri',
+          amount: 50000,
+          createdAt: DateTime.now(),
+        ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Pra-Bayar'));
+    await tester.pumpAndSettle();
+
+    // "Sisa tagihan" WAJIB Rp 80.000 (30000 item + 50000 hutang), BUKAN
+    // Rp 30.000 (item saja). Discope ke Row label "Sisa tagihan " --
+    // ringkasan Total di cart_sheet di belakang sheet ini JUGA menampilkan
+    // Rp 80.000 (footer Total gabungan, sudah benar sejak awal), jadi
+    // `find.text` polos ambigu.
+    final sisaRow = find.ancestor(
+      of: find.text('Sisa tagihan '),
+      matching: find.byType(Row),
+    );
+    expect(find.descendant(of: sisaRow, matching: find.text(formatRupiah(80000))),
+        findsOneWidget,
+        reason: '"Sisa tagihan" di sheet Pra-Bayar harus ikut hutang aktif');
+    expect(find.descendant(of: sisaRow, matching: find.text(formatRupiah(30000))),
+        findsNothing,
+        reason: 'tanpa fix, sheet ini cuma menampilkan item keranjang');
+
+    await tester.tap(find.text('Uang Pas'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(FilledButton).last);
+    await tester.pumpAndSettle();
+
+    final prabayar = r.container.read(cartPrabayarProvider(kMainCartId));
+    expect(prabayar, hasLength(1));
+    expect(prabayar.single.amount, 80000,
+        reason: 'Uang Pas harus mengunci nominal gabungan item+hutang, '
+            'bukan cuma item keranjang');
+  });
+
+  testWidgets(
       'Pra-Bayar melebihi total keranjang -> baris "Kembalian" HIJAU '
       'tampil (bukan "Sisa")', (tester) async {
     final r = await pumpCartSheetOpen(tester, deviceRole: 'owner');

@@ -335,8 +335,26 @@ class _CartSheetState extends ConsumerState<CartSheet> {
     final notifier = ref.read(cartProvider(widget.cartId).notifier);
     final prabayarNotifier =
         ref.read(cartPrabayarProvider(widget.cartId).notifier);
-    final remaining =
-        (notifier.totalAmount - prabayarNotifier.totalLocked).clamp(0, 99999999).toInt();
+    // Bug ditemukan (laporan user, screenshot): "Sisa tagihan" di sheet ini
+    // (termasuk tombol "Uang Pas" & pill Kembalian/Sisa di dalamnya, lihat
+    // `debt_payment_sheet.dart`) cuma dihitung dari item keranjang murni --
+    // TIDAK ikut Lunasi Hutang/Pelunasi Pre-order yang sedang aktif di
+    // keranjang yang SAMA. Kasir yang tap "Uang Pas" bisa mengunci Pra-Bayar
+    // jauh lebih kecil dari yang sebenarnya perlu diterima (persis kelas bug
+    // Item 65/77, di titik yang belum ikut diperbaiki: sheet PENGISIAN
+    // Pra-Bayar, bukan layar Bayar akhir).
+    final debtSettlementTotal = ref
+        .read(cartDebtSettlementProvider(widget.cartId))
+        .fold<int>(0, (s, e) => s + e.amount);
+    final preorderSettlementTotal = ref
+        .read(cartPreorderSettlementProvider(widget.cartId))
+        .fold<int>(0, (s, e) => s + e.amount);
+    final remaining = (notifier.totalAmount +
+            debtSettlementTotal +
+            preorderSettlementTotal -
+            prabayarNotifier.totalLocked)
+        .clamp(0, 99999999)
+        .toInt();
     final result = await showDebtPaymentSheet(
       ctx,
       db,
