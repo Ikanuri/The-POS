@@ -7,6 +7,15 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-20 (sesi ketujuh puluh enam — bug kalkulator Pra-Bayar + audit sync pelunasan/pemenuhan (Item 81) + aksen pelanggan tetap tidak live-update (Item 82))
+
+- `a38df4d` — fix(laci-meja): ikon/aksen "pelanggan tetap" tidak ikut
+  update setelah Ganti Pelanggan (Item 82)
+- `ee2ee06` — fix(sync): pembatalan pembayaran (transaction_payments) &
+  DP pre-order tidak tersinkron (Item 81)
+- `617e07e` — fix(kasir): sheet Pra-Bayar tidak menghitung Lunasi
+  Hutang/Pelunasi Pre-order aktif
+
 ## 2026-09-19 (sesi ketujuh puluh lima — fix bug tile mode + redesain UI/UX katalog HTML ala blueprint Mini App, Item 80)
 
 - `260488a` — fix(katalog)+feat: redesain UX katalog HTML ala blueprint

@@ -6,7 +6,78 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 19 September 2026, sesi ketujuh puluh lima — **Item 80
+_Update sesi 20 September 2026, sesi ketujuh puluh enam — **3 bug nyata
+diperbaiki** dari satu sesi investigasi (user minta: (1) fix bug
+kalkulator Pra-Bayar, (2) analisa sync pelunasan/pemenuhan hutang &
+pre-order — tidak terbatas pada Item 78, (3) analisa dulu — jangan
+langsung asumsi — soal aksen pelanggan tetap/ad-hoc yang salah).
+Commits `617e07e` (Pra-Bayar), `ee2ee06` (Item 81, sync), `a38df4d`
+(Item 82, aksen). Versi kerja **2.67.1+148** (PATCH — murni bugfix, ADA
+entri PATCHNOTES.md, ketiganya user-facing). **schemaVersion NAIK ke
+45** (kolom `transaction_payments.updated_at` baru, migrasi aditif)._
+
+**Bug #1 — kalkulator Pra-Bayar tidak menghitung hutang (ROOT CAUSE
+BEDA dari dugaan awal)**: dari screenshot user, ternyata BUKAN di layar
+Bayar utama (`_grandTotal` di situ SUDAH benar sejak Item 65/77, dicek
+ulang & tetap hijau) — tapi di sheet **"Pra-Bayar"** terpisah
+(`_addPrabayar`, `cart_sheet.dart`): "Sisa tagihan" & tombol "Uang Pas"
+di sheet itu dihitung MURNI dari `notifier.totalAmount` (item
+keranjang), tidak pernah ikut menjumlahkan `debtSettlementTotal`/
+`preorderSettlementTotal` yang aktif di keranjang yang SAMA. Fix murni
+nambah kedua total itu ke `remaining`. **Pelajaran metodologis**: jangan
+berhenti setelah memverifikasi kode "yang sudah pernah diperbaiki" —
+screenshot user justru menunjuk layar LAIN yang belum pernah disentuh
+fix Item 65/77 sama sekali, walau gejalanya kedengaran identik ("hutang
+tidak kehitung").
+
+**Bug #2/Item 81 — sync `voidPayment`, 2 celah dalam SATU fungsi**:
+1. **LAN sync**: `transaction_payments` append-only murni di
+   `dumpSince` (filter `paid_at` doang, tanpa kolom timestamp lain) &
+   `mergeRows` (skip kalau PK sudah ada) — padahal `voidPayment`
+   ("Batalkan Pembayaran") meng-UPDATE `voided` pada baris yang SUDAH
+   ADA. Pembatalan SETELAH baris itu tersinkron TIDAK PERNAH terkirim
+   ke device lain (persis kelas bug Item 62/63, tabel ini yang
+   terlewat). Fix: kolom `updated_at` baru (schemaVersion 45) + stamp +
+   `dumpSince`/`mergeRows` ikut pola `transactions`/`transaction_items`.
+2. **Proposal Laci Meja**: reversal DP pre-order DI DALAM `voidPayment`
+   tidak punya param `locallyModified` sama sekali — reachable dari
+   device kasir (gerbang cuma izin `batal_transaksi`). Ini fungsi yang
+   TERLEWAT saat audit Item 78 (sesi itu eksplisit menyisir "entitas
+   Laci Meja lain" tapi tidak sampai ke `voidPayment`). Fix: tambah
+   param, thread dari `receipt_screen.dart`.
+
+**Bug #3/Item 82 — aksen "pelanggan tetap" beku, TERKONFIRMASI (bukan
+salah duga user)**: sesi lampau sudah benar memperbaiki NAMA pelanggan
+di kartu Laci Meja jadi "dibaca hidup" dari nota (`getCustomerNamesForTransactions`)
+begitu fitur "Ganti Pelanggan" (`changeTransactionCustomer`) dipakai —
+tapi IKON/AKSEN (`_isRegisteredCustomer`, jg dipakai lookup alamat)
+masih baca `customerId` BEKU milik baris Laci Meja itu sendiri, yang
+TIDAK PERNAH ikut di-update. Fix: fungsi baru
+`getRegisteredCustomerIdsForTransactions` (pola sama fungsi nama) +
+provider + helper `_effectiveCustomerId` — **PENTING**: pakai
+`live ?? fallback`, BUKAN `containsKey`-check "nota null -> pasti
+ad-hoc" — sempat dicoba pakai containsKey, MEREGRESI 2 test lama
+(entri yang `customerId`-nya diisi independen dari
+`transactions.customer_id`, kasus SAH & umum di data lama/test)
+sebelum diperbaiki balik ke `??`. **Pelajaran**: "live selalu menang"
+itu terlalu agresif kalau live-nya BISA `null`-karena-belum-diisi
+(bukan `null`-karena-genuinely-ad-hoc) — keduanya harus dibedakan
+lewat DESAIN fallback (`??`), bukan dianggap sama.
+
+**Test baru**: `cart_sheet_prabayar_test.dart` (+1), `migration_v45_test.dart`,
+22 file `migration_v*_test.dart` lama diupdate assersi versi final
+44→45 (murni ikut kenaikan schemaVersion), `transaction_payments_void_sync_test.dart`
+(dumpSince+mergeRows end-to-end 2 sync), `void_payment_preorder_deposit_reverse_test.dart`
+(+1), `laci_meja_dashboard_customer_accent_live_test.dart` (widget test
+end-to-end). Semua revert-verified. `flutter analyze` 0 issue. Full
+suite background dispatch dalam proses saat hand-off ini ditulis — CEK
+hasilnya sebelum menganggap sesi ini benar-benar tuntas kalau
+melanjutkan dari sini.
+
+_Ringkasan sesi sebelumnya di bawah ini dipertahankan sbg histori
+teknis:_
+
+Sesi ketujuh puluh lima — **Item 80
 SELESAI**: fix bug tile mode katalog HTML + redesain UI/UX mengikuti
 blueprint Mini App (DurgerKingBot). Commit `260488a`. Versi kerja
 **2.67.0+147** (MINOR — ada fitur baru yang terlihat pengguna, ADA entri

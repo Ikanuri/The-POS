@@ -8,6 +8,30 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 20 September 2026 (sesi ketujuh puluh enam)
+
+### 🐛 Perbaikan
+- **Kalkulator Pra-Bayar sekarang ikut menghitung "Lunasi Hutang"/
+  "Pelunasi Pre-order" yang sedang aktif di keranjang yang sama.**
+  Sebelumnya, tombol "Uang Pas" di sheet Pra-Bayar bisa mengunci nominal
+  jauh lebih kecil dari yang sebenarnya harus diterima — hanya
+  menghitung harga barang, tidak termasuk hutang/pre-order yang ikut
+  dilunasi bersamaan.
+- **Pembayaran yang dibatalkan ("Batalkan Pembayaran") sekarang ikut
+  tersinkron ke semua perangkat.** Sebelumnya, jika pembayaran itu
+  sudah lebih dulu tersinkron ke HP lain sebelum dibatalkan, status
+  pembatalannya tidak pernah sampai — "Riwayat Pembayaran" di HP lain
+  tetap menampilkan pembayaran itu seolah masih berlaku.
+- **Pembatalan DP/jaminan pre-order dari HP kasir (bukan HP utama)
+  sekarang ikut tersinkron ke perangkat lain**, sama seperti perbaikan
+  serupa untuk pembayaran DP itu sendiri di pembaruan sebelumnya.
+- **Kartu titip/ketinggalan, pinjaman, dan pre-order di dashboard Laci
+  Meja sekarang menampilkan ikon "pelanggan tetap" dengan benar** setelah
+  nota diubah dari pembeli lepas ke pelanggan terdaftar lewat fitur
+  "Ganti Pelanggan" — sebelumnya ikon (dan alamat pelanggan di bawah
+  nama) bisa tetap menampilkan status lama selamanya walau namanya
+  sendiri sudah benar.
+
 ## 19 September 2026 (sesi ketujuh puluh lima)
 
 ### 🐛 Perbaikan
