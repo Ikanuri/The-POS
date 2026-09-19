@@ -304,7 +304,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 44;
+  int get schemaVersion => 45;
 
   /// Key `app_settings` yang BOLEH ikut sync host->klien.
   ///
@@ -917,6 +917,19 @@ class AppDatabase extends _$AppDatabase {
             // valid apa adanya (null = belum pernah dikoreksi ulang).
             await _addColumnIfMissing('transaction_items', 'updated_at',
                 transactionItems, transactionItems.updatedAt, m);
+          }
+          if (from < 45) {
+            // Item 81 — `transaction_payments` diperlakukan append-only
+            // murni oleh `dumpSince`/`mergeRows` (persis bug Item 62/63,
+            // tapi tabel ini sebelumnya tidak punya kolom timestamp apa
+            // pun) — `voidPayment` ("Batalkan Pembayaran") meng-UPDATE
+            // `voided` pada baris yang sudah ada, tidak pernah tersinkron
+            // ke device lain. Tambah `updated_at` supaya bisa difilter/
+            // last-write-wins juga (lihat `dumpSince`/`mergeRows` case
+            // khusus 'transaction_payments'). Aditif & nullable, baris
+            // lama tetap valid apa adanya (null = belum pernah di-void).
+            await _addColumnIfMissing('transaction_payments', 'updated_at',
+                transactionPayments, transactionPayments.updatedAt, m);
           }
         },
         beforeOpen: (details) async {
@@ -5234,7 +5247,16 @@ class AppDatabase extends _$AppDatabase {
   /// terpisah: heuristik ini pilih SATU entri paling dekat waktunya,
   /// bukan sempurna utk skenario itu (jarang terjadi di praktik toko) —
   /// dicatat sbg batasan yang diketahui, bukan diabaikan diam-diam.
-  Future<void> voidPayment(String paymentId) async {
+  /// Item 81 — `locallyModified`/`deviceCode` sebelumnya TIDAK ADA sama
+  /// sekali (beda dari `collectPreorderDeposit`/`fulfillPreorderEntry` dkk
+  /// yang sudah dibenahi Item 78) — reversal DP pre-order di bawah
+  /// (`preorderEntries.paid = false`) dari device kasir (gerbang caller
+  /// cuma izin `batal_transaksi`, BUKAN owner-only, lihat
+  /// `receipt_screen.dart._voidPayment`) tidak pernah ditandai utk
+  /// diusulkan ke host — persis kelas bug Item 78, di fungsi yang
+  /// terlewat saat audit sesi itu.
+  Future<void> voidPayment(String paymentId,
+      {bool locallyModified = false, String? deviceCode}) async {
     await transaction(() async {
       final pay = await (select(transactionPayments)
             ..where((t) => t.id.equals(paymentId)))
@@ -5248,8 +5270,17 @@ class AppDatabase extends _$AppDatabase {
           .getSingleOrNull();
       if (tx == null || tx.status == 'void') return;
 
+      final voidedAt = DateTime.now();
       await (update(transactionPayments)..where((t) => t.id.equals(paymentId)))
-          .write(const TransactionPaymentsCompanion(voided: Value(true)));
+          .write(TransactionPaymentsCompanion(
+        voided: const Value(true),
+        // Item 81 — WAJIB dicap, lihat dok kolom `TransactionPayments.
+        // updatedAt` & `dumpSince`/`mergeRows` case `transaction_payments`:
+        // tanpa ini, status dibatalkan TIDAK PERNAH ke-dump lagi ke device
+        // yang sudah lebih dulu menerima baris ini (persis kelas bug
+        // Item 62/63, level baris pembayaran).
+        updatedAt: Value(voidedAt),
+      ));
       await _reconcileTransactionTotals(pay.transactionId);
 
       if (pay.note == _kPreorderDepositNote) {
@@ -5280,6 +5311,7 @@ class AppDatabase extends _$AppDatabase {
           await (update(preorderEntries)..where((t) => t.id.equals(entry.id)))
               .write(PreorderEntriesCompanion(
             paid: const Value(false),
+            locallyModified: Value(locallyModified),
             updatedAt: Value(now),
           ));
           await recordLaciMejaEvent(
@@ -5288,7 +5320,8 @@ class AppDatabase extends _$AppDatabase {
             entryId: entry.id,
             aksi: 'batal',
             note: 'DP dibatalkan (voidPayment)',
-            deviceCode: pay.kasirId,
+            deviceCode: deviceCode ?? pay.kasirId,
+            locallyModified: locallyModified,
           );
         }
       }
@@ -6775,7 +6808,14 @@ class AppDatabase extends _$AppDatabase {
               'OR added_at >= ? OR updated_at >= ?';
           varCount = 3;
         case 'transaction_payments':
-          sql = 'SELECT * FROM "transaction_payments" WHERE paid_at >= ?';
+          // Item 81 — `voidPayment` ("Batalkan Pembayaran") meng-UPDATE
+          // `voided` pada baris yang SUDAH ada (`paid_at` tidak berubah) --
+          // tanpa OR ini, pembatalan tidak pernah ke-dump lagi begitu
+          // watermark device lain sudah lewat dari `paid_at` baris itu
+          // (persis kelas bug Item 62/63, level baris pembayaran).
+          sql = 'SELECT * FROM "transaction_payments" WHERE paid_at >= ? '
+              'OR updated_at >= ?';
+          varCount = 2;
         case 'expenses':
           // Item 61.5 — soft-delete (`deleted_at`) ditulis via UPDATE,
           // TIDAK mengubah `created_at` — tanpa OR ini, baris yang baru
@@ -7569,6 +7609,41 @@ class AppDatabase extends _$AppDatabase {
                         Variable<Object>(pkVal),
                       ],
                       updates: {transactionItems},
+                      updateKind: UpdateKind.update,
+                    );
+                  }
+                }
+              }
+              // Item 81 — `transaction_payments` KHUSUS: baris yang sudah
+              // ada (`INSERT OR IGNORE` di bawah akan no-op) masih bisa
+              // punya `voided` yang genuinely berubah setelah tersinkron
+              // pertama kali (`voidPayment` — "Batalkan Pembayaran") — sama
+              // pola persis dgn `transactions`/`transaction_items` di atas,
+              // last-write-wins by `updated_at`. Kolom lain (`amount`,
+              // `changeGiven`, `sisaAfter`, dst) SENGAJA tidak ikut —
+              // semuanya immutable, ditulis SEKALI saat baris dibuat, bukan
+              // field yang genuinely berubah pasca-insert.
+              if (tableName == 'transaction_payments') {
+                final incomingUpdatedAt = row['updated_at'];
+                if (incomingUpdatedAt is int) {
+                  final existingFull = await customSelect(
+                    'SELECT updated_at FROM "transaction_payments" '
+                    'WHERE id = ?',
+                    variables: [Variable<Object>(pkVal)],
+                  ).getSingleOrNull();
+                  final existingUpdatedAt =
+                      existingFull?.data['updated_at'] as int?;
+                  if (existingUpdatedAt == null ||
+                      incomingUpdatedAt > existingUpdatedAt) {
+                    await customUpdate(
+                      'UPDATE transaction_payments SET voided = ?, '
+                      'updated_at = ? WHERE id = ?',
+                      variables: [
+                        Variable<Object>(row['voided'] ?? 0),
+                        Variable<Object>(incomingUpdatedAt),
+                        Variable<Object>(pkVal),
+                      ],
+                      updates: {transactionPayments},
                       updateKind: UpdateKind.update,
                     );
                   }

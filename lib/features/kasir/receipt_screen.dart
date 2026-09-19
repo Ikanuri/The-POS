@@ -1277,7 +1277,14 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       ),
     );
     if (confirmed != true) return;
-    await db.voidPayment(payment.id);
+    // Item 81: reversal DP pre-order di dalam voidPayment (kalau baris ini
+    // pembayaran DP/jaminan) sebelumnya SELALU locallyModified=false --
+    // pembatalan dari device kasir tidak pernah diusulkan ke host.
+    await db.voidPayment(
+      payment.id,
+      locallyModified: ref.read(laciMejaLocallyModifiedProvider),
+      deviceCode: device.deviceCode,
+    );
     await _load();
   }
 

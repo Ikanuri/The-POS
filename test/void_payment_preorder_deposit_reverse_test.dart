@@ -134,4 +134,55 @@ void main() {
     expect(voidedPay.voided, isTrue);
     expect(tx.paid, 30000);
   });
+
+  test(
+      'Item 81 — bug sync: voidPayment(locallyModified: true) pada DP '
+      'pre-order WAJIB menandai preorderEntries.locallyModified=true, sama '
+      'seperti collectPreorderDeposit -- tanpa ini, pembatalan DP dari '
+      'device kasir tidak pernah diusulkan ke host', () async {
+    await seedTx();
+    await db.addPreorderEntry(
+        id: 'po1',
+        productId: 'P1',
+        productUnitId: 'U2',
+        customerName: 'Umum',
+        qtyOrdered: 2,
+        transactionId: 'tx1',
+        transactionItemId: 'ti_lpg');
+    await db.collectPreorderDeposit(
+        preorderEntryId: 'po1',
+        amount: 30000,
+        method: 'tunai',
+        kasirId: 'K2');
+
+    // Owner meng-approve dulu (simulasikan flag sudah bersih setelah sync
+    // disetujui) supaya perubahan BERIKUTNYA (void) benar2 yang diuji.
+    await (db.update(db.preorderEntries)..where((t) => t.id.equals('po1')))
+        .write(const PreorderEntriesCompanion(locallyModified: Value(false)));
+
+    final dpPayment = await (db.select(db.transactionPayments)
+          ..where((t) =>
+              t.transactionId.equals('tx1') & t.id.isNotValue('pay1')))
+        .getSingle();
+
+    // Device KASIR (non-owner) membatalkan pembayaran DP itu.
+    await db.voidPayment(dpPayment.id,
+        locallyModified: true, deviceCode: 'K2');
+
+    final entry = await (db.select(db.preorderEntries)
+          ..where((t) => t.id.equals('po1')))
+        .getSingle();
+    expect(entry.paid, isFalse);
+    expect(entry.locallyModified, isTrue,
+        reason: 'tanpa fix, reversal DP dari device kasir tidak pernah '
+            'ditandai locallyModified -> tidak pernah diusulkan ke host');
+
+    // Baris log Laci Meja utk pembatalan ini juga harus locallyModified.
+    final events = await (db.select(db.laciMejaEvents)
+          ..where((t) => t.entryId.equals('po1') & t.aksi.equals('batal')))
+        .get();
+    expect(events, hasLength(1));
+    expect(events.single.locallyModified, isTrue);
+    expect(events.single.deviceCode, 'K2');
+  });
 }

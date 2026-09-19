@@ -106,7 +106,7 @@ void main() {
         reason: 'purchase_items dapat created_at baru, terisi default');
 
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 44);
+    expect(ver.data.values.first, 45);
 
     await db.close();
     if (file.existsSync()) file.deleteSync();

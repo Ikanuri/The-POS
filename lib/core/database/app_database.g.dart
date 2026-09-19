@@ -6593,6 +6593,12 @@ class $TransactionPaymentsTable extends TransactionPayments
       GeneratedColumn<int>(
           'prabayar_change_taken_before_checkout', aliasedName, true,
           type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+      'updated_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -6607,7 +6613,8 @@ class $TransactionPaymentsTable extends TransactionPayments
         changeTaken,
         voided,
         sisaAfter,
-        prabayarChangeTakenBeforeCheckout
+        prabayarChangeTakenBeforeCheckout,
+        updatedAt
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -6689,6 +6696,10 @@ class $TransactionPaymentsTable extends TransactionPayments
               data['prabayar_change_taken_before_checkout']!,
               _prabayarChangeTakenBeforeCheckoutMeta));
     }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    }
     return context;
   }
 
@@ -6725,6 +6736,8 @@ class $TransactionPaymentsTable extends TransactionPayments
       prabayarChangeTakenBeforeCheckout: attachedDatabase.typeMapping.read(
           DriftSqlType.int,
           data['${effectivePrefix}prabayar_change_taken_before_checkout']),
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at']),
     );
   }
 
@@ -6808,6 +6821,26 @@ class TransactionPayment extends DataClass
   /// Pembayaran" in-app (`receipt_screen.dart`) utk menampilkan baris
   /// keterangan tambahan, TIDAK PERNAH dipakai utk kalkulasi ulang apa pun.
   final int? prabayarChangeTakenBeforeCheckout;
+
+  /// Item 81 — bug sync: baris ini diperlakukan append-only murni oleh
+  /// `dumpSince`/`mergeRows` (filter `WHERE paid_at >= ?`, tanpa kolom
+  /// timestamp lain sama sekali), padahal `voidPayment` ("Batalkan
+  /// Pembayaran") meng-UPDATE `voided` pada baris yang SUDAH ada setelah
+  /// insert awal — persis kelas bug Item 62/63 (`transactions`/
+  /// `transaction_items`), tapi di tabel ini belum ada kolom apa pun utk
+  /// mendeteksinya. Tanpa kolom ini, pembatalan yang terjadi SETELAH baris
+  /// pembayaran itu tersinkron ke device lain tidak akan pernah terkirim
+  /// lagi — "Riwayat Pembayaran" di device lain tetap menampilkan baris
+  /// yang sudah dibatalkan seolah masih aktif, walau `transactions.paid`
+  /// nota itu sendiri sudah benar (tabel `transactions` ikut ter-update &
+  /// sync via Item 62). null = baris belum pernah di-void sejak insert
+  /// (dumpSince/mergeRows lama, aman utk baris lama/normal). Field lain di
+  /// tabel ini (`changeGiven`/`sisaAfter`/`prabayarChangeTakenBeforeCheckout`)
+  /// SENGAJA tidak ikut memicu kolom ini — semuanya immutable, ditulis
+  /// SEKALI saat baris dibuat (lihat dok masing-masing), bukan field yang
+  /// genuinely berubah pasca-insert. `changeTaken` JUGA tidak ikut — murni
+  /// per-device (lihat dok kolom itu), sama seperti `Transactions.changeTaken`.
+  final DateTime? updatedAt;
   const TransactionPayment(
       {required this.id,
       required this.transactionId,
@@ -6821,7 +6854,8 @@ class TransactionPayment extends DataClass
       required this.changeTaken,
       required this.voided,
       required this.sisaAfter,
-      this.prabayarChangeTakenBeforeCheckout});
+      this.prabayarChangeTakenBeforeCheckout,
+      this.updatedAt});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -6846,6 +6880,9 @@ class TransactionPayment extends DataClass
     if (!nullToAbsent || prabayarChangeTakenBeforeCheckout != null) {
       map['prabayar_change_taken_before_checkout'] =
           Variable<int>(prabayarChangeTakenBeforeCheckout);
+    }
+    if (!nullToAbsent || updatedAt != null) {
+      map['updated_at'] = Variable<DateTime>(updatedAt);
     }
     return map;
   }
@@ -6872,6 +6909,9 @@ class TransactionPayment extends DataClass
           prabayarChangeTakenBeforeCheckout == null && nullToAbsent
               ? const Value.absent()
               : Value(prabayarChangeTakenBeforeCheckout),
+      updatedAt: updatedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(updatedAt),
     );
   }
 
@@ -6893,6 +6933,7 @@ class TransactionPayment extends DataClass
       sisaAfter: serializer.fromJson<int>(json['sisaAfter']),
       prabayarChangeTakenBeforeCheckout:
           serializer.fromJson<int?>(json['prabayarChangeTakenBeforeCheckout']),
+      updatedAt: serializer.fromJson<DateTime?>(json['updatedAt']),
     );
   }
   @override
@@ -6913,6 +6954,7 @@ class TransactionPayment extends DataClass
       'sisaAfter': serializer.toJson<int>(sisaAfter),
       'prabayarChangeTakenBeforeCheckout':
           serializer.toJson<int?>(prabayarChangeTakenBeforeCheckout),
+      'updatedAt': serializer.toJson<DateTime?>(updatedAt),
     };
   }
 
@@ -6929,8 +6971,8 @@ class TransactionPayment extends DataClass
           bool? changeTaken,
           bool? voided,
           int? sisaAfter,
-          Value<int?> prabayarChangeTakenBeforeCheckout =
-              const Value.absent()}) =>
+          Value<int?> prabayarChangeTakenBeforeCheckout = const Value.absent(),
+          Value<DateTime?> updatedAt = const Value.absent()}) =>
       TransactionPayment(
         id: id ?? this.id,
         transactionId: transactionId ?? this.transactionId,
@@ -6948,6 +6990,7 @@ class TransactionPayment extends DataClass
             prabayarChangeTakenBeforeCheckout.present
                 ? prabayarChangeTakenBeforeCheckout.value
                 : this.prabayarChangeTakenBeforeCheckout,
+        updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
       );
   TransactionPayment copyWithCompanion(TransactionPaymentsCompanion data) {
     return TransactionPayment(
@@ -6972,6 +7015,7 @@ class TransactionPayment extends DataClass
           data.prabayarChangeTakenBeforeCheckout.present
               ? data.prabayarChangeTakenBeforeCheckout.value
               : this.prabayarChangeTakenBeforeCheckout,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
   }
 
@@ -6991,7 +7035,8 @@ class TransactionPayment extends DataClass
           ..write('voided: $voided, ')
           ..write('sisaAfter: $sisaAfter, ')
           ..write(
-              'prabayarChangeTakenBeforeCheckout: $prabayarChangeTakenBeforeCheckout')
+              'prabayarChangeTakenBeforeCheckout: $prabayarChangeTakenBeforeCheckout, ')
+          ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
   }
@@ -7010,7 +7055,8 @@ class TransactionPayment extends DataClass
       changeTaken,
       voided,
       sisaAfter,
-      prabayarChangeTakenBeforeCheckout);
+      prabayarChangeTakenBeforeCheckout,
+      updatedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -7028,7 +7074,8 @@ class TransactionPayment extends DataClass
           other.voided == this.voided &&
           other.sisaAfter == this.sisaAfter &&
           other.prabayarChangeTakenBeforeCheckout ==
-              this.prabayarChangeTakenBeforeCheckout);
+              this.prabayarChangeTakenBeforeCheckout &&
+          other.updatedAt == this.updatedAt);
 }
 
 class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
@@ -7045,6 +7092,7 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
   final Value<bool> voided;
   final Value<int> sisaAfter;
   final Value<int?> prabayarChangeTakenBeforeCheckout;
+  final Value<DateTime?> updatedAt;
   final Value<int> rowid;
   const TransactionPaymentsCompanion({
     this.id = const Value.absent(),
@@ -7060,6 +7108,7 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
     this.voided = const Value.absent(),
     this.sisaAfter = const Value.absent(),
     this.prabayarChangeTakenBeforeCheckout = const Value.absent(),
+    this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   TransactionPaymentsCompanion.insert({
@@ -7076,6 +7125,7 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
     this.voided = const Value.absent(),
     this.sisaAfter = const Value.absent(),
     this.prabayarChangeTakenBeforeCheckout = const Value.absent(),
+    this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : id = Value(id),
         transactionId = Value(transactionId),
@@ -7095,6 +7145,7 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
     Expression<bool>? voided,
     Expression<int>? sisaAfter,
     Expression<int>? prabayarChangeTakenBeforeCheckout,
+    Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -7113,6 +7164,7 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
       if (prabayarChangeTakenBeforeCheckout != null)
         'prabayar_change_taken_before_checkout':
             prabayarChangeTakenBeforeCheckout,
+      if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -7131,6 +7183,7 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
       Value<bool>? voided,
       Value<int>? sisaAfter,
       Value<int?>? prabayarChangeTakenBeforeCheckout,
+      Value<DateTime?>? updatedAt,
       Value<int>? rowid}) {
     return TransactionPaymentsCompanion(
       id: id ?? this.id,
@@ -7147,6 +7200,7 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
       sisaAfter: sisaAfter ?? this.sisaAfter,
       prabayarChangeTakenBeforeCheckout: prabayarChangeTakenBeforeCheckout ??
           this.prabayarChangeTakenBeforeCheckout,
+      updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -7194,6 +7248,9 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
       map['prabayar_change_taken_before_checkout'] =
           Variable<int>(prabayarChangeTakenBeforeCheckout.value);
     }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -7217,6 +7274,7 @@ class TransactionPaymentsCompanion extends UpdateCompanion<TransactionPayment> {
           ..write('sisaAfter: $sisaAfter, ')
           ..write(
               'prabayarChangeTakenBeforeCheckout: $prabayarChangeTakenBeforeCheckout, ')
+          ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -22147,6 +22205,7 @@ typedef $$TransactionPaymentsTableCreateCompanionBuilder
   Value<bool> voided,
   Value<int> sisaAfter,
   Value<int?> prabayarChangeTakenBeforeCheckout,
+  Value<DateTime?> updatedAt,
   Value<int> rowid,
 });
 typedef $$TransactionPaymentsTableUpdateCompanionBuilder
@@ -22164,6 +22223,7 @@ typedef $$TransactionPaymentsTableUpdateCompanionBuilder
   Value<bool> voided,
   Value<int> sisaAfter,
   Value<int?> prabayarChangeTakenBeforeCheckout,
+  Value<DateTime?> updatedAt,
   Value<int> rowid,
 });
 
@@ -22233,6 +22293,9 @@ class $$TransactionPaymentsTableFilterComposer
           column: $table.prabayarChangeTakenBeforeCheckout,
           builder: (column) => ColumnFilters(column));
 
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+
   $$TransactionsTableFilterComposer get transactionId {
     final $$TransactionsTableFilterComposer composer = $composerBuilder(
         composer: this,
@@ -22300,6 +22363,9 @@ class $$TransactionPaymentsTableOrderingComposer
       $composableBuilder(
           column: $table.prabayarChangeTakenBeforeCheckout,
           builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
 
   $$TransactionsTableOrderingComposer get transactionId {
     final $$TransactionsTableOrderingComposer composer = $composerBuilder(
@@ -22369,6 +22435,9 @@ class $$TransactionPaymentsTableAnnotationComposer
           column: $table.prabayarChangeTakenBeforeCheckout,
           builder: (column) => column);
 
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
   $$TransactionsTableAnnotationComposer get transactionId {
     final $$TransactionsTableAnnotationComposer composer = $composerBuilder(
         composer: this,
@@ -22430,6 +22499,7 @@ class $$TransactionPaymentsTableTableManager extends RootTableManager<
             Value<int> sisaAfter = const Value.absent(),
             Value<int?> prabayarChangeTakenBeforeCheckout =
                 const Value.absent(),
+            Value<DateTime?> updatedAt = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               TransactionPaymentsCompanion(
@@ -22447,6 +22517,7 @@ class $$TransactionPaymentsTableTableManager extends RootTableManager<
             sisaAfter: sisaAfter,
             prabayarChangeTakenBeforeCheckout:
                 prabayarChangeTakenBeforeCheckout,
+            updatedAt: updatedAt,
             rowid: rowid,
           ),
           createCompanionCallback: ({
@@ -22464,6 +22535,7 @@ class $$TransactionPaymentsTableTableManager extends RootTableManager<
             Value<int> sisaAfter = const Value.absent(),
             Value<int?> prabayarChangeTakenBeforeCheckout =
                 const Value.absent(),
+            Value<DateTime?> updatedAt = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               TransactionPaymentsCompanion.insert(
@@ -22481,6 +22553,7 @@ class $$TransactionPaymentsTableTableManager extends RootTableManager<
             sisaAfter: sisaAfter,
             prabayarChangeTakenBeforeCheckout:
                 prabayarChangeTakenBeforeCheckout,
+            updatedAt: updatedAt,
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0

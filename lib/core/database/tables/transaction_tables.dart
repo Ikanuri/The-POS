@@ -212,6 +212,26 @@ class TransactionPayments extends Table {
   /// keterangan tambahan, TIDAK PERNAH dipakai utk kalkulasi ulang apa pun.
   IntColumn get prabayarChangeTakenBeforeCheckout => integer().nullable()();
 
+  /// Item 81 — bug sync: baris ini diperlakukan append-only murni oleh
+  /// `dumpSince`/`mergeRows` (filter `WHERE paid_at >= ?`, tanpa kolom
+  /// timestamp lain sama sekali), padahal `voidPayment` ("Batalkan
+  /// Pembayaran") meng-UPDATE `voided` pada baris yang SUDAH ada setelah
+  /// insert awal — persis kelas bug Item 62/63 (`transactions`/
+  /// `transaction_items`), tapi di tabel ini belum ada kolom apa pun utk
+  /// mendeteksinya. Tanpa kolom ini, pembatalan yang terjadi SETELAH baris
+  /// pembayaran itu tersinkron ke device lain tidak akan pernah terkirim
+  /// lagi — "Riwayat Pembayaran" di device lain tetap menampilkan baris
+  /// yang sudah dibatalkan seolah masih aktif, walau `transactions.paid`
+  /// nota itu sendiri sudah benar (tabel `transactions` ikut ter-update &
+  /// sync via Item 62). null = baris belum pernah di-void sejak insert
+  /// (dumpSince/mergeRows lama, aman utk baris lama/normal). Field lain di
+  /// tabel ini (`changeGiven`/`sisaAfter`/`prabayarChangeTakenBeforeCheckout`)
+  /// SENGAJA tidak ikut memicu kolom ini — semuanya immutable, ditulis
+  /// SEKALI saat baris dibuat (lihat dok masing-masing), bukan field yang
+  /// genuinely berubah pasca-insert. `changeTaken` JUGA tidak ikut — murni
+  /// per-device (lihat dok kolom itu), sama seperti `Transactions.changeTaken`.
+  DateTimeColumn get updatedAt => dateTime().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
