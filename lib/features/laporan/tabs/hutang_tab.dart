@@ -51,6 +51,14 @@ class _HutangTabState extends ConsumerState<HutangTab> {
             : all.where((e) => e.name.toLowerCase().contains(q)).toList();
         final totalDebt = all.fold<int>(0, (s, e) => s + e.debt);
 
+        // Item 83 (permintaan user) — pisahkan pelanggan TERDAFTAR dari
+        // pembeli AD-HOC (nama diketik manual/"Umum", tidak punya record
+        // `Customers`) jadi 2 section, bukan satu daftar campur.
+        final tetap = list.where((e) => !e.isAdhoc).toList();
+        final adhoc = list.where((e) => e.isAdhoc).toList();
+        final tetapDebt = tetap.fold<int>(0, (s, e) => s + e.debt);
+        final adhocDebt = adhoc.fold<int>(0, (s, e) => s + e.debt);
+
         return Column(
           children: [
             Padding(
@@ -95,31 +103,25 @@ class _HutangTabState extends ConsumerState<HutangTab> {
                               : 'Tidak ada pelanggan cocok.',
                           style: TextStyle(color: scheme.onSurfaceVariant)),
                     )
-                  : ListView.separated(
-                      itemCount: list.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (_, i) {
-                        final e = list[i];
-                        final days = e.daysOverdue;
-                        return ListTile(
-                          title: Text(e.name,
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.w600)),
-                          subtitle: Text(
-                            'menunggak $days hari · ${e.count} nota',
-                            style: TextStyle(
-                                fontSize: 12,
-                                color: _overdueColor(days, isDark),
-                                fontWeight: FontWeight.w600),
+                  : ListView(
+                      children: [
+                        if (tetap.isNotEmpty)
+                          _groupSection(
+                            title: 'Pelanggan Tetap',
+                            entries: tetap,
+                            groupDebt: tetapDebt,
+                            isDark: isDark,
+                            scheme: scheme,
                           ),
-                          trailing: Text(formatRupiah(e.debt),
-                              style: AppTheme.numStyle(context,
-                                  size: 15,
-                                  weight: FontWeight.w700,
-                                  color: AppTheme.debtFg(isDark))),
-                          onTap: () => _showDetail(e),
-                        );
-                      },
+                        if (adhoc.isNotEmpty)
+                          _groupSection(
+                            title: 'Pembeli Umum (Ad-hoc)',
+                            entries: adhoc,
+                            groupDebt: adhocDebt,
+                            isDark: isDark,
+                            scheme: scheme,
+                          ),
+                      ],
                     ),
             ),
           ],
@@ -128,10 +130,69 @@ class _HutangTabState extends ConsumerState<HutangTab> {
     );
   }
 
+  /// Item 83 — satu section (header + subtotal + daftar), dipakai baik utk
+  /// "Pelanggan Tetap" maupun "Pembeli Umum (Ad-hoc)".
+  Widget _groupSection({
+    required String title,
+    required List<DebtBookEntry> entries,
+    required int groupDebt,
+    required bool isDark,
+    required ColorScheme scheme,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(title,
+                  style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: scheme.primary)),
+              Text(formatRupiah(groupDebt),
+                  style: AppTheme.numStyle(context,
+                      size: 13,
+                      weight: FontWeight.w700,
+                      color: scheme.onSurfaceVariant)),
+            ],
+          ),
+        ),
+        for (final e in entries)
+          Column(
+            children: [
+              ListTile(
+                title: Text(e.name,
+                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                subtitle: Text(
+                  'menunggak ${e.daysOverdue} hari · ${e.count} nota',
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: _overdueColor(e.daysOverdue, isDark),
+                      fontWeight: FontWeight.w600),
+                ),
+                trailing: Text(formatRupiah(e.debt),
+                    style: AppTheme.numStyle(context,
+                        size: 15,
+                        weight: FontWeight.w700,
+                        color: AppTheme.debtFg(isDark))),
+                onTap: () => _showDetail(e),
+              ),
+              const Divider(height: 1),
+            ],
+          ),
+      ],
+    );
+  }
+
   Future<void> _showDetail(DebtBookEntry e) async {
     final scheme = Theme.of(context).colorScheme;
     final db = ref.read(databaseProvider);
-    final unpaidTx = await db.getUnpaidTxDetails(e.customerId);
+    final unpaidTx = e.isAdhoc
+        ? await db.getUnpaidTxDetailsByCustomerName(e.adhocCustomerName)
+        : await db.getUnpaidTxDetails(e.customerId!);
     if (!mounted) return;
     await showModalBottomSheet<void>(
       context: context,
@@ -231,7 +292,9 @@ class _HutangTabState extends ConsumerState<HutangTab> {
         remaining: e.debt, title: 'Lunasi Hutang ${e.name}');
     if (result == null || result.amount <= 0) return;
 
-    final txIds = await db.getUnpaidTxIds(e.customerId);
+    final txIds = e.isAdhoc
+        ? await db.getUnpaidTxIdsByCustomerName(e.adhocCustomerName)
+        : await db.getUnpaidTxIds(e.customerId!);
     final (applied, change) = await db.settleMergedDebt(
       txIds: txIds,
       amount: result.amount,

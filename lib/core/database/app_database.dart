@@ -4932,28 +4932,110 @@ class AppDatabase extends _$AppDatabase {
   /// pelanggan hilang dari Buku Hutang walau tiap nota individual
   /// `status`-nya tetap benar. Fix: net dari `change_given` (LEFT JOIN
   /// subquery per transaksi), pola SQL sepadan `netRemainingOwed`.
+  ///
+  /// Item 83 — bug dilaporkan user: nota tempo/kurang_bayar milik pembeli
+  /// AD-HOC (`customer_id IS NULL`, cuma `customer_name` diketik atau
+  /// kosong sama sekali — "Umum") SAMA SEKALI TIDAK MUNCUL di sini
+  /// sebelumnya, walau di Riwayat Transaksi nota itu jelas belum lunas —
+  /// akarnya `JOIN customers` di atas adalah INNER JOIN, baris tanpa
+  /// `customer_id` otomatis tersaring habis. Fix: UNION ALL dgn cabang
+  /// kedua yang mengelompokkan nota ad-hoc per `customer_name` (satu-
+  /// satunya identitas yang ada — SAMA keterbatasannya dgn pengelompokan
+  /// ad-hoc di tempat lain, mis. kartu Laci Meja: dua pembeli beda tapi
+  /// ketik nama sama akan tergabung jadi satu baris; tidak ada cara lain
+  /// membedakan tanpa `customer_id`). `cid` NULL menandai baris ad-hoc —
+  /// dipakai UI (`hutang_tab.dart`) memisahkan section "Pelanggan Tetap"
+  /// vs "Pembeli Umum".
   Future<List<DebtBookEntry>> getDebtBook() async {
+    const changeGivenSubquery =
+        'SELECT transaction_id, SUM(change_given) AS total_cg '
+        'FROM transaction_payments WHERE NOT voided GROUP BY transaction_id';
     final rows = await customSelect(
       'SELECT c.id AS cid, c.name AS name, c.phone AS phone, '
       'SUM((t.total - t.paid) + COALESCE(cg.total_cg, 0)) AS debt, '
       'MIN(t.created_at) AS oldest, COUNT(*) AS cnt '
       'FROM transactions t JOIN customers c ON c.id = t.customer_id '
-      'LEFT JOIN (SELECT transaction_id, SUM(change_given) AS total_cg '
-      '  FROM transaction_payments WHERE NOT voided GROUP BY transaction_id) cg '
-      '  ON cg.transaction_id = t.id '
+      'LEFT JOIN ($changeGivenSubquery) cg ON cg.transaction_id = t.id '
       "WHERE t.status IN ('kurang_bayar', 'tempo') "
-      'GROUP BY c.id HAVING debt > 0 ORDER BY oldest ASC',
+      'GROUP BY c.id HAVING debt > 0 '
+      'UNION ALL '
+      "SELECT NULL AS cid, COALESCE(NULLIF(t.customer_name, ''), '') AS name, "
+      'NULL AS phone, '
+      'SUM((t.total - t.paid) + COALESCE(cg.total_cg, 0)) AS debt, '
+      'MIN(t.created_at) AS oldest, COUNT(*) AS cnt '
+      'FROM transactions t '
+      'LEFT JOIN ($changeGivenSubquery) cg ON cg.transaction_id = t.id '
+      "WHERE t.customer_id IS NULL AND t.status IN ('kurang_bayar', 'tempo') "
+      "GROUP BY COALESCE(NULLIF(t.customer_name, ''), '') HAVING debt > 0 "
+      'ORDER BY oldest ASC',
       readsFrom: {transactions, customers, transactionPayments},
     ).get();
     return rows.map((r) {
       final oldest = r.data['oldest'] as int;
+      final cid = r.data['cid'] as String?;
+      final rawName = r.data['name'] as String;
       return DebtBookEntry(
-        customerId: r.data['cid'] as String,
-        name: r.data['name'] as String,
+        customerId: cid,
+        name: cid == null && rawName.isEmpty ? 'Umum' : rawName,
+        // null = pelanggan terdaftar (tidak relevan) ATAU ad-hoc benar²
+        // tanpa nama ("Umum" murni) — dipakai `getUnpaidTxIdsByCustomerName`/
+        // `getUnpaidTxDetailsByCustomerName` utk mencocokkan balik nota
+        // yang TEPAT (beda dari [name] yang sudah di-fallback utk tampilan).
+        adhocCustomerName: cid == null && rawName.isNotEmpty ? rawName : null,
         phone: r.data['phone'] as String?,
         debt: (r.data['debt'] as num).toInt(),
         oldest: DateTime.fromMillisecondsSinceEpoch(oldest * 1000),
         count: r.data['cnt'] as int,
+      );
+    }).toList();
+  }
+
+  /// Item 83 — pelengkap [getUnpaidTxIds] utk pembeli AD-HOC (tanpa
+  /// `customer_id`): `customerName` null = kelompok "Umum" murni (nota
+  /// tanpa nama sama sekali), non-null = cocokkan `customer_name` PERSIS.
+  Future<List<String>> getUnpaidTxIdsByCustomerName(
+      String? customerName) async {
+    final rows = await (select(transactions)
+          ..where((t) {
+            final base =
+                t.customerId.isNull() & t.status.isIn(['kurang_bayar', 'tempo']);
+            final nameMatch = customerName == null
+                ? (t.customerName.isNull() | t.customerName.equals(''))
+                : t.customerName.equals(customerName);
+            return base & nameMatch;
+          })
+          ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+        .get();
+    return rows.map((t) => t.id).toList();
+  }
+
+  /// Item 83 — pelengkap [getUnpaidTxDetails] utk pembeli AD-HOC, pola &
+  /// alasan filter SAMA PERSIS [getUnpaidTxIdsByCustomerName].
+  Future<List<UnpaidTxEntry>> getUnpaidTxDetailsByCustomerName(
+      String? customerName) async {
+    final rows = await (select(transactions)
+          ..where((t) {
+            final base =
+                t.customerId.isNull() & t.status.isIn(['kurang_bayar', 'tempo']);
+            final nameMatch = customerName == null
+                ? (t.customerName.isNull() | t.customerName.equals(''))
+                : t.customerName.equals(customerName);
+            return base & nameMatch;
+          })
+          ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+        .get();
+    final paymentsByTx =
+        await getPaymentsForTxs(rows.map((t) => t.id).toList());
+    return rows.map((t) {
+      final sumChangeGiven = (paymentsByTx[t.id] ?? const [])
+          .where((p) => !p.voided)
+          .fold<int>(0, (s, p) => s + p.changeGiven);
+      final sisa = t.total - t.paid + sumChangeGiven;
+      return UnpaidTxEntry(
+        id: t.id,
+        localId: t.localId,
+        createdAt: t.createdAt,
+        sisa: sisa > 0 ? sisa : 0,
       );
     }).toList();
   }
@@ -9651,18 +9733,28 @@ class DebtBookEntry {
   const DebtBookEntry({
     required this.customerId,
     required this.name,
+    this.adhocCustomerName,
     required this.phone,
     required this.debt,
     required this.oldest,
     required this.count,
   });
 
-  final String customerId;
+  /// null = baris pembeli AD-HOC (Item 83) — dikelompokkan per
+  /// `customer_name`, bukan record `Customers` sungguhan.
+  final String? customerId;
   final String name;
+
+  /// HANYA terisi utk baris ad-hoc yang PUNYA nama (bukan "Umum" murni) —
+  /// lihat dok [getDebtBook]. null utk baris pelanggan terdaftar ATAU
+  /// baris ad-hoc "Umum" tanpa nama sama sekali.
+  final String? adhocCustomerName;
   final String? phone;
   final int debt;
   final DateTime oldest;
   final int count;
+
+  bool get isAdhoc => customerId == null;
 
   int get daysOverdue => DateTime.now().difference(oldest).inDays;
 }
