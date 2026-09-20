@@ -7,8 +7,10 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
-## 2026-09-20 (sesi ketujuh puluh enam — bug kalkulator Pra-Bayar + audit sync pelunasan/pemenuhan (Item 81) + aksen pelanggan tetap tidak live-update (Item 82))
+## 2026-09-20 (sesi ketujuh puluh enam — bug kalkulator Pra-Bayar + audit sync pelunasan/pemenuhan (Item 81) + aksen pelanggan tetap tidak live-update (Item 82) + pisah hutang tetap/ad-hoc di laporan (Item 83))
 
+- `302fdba` — feat(laporan): pisahkan hutang pelanggan tetap vs ad-hoc,
+  sertakan ad-hoc di Buku Hutang (Item 83)
 - `a38df4d` — fix(laci-meja): ikon/aksen "pelanggan tetap" tidak ikut
   update setelah Ganti Pelanggan (Item 82)
 - `ee2ee06` — fix(sync): pembatalan pembayaran (transaction_payments) &

@@ -32,6 +32,15 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   nama) bisa tetap menampilkan status lama selamanya walau namanya
   sendiri sudah benar.
 
+### ✨ Baru
+- **Tab Laporan > Hutang sekarang memisahkan "Pelanggan Tetap" dari
+  "Pembeli Umum (Ad-hoc)"** jadi dua daftar dengan subtotal masing-
+  masing, bukan lagi campur jadi satu daftar. Nota hutang pelanggan
+  yang tidak dipilih dari daftar pelanggan terdaftar (cuma diketik
+  manual, atau dibiarkan kosong) juga **sekarang ikut muncul** —
+  sebelumnya nota semacam ini sama sekali tidak tercatat di Buku
+  Hutang walau jelas belum lunas di Riwayat Transaksi.
+
 ## 19 September 2026 (sesi ketujuh puluh lima)
 
 ### 🐛 Perbaikan

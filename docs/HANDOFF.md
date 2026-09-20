@@ -6,15 +6,33 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 20 September 2026, sesi ketujuh puluh enam — **3 bug nyata
-diperbaiki** dari satu sesi investigasi (user minta: (1) fix bug
-kalkulator Pra-Bayar, (2) analisa sync pelunasan/pemenuhan hutang &
-pre-order — tidak terbatas pada Item 78, (3) analisa dulu — jangan
-langsung asumsi — soal aksen pelanggan tetap/ad-hoc yang salah).
-Commits `617e07e` (Pra-Bayar), `ee2ee06` (Item 81, sync), `a38df4d`
-(Item 82, aksen). Versi kerja **2.67.1+148** (PATCH — murni bugfix, ADA
-entri PATCHNOTES.md, ketiganya user-facing). **schemaVersion NAIK ke
-45** (kolom `transaction_payments.updated_at` baru, migrasi aditif)._
+_Update sesi 20 September 2026, sesi ketujuh puluh enam — **4 perbaikan
+nyata** dari satu sesi (3 bug + 1 fitur/fix laporan hutang, permintaan
+susulan di sesi yang sama). Commits `617e07e` (Pra-Bayar), `ee2ee06`
+(Item 81, sync), `a38df4d` (Item 82, aksen), `302fdba` (Item 83, Buku
+Hutang tetap/ad-hoc). Versi kerja **2.68.0+149** (MINOR — Item 83
+menambah fitur baru yang terlihat pengguna/pemisahan section, bukan
+cuma bugfix murni; ADA entri PATCHNOTES.md utk semuanya). **schemaVersion
+NAIK ke 45** (kolom `transaction_payments.updated_at` baru, migrasi
+aditif, dari Item 81)._
+
+**Item 83 — Buku Hutang tidak mengelompokkan tetap/ad-hoc, DAN ad-hoc
+hilang total (permintaan susulan user di sesi yang sama)**: root cause
+`getDebtBook()` pakai INNER JOIN ke `customers` — baris `transactions`
+dgn `customer_id IS NULL` (ad-hoc) otomatis tersaring habis SEBELUM
+sempat diagregasi, jadi nota ad-hoc yg belum lunas tidak pernah nongol
+di Buku Hutang sama sekali (walau kelihatan jelas di Riwayat
+Transaksi). Fix: `getDebtBook()` jadi UNION ALL (cabang pelanggan
+terdaftar + cabang BARU ad-hoc dikelompokkan per `customer_name`).
+`DebtBookEntry.customerId` sekarang nullable (null = baris ad-hoc),
+field baru `adhocCustomerName`. Fungsi baru
+`getUnpaidTxIdsByCustomerName`/`getUnpaidTxDetailsByCustomerName` (pola
+sama versi `customerId`) utk detail & tombol Lunasi baris ad-hoc.
+`hutang_tab.dart` dipecah 2 section berlabel "Pelanggan Tetap" &
+"Pembeli Umum (Ad-hoc)", masing2 subtotal sendiri. **Keterbatasan yg
+disengaja** (SAMA dgn pengelompokan ad-hoc di tempat lain, mis. Laci
+Meja): dua pembeli ad-hoc BEDA tapi ketik nama SAMA akan tergabung jadi
+satu baris — tidak ada identitas lain tanpa `customer_id`.
 
 **Bug #1 — kalkulator Pra-Bayar tidak menghitung hutang (ROOT CAUSE
 BEDA dari dugaan awal)**: dari screenshot user, ternyata BUKAN di layar
@@ -69,10 +87,13 @@ lewat DESAIN fallback (`??`), bukan dianggap sama.
 44→45 (murni ikut kenaikan schemaVersion), `transaction_payments_void_sync_test.dart`
 (dumpSince+mergeRows end-to-end 2 sync), `void_payment_preorder_deposit_reverse_test.dart`
 (+1), `laci_meja_dashboard_customer_accent_live_test.dart` (widget test
-end-to-end). Semua revert-verified. `flutter analyze` 0 issue. Full
-suite background dispatch dalam proses saat hand-off ini ditulis — CEK
-hasilnya sebelum menganggap sesi ini benar-benar tuntas kalau
-melanjutkan dari sini.
+end-to-end), `debt_book_test.dart` (+5, Item 83), `hutang_tab_adhoc_grouping_test.dart`
+(widget test, Item 83). Semua revert-verified. `flutter analyze` 0
+issue. Full suite (1719 test, sebelum Item 83) sudah hijau bersih di
+titik commit `a38df4d` — Item 83 (commit `302fdba`) BELUM ikut full
+suite terakhir saat hand-off ini ditulis (baru test file terkait
+langsung, 57 test hijau) — jalankan full suite sekali lagi kalau
+melanjutkan dari sini sebelum push, demi kepastian ekstra.
 
 _Ringkasan sesi sebelumnya di bawah ini dipertahankan sbg histori
 teknis:_
