@@ -8,6 +8,18 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 22 September 2026 (sesi ketujuh puluh tujuh)
+
+### ✨ Fitur Baru
+- **Laporan > Transaksi sekarang punya filter kategori: Semua, Lunas,
+  Kurang, Void.** Tinggal ketuk chip-nya di atas daftar nota untuk hanya
+  menampilkan nota dengan status tertentu (filter tanggal tetap lewat ikon
+  kalender seperti biasa).
+- **"Batalkan & Susun Ulang" sekarang membawa centang verifikasi barang
+  dari nota lama ke keranjang baru.** Kalau sebelum dibatalkan sudah ada
+  barang yang dicentang (misalnya sudah dicek fisik saat packing), centang
+  itu tidak perlu diulang lagi di keranjang baru.
+
 ## 20 September 2026 (sesi ketujuh puluh enam)
 
 ### 🐛 Perbaikan

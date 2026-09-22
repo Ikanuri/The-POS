@@ -7,6 +7,11 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-22 (sesi ketujuh puluh tujuh — filter status Laporan Transaksi + bawa centang saat Susun Ulang)
+
+- `97b604a` — feat(laporan,kasir): filter kategori status di Laporan
+  Transaksi + bawa centang saat Batalkan & Susun Ulang
+
 ## 2026-09-20 (sesi ketujuh puluh enam — bug kalkulator Pra-Bayar + audit sync pelunasan/pemenuhan (Item 81) + aksen pelanggan tetap tidak live-update (Item 82) + pisah hutang tetap/ad-hoc di laporan (Item 83))
 
 - `302fdba` — feat(laporan): pisahkan hutang pelanggan tetap vs ad-hoc,

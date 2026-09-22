@@ -6,7 +6,68 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 20 September 2026, sesi ketujuh puluh enam — **4 perbaikan
+_Update sesi 22 September 2026, sesi ketujuh puluh tujuh — 2 fitur baru
+(permintaan user, bukan bugfix) SELESAI. Commit `97b604a`. Versi kerja
+**2.69.0+150** (MINOR — fitur baru terlihat pengguna, ADA entri
+PATCHNOTES.md). schemaVersion TETAP **45** (tidak ada migrasi baru sesi
+ini)._
+
+**Fitur 1** — Laporan > Transaksi: chip filter kategori status (Semua/
+Lunas/Kurang/Void) ditambahkan LOKAL di `transaksi_tab.dart`
+(`TransaksiTab` diubah dari `ConsumerWidget` jadi `ConsumerStatefulWidget`,
+state `_StatusFilter _filter`, filter client-side di atas hasil
+`_transaksiTabProvider` yang sudah ada — TIDAK mengubah query DB/provider
+itu sendiri). "Kurang" menggabungkan status `kurang_bayar` DAN `tempo`
+(sama seperti badge KURANG/TEMPO yang sudah ada di `_TxTile`). Filter
+tanggal TIDAK perlu ditambah — sudah ada sebelumnya via `dateRangeProvider`
+global (ikon kalender di AppBar `LaporanScreen`, berlaku ke semua 8 tab).
+Test: `test/transaksi_tab_status_filter_test.dart` (2 test widget, pola
+`pumpWithFakeApp`).
+
+**Fitur 2** — "Batalkan & Susun Ulang" (`tx_history_sheet.dart`
+`_redoCartFromVoidedTransaction`) sekarang membawa centang checklist
+verifikasi barang (`transactions.checkedItemIds`, lihat dok kolom &
+`receipt_screen.dart`) dari nota lama ke `CartItem.checked` di keranjang
+baru. Root cause: `cartItemsFromTransaction` (`app_database.dart`,
+satu-satunya caller = fungsi redo di atas) membangun `CartItem` TANPA
+pernah membaca `checkedItemIds` sama sekali — semua item selalu
+`checked: false` walau nota lama sudah ada yg dicentang. Fix: fungsi ini
+sekarang query row `transactions` utk `txId`, decode `checkedItemIds`
+(try/catch, pola sama `receipt_screen.dart` — data rusak/format lama
+diabaikan bukan crash), lalu set `checked: checkedIds.contains(i.id)`
+per baris (`i.id` = PK `transaction_items`, KUNCI yang sama dipakai
+`receipt_screen.dart` `_checked` map). `cart_sheet.dart` sudah baca
+`item.checked` utk render checkbox & `payment_screen.dart` sudah propagate
+balik `checked` cart items ke `checkedItemIds` transaksi baru saat
+checkout — KEDUANYA sudah ada sebelumnya, tidak disentuh, fix ini murni
+menyambungkan titik yang hilang di tengah (`cartItemsFromTransaction`).
+Test: `test/cart_items_from_transaction_checked_test.dart` (Tier 1, 3
+test DB — sebagian checked, semua unchecked, `checkedItemIds` null).
+
+`flutter analyze` 0 issue. Kedua fix revert-verified terpisah (masing²
+di-stash sendiri, test baru gagal dgn pesan sensibel, restore, hijau
+lagi). Regression check (11 test gabungan file baru + `transaksi_tab_
+void_test.dart` + `hutang_tab_nota_list_test.dart` +
+`kasir_add_mode_paste_order_test.dart`): semua lulus. Full suite:
+**1708 test, 1707 lulus** — satu gagal
+(`laci_meja_proposal_unchanged_end_to_end_test.dart`) lulus bersih 2/2
+saat diisolasi, flake resource-contention environment yang sudah
+berulang kali didokumentasikan, tidak terkait perubahan sesi ini.
+
+**Catatan lingkungan (kalau melanjutkan sesi di container/sandbox
+BARU)**: Flutter SDK TIDAK preinstalled di container remote ini (beda
+dari `/opt/flutter/bin` yang disebut CLAUDE.md) — didownload manual dari
+`storage.googleapis.com/flutter_infra_release/releases/stable/linux/
+flutter_linux_3.24.5-stable.tar.xz` (versi sama dgn
+`.github/workflows/build-apk.yml`) ke `/tmp/flutter`, `git config
+--global --add safe.directory /tmp/flutter` (dubious ownership),
+`export PATH="/tmp/flutter/bin:$PATH"` sebelum `flutter pub get`/
+`analyze`/`test`. Kalau container baru lagi, ulangi langkah ini dulu.
+
+_Ringkasan sesi sebelumnya di bawah ini dipertahankan sbg histori
+teknis:_
+
+Sesi ketujuh puluh enam — **4 perbaikan
 nyata** dari satu sesi (3 bug + 1 fitur/fix laporan hutang, permintaan
 susulan di sesi yang sama). Commits `617e07e` (Pra-Bayar), `ee2ee06`
 (Item 81, sync), `a38df4d` (Item 82, aksen), `302fdba` (Item 83, Buku
@@ -14,7 +75,7 @@ Hutang tetap/ad-hoc). Versi kerja **2.68.0+149** (MINOR — Item 83
 menambah fitur baru yang terlihat pengguna/pemisahan section, bukan
 cuma bugfix murni; ADA entri PATCHNOTES.md utk semuanya). **schemaVersion
 NAIK ke 45** (kolom `transaction_payments.updated_at` baru, migrasi
-aditif, dari Item 81)._
+aditif, dari Item 81).
 
 **Item 83 — Buku Hutang tidak mengelompokkan tetap/ad-hoc, DAN ad-hoc
 hilang total (permintaan susulan user di sesi yang sama)**: root cause
