@@ -88,6 +88,12 @@ Future<void> _runStartupMaintenance(ProviderContainer container) async {
       // Lengkapi buku pembayaran untuk nota lama (data pra-fitur / import)
       // agar timeline pembayaran di struk tetap muncul.
       await db.backfillMissingPayments();
+      // Perbaikan data satu kali jalan (permintaan user) — bereskan
+      // preorder_entries.paid yang SEMPAT ter-revert jadi false oleh bug
+      // usulan Laci Meja basi SEBELUM fix-nya ada (lihat dok
+      // `repairStalePreorderPaidStatus`). Idempotent, no-op begitu semua
+      // device pernah start dgn versi ini.
+      await db.repairStalePreorderPaidStatus();
     } catch (_) {
       // Non-fatal — laporan & struk tetap berfungsi tanpa pre-aggregate.
     }

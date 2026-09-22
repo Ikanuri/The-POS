@@ -9337,6 +9337,55 @@ class AppDatabase extends _$AppDatabase {
     return owed > 0 ? 0 : 1;
   }
 
+  /// Perbaikan data SATU KALI JALAN (dipanggil tiap startup, idempotent —
+  /// pola sama `backfillMissingPayments`) utk baris `preorder_entries` yang
+  /// SUDAH TERLANJUR rusak oleh bug usulan Laci Meja basi (lihat komentar
+  /// panjang `_derivePreorderPaid`/titik pemanggilnya di
+  /// `applyLaciMejaProposals`) SEBELUM fix itu ada — device yang sempat
+  /// menyetujui usulan basi sebelum sesi ini akan permanen menampilkan
+  /// "Tempo" utk pre-order yang DP-nya sungguhan sudah lunas, walau baris
+  /// notanya sendiri sudah benar (harga sudah naik ke nilai asli).
+  ///
+  /// Diagnostik SAMA PERSIS invarian yang dijaga fix itu: `paid = false`
+  /// TAPI baris nota tertaut sudah tidak berhutang (`owed <= 0`, dihitung
+  /// identik [getPreorderDepositOwed]) hanya bisa terjadi lewat kombinasi
+  /// ini — pre-order yang genuinely belum dibayar SELALU py `subtotal = 0`
+  /// (harga dikunci Rp 0 saat checkout, lihat dok `transactionItemId`),
+  /// jadi `owed` pasti > 0 sampai `collectPreorderDeposit` (satu-satunya
+  /// fungsi yang menaikkan `subtotal`) benar-benar dipanggil — dan fungsi
+  /// itu SELALU menyetel `paid = true` di baris yang SAMA persis. Tidak
+  /// ada kombinasi valid lain yang menghasilkan `paid=false` + `owed<=0`
+  /// selain korupsi ini.
+  ///
+  /// Aman dijalankan di SEMUA device (host maupun klien) berkali-kali:
+  /// hanya menyetel `paid=true` + `updated_at` (supaya ikut ter-dump ke
+  /// device lain pada sync berikutnya, master data satu arah host→klien
+  /// tetap berlaku) — TIDAK menyentuh `locally_modified`
+  /// (bukan usulan baru, cukup mengikuti alur `dumpSince` normal begitu
+  /// host sendiri sudah memperbaiki barisnya). Mengembalikan jumlah baris
+  /// yang diperbaiki (0 = tidak ada yang perlu, kasus normal jangka
+  /// panjang setelah semua device pernah start dgn versi ini).
+  Future<int> repairStalePreorderPaidStatus() async {
+    final rows = await customSelect(
+      'SELECT po.id AS id FROM preorder_entries po '
+      'JOIN transaction_items ti ON ti.id = po.transaction_item_id '
+      'WHERE po.paid = 0 '
+      'AND (ti.original_price * ti.qty) - ti.subtotal <= 0',
+      readsFrom: {preorderEntries, transactionItems},
+    ).get();
+    if (rows.isEmpty) return 0;
+    final now = DateTime.now();
+    for (final r in rows) {
+      await (update(preorderEntries)
+            ..where((t) => t.id.equals(r.data['id'] as String)))
+          .write(PreorderEntriesCompanion(
+        paid: const Value(true),
+        updatedAt: Value(now),
+      ));
+    }
+    return rows.length;
+  }
+
   /// Label ringkas satu baris Laci Meja utk pesan "dilewati" — dipakai
   /// [applyLaciMejaProposals] saat baris gagal diterapkan (transaksi
   /// terkait belum tersinkron).
