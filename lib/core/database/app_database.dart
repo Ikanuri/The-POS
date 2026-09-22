@@ -4211,6 +4211,24 @@ class AppDatabase extends _$AppDatabase {
         .get();
     if (items.isEmpty) return const [];
 
+    // Permintaan user — "Batalkan & Susun Ulang" bawa balik centang
+    // verifikasi barang (`checkedItemIds`, lihat dok kolom di
+    // `transaction_tables.dart`) yang sudah dicentang di nota lama ke
+    // keranjang baru, supaya kasir tak perlu centang ulang barang yg sudah
+    // diverifikasi sebelum nota itu dibatalkan.
+    final txRow = await (select(transactions)
+          ..where((t) => t.id.equals(txId)))
+        .getSingleOrNull();
+    final checkedIds = <String>{};
+    if (txRow?.checkedItemIds != null) {
+      try {
+        checkedIds.addAll(
+            (jsonDecode(txRow!.checkedItemIds!) as List).cast<String>());
+      } catch (_) {
+        // Data rusak/format lama — abaikan, mulai dari kosong.
+      }
+    }
+
     final productIds = items.map((i) => i.productId).toSet();
     final unitIds = items.map((i) => i.productUnitId).toSet();
     final prods =
@@ -4257,6 +4275,7 @@ class AppDatabase extends _$AppDatabase {
           itemNote: i.itemNote,
           parentProductId: productById[i.productId]?.parentProductId,
           isVariant: isVariant(i),
+          checked: checkedIds.contains(i.id),
         ),
     ];
   }

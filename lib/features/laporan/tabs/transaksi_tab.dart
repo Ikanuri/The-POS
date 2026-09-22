@@ -17,34 +17,100 @@ final _transaksiTabProvider =
       from: range.start, to: range.end, includeVoid: true);
 });
 
-class TransaksiTab extends ConsumerWidget {
+/// Filter kategori status transaksi. `semua` = tanpa filter (tampilkan semua
+/// status). `kurang` mencakup `kurang_bayar` DAN `tempo` — keduanya sudah
+/// dianggap satu kategori "KURANG"/"TEMPO" di badge `_TxTile`, jadi
+/// digabung di sini juga supaya user tak perlu tahu ada 2 status internal.
+enum _StatusFilter { semua, lunas, kurang, void_ }
+
+bool _matchesStatus(Transaction tx, _StatusFilter filter) {
+  switch (filter) {
+    case _StatusFilter.semua:
+      return true;
+    case _StatusFilter.lunas:
+      return tx.status != 'void' &&
+          tx.status != 'kurang_bayar' &&
+          tx.status != 'tempo';
+    case _StatusFilter.kurang:
+      return tx.status == 'kurang_bayar' || tx.status == 'tempo';
+    case _StatusFilter.void_:
+      return tx.status == 'void';
+  }
+}
+
+class TransaksiTab extends ConsumerStatefulWidget {
   const TransaksiTab({super.key, required this.range});
   final DateTimeRange range;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final txAsync = ref.watch(_transaksiTabProvider(range));
+  ConsumerState<TransaksiTab> createState() => _TransaksiTabState();
+}
+
+class _TransaksiTabState extends ConsumerState<TransaksiTab> {
+  _StatusFilter _filter = _StatusFilter.semua;
+
+  @override
+  Widget build(BuildContext context) {
+    final txAsync = ref.watch(_transaksiTabProvider(widget.range));
     final scheme = Theme.of(context).colorScheme;
 
-    return txAsync.when(
-      data: (txList) {
-        if (txList.isEmpty) {
-          return Center(
-            child: Text(
-              'Tidak ada transaksi pada periode ini',
-              style: TextStyle(color: scheme.onSurfaceVariant),
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _statusChip('Semua', _StatusFilter.semua),
+                const SizedBox(width: 6),
+                _statusChip('Lunas', _StatusFilter.lunas),
+                const SizedBox(width: 6),
+                _statusChip('Kurang', _StatusFilter.kurang),
+                const SizedBox(width: 6),
+                _statusChip('Void', _StatusFilter.void_),
+              ],
             ),
-          );
-        }
-        return ListView.separated(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          itemCount: txList.length,
-          separatorBuilder: (_, __) => const Divider(height: 1),
-          itemBuilder: (_, i) => _TxTile(tx: txList[i]),
-        );
-      },
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Error: $e')),
+          ),
+        ),
+        Expanded(
+          child: txAsync.when(
+            data: (txList) {
+              final filtered = _filter == _StatusFilter.semua
+                  ? txList
+                  : txList.where((tx) => _matchesStatus(tx, _filter)).toList();
+              if (filtered.isEmpty) {
+                return Center(
+                  child: Text(
+                    txList.isEmpty
+                        ? 'Tidak ada transaksi pada periode ini'
+                        : 'Tidak ada transaksi dengan kategori ini',
+                    style: TextStyle(color: scheme.onSurfaceVariant),
+                  ),
+                );
+              }
+              return ListView.separated(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                itemCount: filtered.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (_, i) => _TxTile(tx: filtered[i]),
+              );
+            },
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (e, _) => Center(child: Text('Error: $e')),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _statusChip(String label, _StatusFilter value) {
+    final selected = _filter == value;
+    return FilterChip(
+      label: Text(label, style: const TextStyle(fontSize: 12)),
+      selected: selected,
+      visualDensity: VisualDensity.compact,
+      onSelected: (_) => setState(() => _filter = value),
     );
   }
 }
