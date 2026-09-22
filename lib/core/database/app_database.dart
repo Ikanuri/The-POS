@@ -9313,6 +9313,30 @@ class AppDatabase extends _$AppDatabase {
     return result;
   }
 
+  /// Nilai `preorder_entries.paid` yang BENAR menurut data HOST sendiri —
+  /// dipakai [applyLaciMejaProposals] supaya kolom ini tidak pernah diambil
+  /// mentah dari usulan klien yang bisa basi (lihat komentar panjang di
+  /// titik pemanggilnya).
+  ///
+  /// Perhitungan "masih terhutang" SAMA PERSIS [getPreorderDepositOwed]:
+  /// baris nota tertaut masih di bawah harga aslinya = DP belum ditagih.
+  /// Tanpa baris tertaut ([hostItemId] null / barisnya tidak ada), tidak ada
+  /// yang bisa disimpulkan → [hostPaid] dipertahankan apa adanya.
+  /// Mengembalikan 1/0 (bentuk penyimpanan SQLite utk boolean Drift), bukan
+  /// `bool` — nilainya langsung dipasang ke baris raw-SQL.
+  Future<Object?> _derivePreorderPaid({
+    required Object? hostItemId,
+    required Object? hostPaid,
+  }) async {
+    if (hostItemId is! String || hostItemId.isEmpty) return hostPaid;
+    final item = await (select(transactionItems)
+          ..where((t) => t.id.equals(hostItemId)))
+        .getSingleOrNull();
+    if (item == null) return hostPaid;
+    final owed = (item.originalPrice * item.qty).round() - item.subtotal;
+    return owed > 0 ? 0 : 1;
+  }
+
   /// Label ringkas satu baris Laci Meja utk pesan "dilewati" — dipakai
   /// [applyLaciMejaProposals] saat baris gagal diterapkan (transaksi
   /// terkait belum tersinkron).
@@ -9453,6 +9477,44 @@ class AppDatabase extends _$AppDatabase {
                   (incomingReturned is! num ||
                       incomingReturned < hostReturned)) {
                 cleaned['qty_returned'] = hostReturned;
+              }
+              // Bug dilaporkan user ("hutang/pre-order sudah dilunasi host,
+              // di klien masih belum terlunasi — meskipun sudah disync"):
+              // `paid` (DP/jaminan pre-order sudah ditagih) TIDAK ikut
+              // `closedColumns` di atas, padahal kelas bugnya SAMA PERSIS.
+              // Usulan klien memuat SELURUH baris apa adanya — kasir yang
+              // cuma mengubah field LAIN (mis. catatan/qty) ikut membawa
+              // `paid` miliknya yang sudah BASI, dan `INSERT OR REPLACE` di
+              // bawah mengembalikan entri yang SUDAH dilunasi di host jadi
+              // "belum lunas" lagi. Efeknya permanen & tidak bisa
+              // diperbaiki lewat app: baris notanya sendiri TETAP terlanjur
+              // naik ke harga asli, jadi `getPreorderDepositOwed` sudah 0 →
+              // tombol "Lunasi" di dashboard no-op (`collectPreorderDeposit`
+              // balik null) DAN entri ini tidak pernah jadi kandidat
+              // "Pelunasi Pre-order" di keranjang (`owed <= 0` disaring) —
+              // badge "Tempo" nyangkut selamanya di KEDUA device.
+              //
+              // `paid` TIDAK diambil dari usulan sama sekali: nilainya
+              // sepenuhnya diturunkan dari baris nota tertaut milik HOST
+              // sendiri (fakta yang sama-sama dilihat kedua device), bukan
+              // dari kepercayaan pada urutan/jam device. Invarian ini
+              // dipegang SEMUA (dan hanya) 3 penulis kolom ini:
+              // `addPreorderEntry` (harga terisi = DP lunas, harga 0 = belum),
+              // `collectPreorderDeposit` (naikkan subtotal → paid=true), dan
+              // `voidPayment` (kembalikan subtotal ke 0 → paid=false) — jadi
+              // pembatalan DP yang SUNGGUHAN dari klien tetap sampai ke host
+              // (baris notanya ikut balik ke 0 lewat jalur
+              // `transaction_items`, Item 63), sedangkan usulan yang cuma
+              // BASI tidak bisa lagi membatalkan pelunasan yang uangnya
+              // sudah tercatat. Entri tanpa baris nota tertaut (mis. "Jadikan
+              // Pre-order" dari struk, `transaction_item_id` null) tidak
+              // punya fakta pembanding DAN tidak punya jalur app mana pun
+              // yang mengubah `paid`-nya → nilai host dipertahankan.
+              if (entry.key == 'preorder_entries') {
+                cleaned['paid'] = await _derivePreorderPaid(
+                  hostItemId: hostRow.data['transaction_item_id'],
+                  hostPaid: hostRow.data['paid'],
+                );
               }
             }
           }
