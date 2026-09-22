@@ -6,11 +6,80 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 22 September 2026, sesi ketujuh puluh tujuh — 2 fitur baru
-(permintaan user, bukan bugfix) SELESAI. Commit `97b604a`. Versi kerja
-**2.69.0+150** (MINOR — fitur baru terlihat pengguna, ADA entri
-PATCHNOTES.md). schemaVersion TETAP **45** (tidak ada migrasi baru sesi
-ini)._
+_Update sesi 22 September 2026, sesi ketujuh puluh tujuh — 2 fitur baru +
+1 bugfix sync SERIUS. Commits `97b604a` (fitur), `3d45833` (fix DP
+pre-order). Versi kerja **2.69.1+151**. schemaVersion TETAP **45** (tidak
+ada migrasi baru sesi ini)._
+
+**Bugfix — DP pre-order yang sudah dilunasi host DIKEMBALIKAN jadi belum
+lunas oleh usulan BASI klien** (laporan user: "hutang/pre-order sudah
+dilunasi oleh host, di client masih belum terlunasi/terpenuhi — meskipun
+sudah disync"). Commit `3d45833`.
+
+Metode investigasi yang TERBUKTI berguna (ulangi utk laporan sync
+sejenis): tulis probe yang mereplikasi jalur sync SUNGGUHAN
+(`dumpSince` → `mergeRows` per-tabel pakai `LanSyncService.
+clientMergeableTables`/`appendOnlyTables` → `reconcileTransactionsByIds`)
+di 2 `AppDatabase` memori. Probe pertama (jalur BERSIH: host melunasi,
+klien cuma menerima) LULUS utk hutang biasa MAUPUN pre-order — itu yang
+menyingkirkan seluruh kelas dugaan "lupa cap `updated_at`"/"append-only
+skip" (Item 62/63/81) dan mengarahkan ke state DI SISI KLIEN. Probe kedua
+(klien punya baris `locally_modified=1`) langsung mereproduksi bugnya.
+
+**Akar masalah**: usulan Laci Meja dari klien memuat SELURUH baris apa
+adanya & `applyLaciMejaProposals` meng-`INSERT OR REPLACE` bulat-bulat.
+Kasir yang cuma mengubah field LAIN (mis. catatan) ikut membawa
+`preorder_entries.paid` miliknya yang sudah BASI — begitu owner menekan
+"Terapkan", pelunasan DP yang sudah tercatat di host dikembalikan jadi
+"belum lunas", lalu status basi itu tersebar balik ke klien lewat sync
+master data biasa. **Kelas bug yang SAMA sudah pernah ditambal di fungsi
+yang SAMA** (`closedColumns`: `fulfilled_at`/`cancelled_at`/
+`collected_at`/`fully_returned_at`/`qty_returned`, audit sesi 2 Sep
+2026) — `paid` TERLEWAT waktu itu.
+
+**Kenapa gejalanya permanen** (dan kenapa user melihatnya "tidak pernah
+beres"): baris notanya sendiri TETAP terlanjur naik ke harga asli, jadi
+`getPreorderDepositOwed` sudah 0 → tombol "Lunasi" no-op
+(`collectPreorderDeposit` balik null krn `owed <= 0`) DAN entri tidak
+pernah jadi kandidat "Pelunasi Pre-order" di keranjang
+(`getPreorderSettlementCandidates` menyaring `owed <= 0`). Badge "Tempo"
+nyangkut selamanya di KEDUA device, tanpa jalur app utk membereskannya.
+
+**Fix**: `paid` TIDAK diambil dari usulan sama sekali — diturunkan dari
+baris nota tertaut milik HOST sendiri (`_derivePreorderPaid`, perhitungan
+sama persis `getPreorderDepositOwed`). Dipilih krn itu FAKTA yang
+sama-sama dilihat kedua device, bukan kepercayaan pada urutan/jam device
+(sengaja TIDAK pakai `updated_at` lintas-device sbg wasit — beda jam HP
+itu nyata, dan `filterUnchangedLaciMejaProposals` pun sudah sengaja
+mengecualikan kolom itu). Invarian `paid == (owed <= 0)` dipegang SEMUA
+(dan hanya) 3 penulis kolom itu — sudah diverifikasi satu-satu:
+`addPreorderEntry`, `collectPreorderDeposit` (naikkan subtotal →
+paid=true), `voidPayment` (kembalikan subtotal baris nota ke 0 →
+paid=false). Jadi pembatalan DP SUNGGUHAN dari klien tetap sampai ke host
+(baris notanya ikut balik lewat jalur `transaction_items` append-only,
+Item 63), sedangkan usulan basi tidak bisa lagi membatalkan pelunasan
+yang uangnya sudah tercatat. Entri tanpa baris nota tertaut ("Jadikan
+Pre-order" dari struk, `transaction_item_id` null) → nilai host
+dipertahankan (tidak ada fakta pembanding DAN tidak ada jalur app yang
+mengubah `paid`-nya).
+
+**Test**: `test/preorder_paid_proposal_revert_test.dart` (4 test DB) —
+usulan basi tidak me-revert pelunasan; pembatalan DP SUNGGUHAN tetap
+sampai (penjaga regresi fix ini); arah sebaliknya (usulan basi tidak
+menghidupkan DP yang sudah dibatalkan host); entri tanpa baris nota
+tertaut. Revert-verified: 3 gagal sensible tanpa fix, 1 sisanya memang
+tetap hijau (menguji perilaku yang SUDAH benar sebelumnya).
+
+**Yang SUDAH dicek & terbukti AMAN** (jangan diulang dari nol): hutang
+nota biasa (`settleMergedDebt`) host→klien SUDAH benar — `updated_at`
+dicap, `dumpSince` mengikutkan, `mergeRows` menerapkan `status` (Item
+62), dan `paid`/`status` direkonsiliasi ulang dari
+`transaction_payments` oleh `_reconcileTransactionTotals` di KEDUA sisi.
+`fulfillPreorderEntry`/`collectPreorderDeposit` juga sudah benar mencap
+`updated_at`. 3 tabel Laci Meja lain tidak punya kolom state setara
+`paid` yang belum dijaga (`LeftBehindItems.collectedAt`,
+`BorrowedItems.qtyReturned`/`fullyReturnedAt` — semua sudah masuk
+`closedColumns`).
 
 **Fitur 1** — Laporan > Transaksi: chip filter kategori status (Semua/
 Lunas/Kurang/Void) ditambahkan LOKAL di `transaksi_tab.dart`

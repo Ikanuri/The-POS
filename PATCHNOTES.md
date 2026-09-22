@@ -10,6 +10,17 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ## 22 September 2026 (sesi ketujuh puluh tujuh)
 
+### 🐛 Perbaikan
+- **DP/jaminan pre-order yang sudah dilunasi di HP owner tidak lagi
+  berubah balik jadi "belum lunas".** Sebelumnya, kalau kasir sempat
+  mengubah apa pun pada pre-order itu (misalnya menambah catatan) lalu
+  owner menekan "Terapkan" di antrian usulan, pelunasan yang sudah
+  tercatat diam-diam dibatalkan — badge "Tempo" muncul lagi di kedua HP
+  dan **tidak bisa diperbaiki lewat aplikasi**: tombol "Lunasi" tidak
+  bereaksi dan pre-order itu juga tidak muncul lagi sebagai pilihan di
+  "Pelunasi Pre-order" pada keranjang. Pembatalan DP yang memang
+  disengaja (lewat "Batalkan Pembayaran") tetap berfungsi seperti biasa.
+
 ### ✨ Fitur Baru
 - **Laporan > Transaksi sekarang punya filter kategori: Semua, Lunas,
   Kurang, Void.** Tinggal ketuk chip-nya di atas daftar nota untuk hanya
