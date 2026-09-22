@@ -7,9 +7,44 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [PLAN.md](../PLAN.md).
 
 _Update sesi 22 September 2026, sesi ketujuh puluh tujuh — 2 fitur baru +
-1 bugfix sync SERIUS. Commits `97b604a` (fitur), `3d45833` (fix DP
-pre-order). Versi kerja **2.69.1+151**. schemaVersion TETAP **45** (tidak
-ada migrasi baru sesi ini)._
+1 bugfix sync SERIUS + 1 perbaikan data satu-kali-jalan susulannya.
+Commits `97b604a` (fitur), `3d45833` (fix DP pre-order), `2944a1f`
+(repair data). Versi kerja **2.69.2+152**. schemaVersion TETAP **45**
+(tidak ada migrasi baru sesi ini)._
+
+**Susulan — perbaikan data satu-kali-jalan** (permintaan user langsung
+setelah fix `3d45833`: "buatkan satu kali jalan" utk baris yang SUDAH
+terlanjur rusak). Commit `2944a1f`.
+
+`AppDatabase.repairStalePreorderPaidStatus()` — dipanggil tiap startup
+dari `main.dart` `_runStartupMaintenance` (pola SAMA PERSIS
+`backfillMissingPayments`: try/catch non-fatal, hanya jalan kalau device
+sudah configured, idempotent). Mendeteksi baris rusak lewat invarian
+YANG SAMA dipakai `_derivePreorderPaid`: `paid=false` TAPI baris nota
+tertaut sudah `owed<=0` — kombinasi itu SECARA MATEMATIS hanya mungkin
+lewat korupsi bug ini (pre-order genuinely belum dibayar selalu
+`subtotal=0` sampai `collectPreorderDeposit` menaikkannya DAN
+langsung `paid=true` di baris yang sama, tidak ada jalur lain). Set
+`paid=true` + `updated_at` (supaya ikut ter-dump ke device lain lewat
+`dumpSince` normal) — TIDAK menyentuh `locally_modified` (bukan usulan
+baru, biar propagasi lewat jalur master data host→klien biasa: host
+memperbaiki dirinya sendiri saat startup, lalu dorong ke semua klien
+pada sync berikutnya).
+
+**Aman dijalankan di device MANAPUN** (host maupun klien) — kalau host
+yang rusak, ia akan self-repair & jadi sumber kebenaran lagi utk semua
+klien; kalau HANYA klien yang (sementara) menampilkan status basi krn
+belum sync, repair lokalnya sendiri tidak masalah walau bisa ketimpa
+lagi oleh sync berikutnya sampai host juga start dgn versi ini — tidak
+ada skenario di mana repair ini SALAH menandai sesuatu (diverifikasi
+test "genuinely belum dibayar" & "sudah lunas" & "tanpa baris nota
+tertaut" semua TIDAK tersentuh).
+
+Test: `test/preorder_paid_repair_test.dart` (5 test DB), revert-verified
+(SQL dineutralkan via `AND 1=0` sementara — bukan hapus fungsi total,
+supaya revert-verify menguji LOGIKA bukan cuma "fungsi tidak ada" — 2
+test yang genuinely menguji perbaikan gagal sensible, 3 test guard tetap
+hijau, restore).
 
 **Bugfix — DP pre-order yang sudah dilunasi host DIKEMBALIKAN jadi belum
 lunas oleh usulan BASI klien** (laporan user: "hutang/pre-order sudah

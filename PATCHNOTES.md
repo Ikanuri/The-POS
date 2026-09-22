@@ -20,6 +20,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   bereaksi dan pre-order itu juga tidak muncul lagi sebagai pilihan di
   "Pelunasi Pre-order" pada keranjang. Pembatalan DP yang memang
   disengaja (lewat "Batalkan Pembayaran") tetap berfungsi seperti biasa.
+- **Pre-order yang sempat "tersangkut" salah tampil belum lunas akibat
+  bug di atas kini otomatis diperbaiki sendiri** — cukup buka aplikasi
+  seperti biasa (di HP owner maupun kasir), tidak perlu tindakan manual
+  apa pun.
 
 ### ✨ Fitur Baru
 - **Laporan > Transaksi sekarang punya filter kategori: Semua, Lunas,

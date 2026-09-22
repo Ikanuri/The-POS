@@ -7,8 +7,10 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
-## 2026-09-22 (sesi ketujuh puluh tujuh — filter status Laporan Transaksi + bawa centang saat Susun Ulang + fix DP pre-order ter-revert usulan basi)
+## 2026-09-22 (sesi ketujuh puluh tujuh — filter status Laporan Transaksi + bawa centang saat Susun Ulang + fix DP pre-order ter-revert usulan basi + perbaikan data satu-kali-jalan)
 
+- `2944a1f` — fix(sync): perbaikan data satu-kali-jalan utk
+  preorder_entries.paid yang terlanjur ter-revert
 - `3d45833` — fix(sync): usulan Laci Meja basi dari klien mengembalikan DP
   pre-order yang sudah dilunasi host
 - `97b604a` — feat(laporan,kasir): filter kategori status di Laporan
