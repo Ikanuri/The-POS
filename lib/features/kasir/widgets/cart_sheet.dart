@@ -326,10 +326,14 @@ class _CartSheetState extends ConsumerState<CartSheet> {
   /// Fitur Pra-Bayar — buka kalkulator pelunasan yang SUDAH ADA
   /// (`showDebtPaymentSheet`, dipakai juga oleh "Tambah Bayar" di
   /// receipt_screen.dart/tx_history_sheet.dart) dgn `remaining` = sisa yang
-  /// BELUM terkunci (`total keranjang - totalLocked`, clamp 0 — sheet-nya
+  /// BELUM terkunci (`total keranjang - poolAvailable`, clamp 0 — sheet-nya
   /// sendiri sudah punya kalkulator bebas ketik nominal apa pun lebih dari
-  /// itu, TIDAK di-cap paksa di sini). Hasilnya jadi satu [PrabayarEntry]
-  /// baru (akumulatif, TIDAK menimpa entri lama).
+  /// itu, TIDAK di-cap paksa di sini). `poolAvailable` (BUKAN `totalLocked`
+  /// mentah) supaya kembalian yang sudah fisik diserahkan & dicentang
+  /// "sudah diambil" tidak ikut dihitung sbg Pra-Bayar yang masih tersedia
+  /// (lihat komentar bug di titik pemanggilan `poolAvailable` di bawah).
+  /// Hasilnya jadi satu [PrabayarEntry] baru (akumulatif, TIDAK menimpa
+  /// entri lama).
   Future<void> _addPrabayar(BuildContext ctx, WidgetRef ref) async {
     final db = ref.read(databaseProvider);
     final notifier = ref.read(cartProvider(widget.cartId).notifier);
@@ -349,10 +353,24 @@ class _CartSheetState extends ConsumerState<CartSheet> {
     final preorderSettlementTotal = ref
         .read(cartPreorderSettlementProvider(widget.cartId))
         .fold<int>(0, (s, e) => s + e.amount);
+    // Susulan bug KEDUA (laporan user, screenshot): sheet ini pakai
+    // `totalLocked` MENTAH, bukan `poolAvailable` (`totalLocked -
+    // changeTakenTotal`, lihat dok getter itu) -- begitu ada kembalian yang
+    // SUDAH fisik diserahkan & dicentang "sudah diambil", uang itu tetap
+    // ikut dihitung sbg Pra-Bayar yang "masih tersedia" di sini, padahal
+    // uangnya sudah di tangan pelanggan. Akibatnya "Sisa tagihan" kalkulator
+    // ini understated persis sebesar `changeTakenTotal` -- kalau tambahan
+    // belanja (setelah kembalian diambil) lebih KECIL dari kembalian itu,
+    // sisa yang seharusnya positif malah ke-clamp jadi Rp 0 (pelanggan
+    // seolah tidak perlu bayar apa-apa lagi, padahal harus bayar penuh
+    // tambahannya -- uang kembalian tadi TIDAK BOLEH dipakai lagi menutup
+    // belanja baru). Footer keranjang (`_PrabayarFooterSummary`) sudah
+    // benar pakai pool ini sejak awal; titik INI yang terlewat.
+    final poolAvailable = prabayarNotifier.poolAvailable;
     final remaining = (notifier.totalAmount +
             debtSettlementTotal +
             preorderSettlementTotal -
-            prabayarNotifier.totalLocked)
+            poolAvailable)
         .clamp(0, 99999999)
         .toInt();
     final result = await showDebtPaymentSheet(
