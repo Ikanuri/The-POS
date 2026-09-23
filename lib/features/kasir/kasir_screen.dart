@@ -1505,6 +1505,10 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
             lockedAt: DateTime.fromMillisecondsSinceEpoch(p.lockedAtMs),
           ));
         }
+        // Kembalian yang SUDAH diserahkan di device pengirim — tanpa ini
+        // kembalian yang sama tampil lagi di sini dgn centang kosong.
+        prabayarNotifier.recordChangeTaken(adoptedPrabayar.fold<int>(
+            0, (s, p) => s + p.changeTaken));
         if (!mounted) return;
         if (_scannerOpen) _closeScanner();
         _showBanner('Pesanan dari $employeeName ditambahkan ke keranjang aktif',
@@ -1526,6 +1530,10 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
                   'lockedAt': p.lockedAtMs,
                 })
             .toList(),
+        // Dibaca `_parseHeldPayload` saat pesanan ini dilanjutkan — lihat
+        // cabang keranjang aktif di atas utk alasannya.
+        'prabayarChangeTaken':
+            adoptedPrabayar.fold<int>(0, (s, p) => s + p.changeTaken),
       });
       await db.holdOrder(
         id: _kasirUuid.v4(),

@@ -99,7 +99,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 10));
   }
 
-  String handoffCode() => OrderParserService.encodeHandoff(
+  String handoffCode({int changeTaken = 0}) => OrderParserService.encodeHandoff(
         items: [
           const CartItem(
             productId: 'p1',
@@ -116,6 +116,7 @@ void main() {
         prabayar: const [
           (amount: 25000, method: 'tunai', methodName: null, lockedAtMs: 1700000000000),
         ],
+        prabayarChangeTaken: changeTaken,
       );
 
   Future<ProviderContainer> pumpKasir(
@@ -227,6 +228,37 @@ void main() {
     expect(prabayar, isEmpty,
         reason: 'penerima tak bergerbang → Pra-Bayar dibuang sepenuhnya, '
             'BUKAN sebagian');
+
+    await drain(tester);
+  });
+
+  testWidgets(
+      'audit Pra-Bayar: kembalian yang SUDAH diambil di pengirim ikut '
+      'tercatat di penerima (pool tidak kembali penuh)', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    await _seedProduct(db);
+    addTearDown(() async => db.close());
+
+    const fakeDevice = DeviceIdentity(
+      storeUuid: 's',
+      storeKey: 'k',
+      storeName: 'Toko',
+      deviceName: 'Owner',
+      deviceCode: 'K1',
+      deviceRole: 'owner',
+    );
+
+    final container = await pumpKasir(tester, db, fakeDevice);
+
+    fake.emitBarcode(handoffCode(changeTaken: 15000));
+    await tester.pumpAndSettle();
+
+    final notifier = container.read(cartPrabayarProvider(kMainCartId).notifier);
+    expect(notifier.totalLocked, 25000);
+    expect(notifier.changeTakenTotal, 15000,
+        reason: 'tanpa fix: penerima mencatat 0 -> pool kembali penuh 25.000 '
+            '& kembalian yang sama bisa diserahkan untuk kedua kalinya');
+    expect(notifier.poolAvailable, 10000);
 
     await drain(tester);
   });

@@ -3655,13 +3655,23 @@ class AppDatabase extends _$AppDatabase {
   }) async {
     final amountSum = transactionPayments.amount.sum();
     final changeSum = transactionPayments.changeGiven.sum();
+    final cutSum =
+        transactionPayments.prabayarChangeTakenBeforeCheckout.sum();
     final row = await (selectOnly(transactionPayments)
-          ..addColumns([amountSum, changeSum])
+          ..addColumns([amountSum, changeSum, cutSum])
           ..where(transactionPayments.transactionId.equals(txId) &
               transactionPayments.voided.equals(false)))
         .getSingle();
-    var priorPaid = row.read(amountSum);
-    final priorChangeSum = row.read(changeSum) ?? 0;
+    // Kembalian Pra-Bayar yang SUDAH diambil sebelum checkout WAJIB dipotong
+    // dari `priorPaid` — `amount` baris Pra-Bayar ditulis GROSS sejak
+    // `191570c` (lihat dok `buildPrabayarCheckout`), uang potongan itu sudah
+    // di tangan pelanggan. Tanpa ini, pelunasan PAS nota Pra-Bayar ("Tambah
+    // Bayar"/Tambah Belanjaan) menghitung kembalian FIKTIF sebesar potongan
+    // itu — kasir disuruh menyerahkan uang yang SAMA untuk kedua kalinya.
+    final int? amountTotal = row.read(amountSum);
+    final int cutTotal = row.read(cutSum) ?? 0;
+    int? priorPaid = amountTotal == null ? null : amountTotal - cutTotal;
+    final int priorChangeSum = row.read(changeSum) ?? 0;
     if (priorPaid == null) {
       // Belum ada baris pembayaran sama sekali untuk nota ini (nota
       // legacy/pre-backfill) — jatuhkan ke header `transactions.paid`,
@@ -3827,7 +3837,19 @@ class AppDatabase extends _$AppDatabase {
     // terjadi secara finansial.
     final payRows = allPayRows.where((p) => !p.voided).toList();
     final sumPay = payRows.fold<int>(0, (s, p) => s + p.amount);
-    final newPaid = allPayRows.isEmpty ? tx.paid : sumPay;
+    // Sejak `191570c`, `amount` baris Pra-Bayar ditulis GROSS & kembalian
+    // yang SUDAH diambil sebelum checkout dicatat terpisah di
+    // `prabayarChangeTakenBeforeCheckout` (invariant `buildPrabayarCheckout`:
+    // Σ(amount - changeGiven - potongan) == dibayar bersih). Commit itu
+    // menyesuaikan Tutup Kasir & Arus Kas, tapi TIDAK fungsi ini — `paid`
+    // yang dihitung ulang dari `amount` mentah membengkak persis sebesar
+    // potongan: nota Pra-Bayar berhutang berubah jadi "lunas" dgn kembalian
+    // fiktif begitu fungsi ini jalan (tiap sync LAN, tambah belanjaan,
+    // retur, edit item, batal pembayaran). `paid` di sini disamakan dgn
+    // nilai yang ditulis checkout (`combinedPaid`, bersih dari potongan).
+    final sumCut = payRows.fold<int>(
+        0, (s, p) => s + (p.prabayarChangeTakenBeforeCheckout ?? 0));
+    final newPaid = allPayRows.isEmpty ? tx.paid : sumPay - sumCut;
 
     // Status HARUS dihitung dari `paid` dikurangi kembalian yang pernah
     // diberikan (bukan `newPaid` mentah) — kalau tidak, kembalian lama yang

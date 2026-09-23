@@ -139,6 +139,12 @@ class _CartSheetState extends ConsumerState<CartSheet> {
               lockedAtMs: e.lockedAt.millisecondsSinceEpoch,
             ))
         .toList();
+    // Kembalian Pra-Bayar yang SUDAH diserahkan di device ini WAJIB ikut —
+    // tanpa ini penerima menghitung pool penuh & menampilkan kembalian yang
+    // sama lagi (bisa diserahkan dua kali).
+    final prabayarChangeTaken = ref
+        .read(cartPrabayarProvider(widget.cartId).notifier)
+        .changeTakenTotal;
     // Susulan (permintaan user, 14 Agt 2026): payload QR dipisah dari teks
     // Copy/Share. `OrderParserService.parse` HANYA membaca baris `#PSN:...`
     // + baris meta (Pegawai/Nama/dst) lewat regex per-baris — blok
@@ -160,6 +166,7 @@ class _CartSheetState extends ConsumerState<CartSheet> {
       trustPrices: !needsGate,
       storeName: null,
       prabayar: prabayarPayload,
+      prabayarChangeTaken: prabayarChangeTaken,
     );
     final shareText = OrderParserService.encodeHandoff(
       items: cart,
@@ -186,6 +193,7 @@ class _CartSheetState extends ConsumerState<CartSheet> {
       // mesin, format sama dgn katalog HTML (`buildOrderText`).
       storeName: device.storeName,
       prabayar: prabayarPayload,
+      prabayarChangeTaken: prabayarChangeTaken,
     );
 
     await showModalBottomSheet<void>(
@@ -455,10 +463,45 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                               tooltip: 'Hapus',
                               icon: Icon(Icons.delete_outline,
                                   color: scheme.error, size: 20),
-                              onPressed: () => sheetRef
-                                  .read(cartPrabayarProvider(widget.cartId)
-                                      .notifier)
-                                  .remove(e.id),
+                              onPressed: () {
+                                final n = sheetRef.read(
+                                    cartPrabayarProvider(widget.cartId)
+                                        .notifier);
+                                // Audit Pra-Bayar: menghapus entri yang
+                                // kembaliannya SUDAH dicentang diambil bikin
+                                // pool negatif — footer menagihnya sbg Sisa,
+                                // tapi checkout menjepitnya ke 0 & catatan
+                                // uang yang sudah keluar laci hilang diam-diam.
+                                // Paksa urutan yang jelas: batalkan dulu
+                                // riwayat kembaliannya (kalau memang belum
+                                // diserahkan), baru entri ini boleh dihapus.
+                                if (n.totalLocked - e.amount <
+                                    n.changeTakenTotal) {
+                                  showDialog<void>(
+                                    context: consumerCtx,
+                                    builder: (dCtx) => AlertDialog(
+                                      title: const Text(
+                                          'Entri tidak bisa dihapus'),
+                                      content: Text(
+                                          'Kembalian ${formatRupiah(n.changeTakenTotal)} '
+                                          'sudah dicatat diambil dari Pra-Bayar ini. '
+                                          'Kalau kembalian itu belum benar-benar '
+                                          'diserahkan, batalkan dulu lewat '
+                                          '"Kembalian diambil" di keranjang, lalu '
+                                          'hapus entri ini.'),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () =>
+                                              Navigator.of(dCtx).pop(),
+                                          child: const Text('Mengerti'),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                  return;
+                                }
+                                n.remove(e.id);
+                              },
                             ),
                           );
                         },

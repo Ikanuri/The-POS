@@ -152,4 +152,49 @@ void main() {
             '-> 50000-84900 clamp ke 0, BUKAN 20000 yang sebenarnya harus '
             'dibayar penuh');
   });
+
+  testWidgets(
+      'audit Pra-Bayar: entri yang kembaliannya SUDAH dicentang diambil TIDAK '
+      'bisa dihapus (pool negatif = catatan uang keluar laci hilang saat '
+      'checkout)', (tester) async {
+    final r = await pumpCartSheetOpen(tester);
+    addTearDown(() async => r.db.close());
+
+    final notifier =
+        r.container.read(cartPrabayarProvider(kMainCartId).notifier);
+    notifier.add(PrabayarEntry(
+      id: 'e1',
+      amount: 84900,
+      method: 'tunai',
+      lockedAt: DateTime.now(),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.descendant(
+      of: find.ancestor(
+          of: find.textContaining('Kembalian '), matching: find.byType(Row)),
+      matching: find.byType(Checkbox),
+    ));
+    await tester.pumpAndSettle();
+    expect(notifier.changeTakenTotal, 54900, reason: 'prakondisi');
+
+    await tester.tap(find.text('Total'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Hapus'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Entri tidak bisa dihapus'), findsOneWidget);
+    expect(notifier.totalLocked, 84900,
+        reason: 'tanpa fix: entri terhapus -> pool -54.900, lalu checkout '
+            'menjepitnya ke 0 & kembalian yang sudah keluar laci hilang dari '
+            'catatan');
+
+    // Setelah riwayat kembaliannya dibatalkan (misclick), entri boleh dihapus.
+    await tester.tap(find.text('Mengerti'));
+    await tester.pumpAndSettle();
+    notifier.removeChangeTaken(notifier.changeTakenEntries.single.id);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Hapus'));
+    await tester.pumpAndSettle();
+    expect(notifier.totalLocked, 0);
+  });
 }

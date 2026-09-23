@@ -201,6 +201,10 @@ class _PasteOrderSheetState extends ConsumerState<PasteOrderSheet> {
           lockedAt: DateTime.fromMillisecondsSinceEpoch(p.lockedAtMs),
         ));
       }
+      // Kembalian yang SUDAH diserahkan di device pengirim — tanpa ini
+      // kembalian yang sama tampil lagi di sini dgn centang kosong.
+      prabayarNotifier.recordChangeTaken(
+          result.prabayar.fold<int>(0, (s, p) => s + p.changeTaken));
     }
 
     if (mounted) {

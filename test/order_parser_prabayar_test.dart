@@ -104,4 +104,46 @@ void main() {
     expect(parsed.items, hasLength(1),
         reason: 'barang tetap masuk walau baris Prabayar rusak');
   });
+
+  test(
+      'audit Pra-Bayar: kembalian yang SUDAH diambil di pengirim ikut terbawa '
+      '(penerima tidak boleh menampilkan kembalian yang sama lagi)', () async {
+    final db = await seedDb();
+    addTearDown(db.close);
+
+    final text = OrderParserService.encodeHandoff(
+      items: [item],
+      employeeName: 'Kasir A',
+      prabayar: [
+        (amount: 50000, method: 'tunai', methodName: null, lockedAtMs: 1000),
+        (amount: 34900, method: 'tunai', methodName: null, lockedAtMs: 2000),
+      ],
+      prabayarChangeTaken: 54900,
+    );
+    final parsed = await OrderParserService.parse(db: db, text: text);
+
+    expect(parsed.prabayar.fold<int>(0, (s, e) => s + e.changeTaken), 54900,
+        reason: 'tanpa fix: kode transfer tidak membawa kembalian yang sudah '
+            'diambil sama sekali -> penerima menghitung pool penuh');
+  });
+
+  test('kode transfer lama TANPA field kembalian -> dibaca 0, tidak error',
+      () async {
+    final db = await seedDb();
+    addTearDown(db.close);
+
+    final text = OrderParserService.encodeHandoff(
+      items: [item],
+      employeeName: 'Kasir A',
+      prabayar: [
+        (amount: 30000, method: 'tunai', methodName: null, lockedAtMs: 1000),
+      ],
+    );
+    final parsed = await OrderParserService.parse(db: db, text: text);
+
+    expect(parsed.prabayar, hasLength(1));
+    expect(parsed.prabayar.single.changeTaken, 0);
+    expect(text, isNot(contains('"c"')),
+        reason: 'tanpa kembalian diambil, payload tetap identik format lama');
+  });
 }

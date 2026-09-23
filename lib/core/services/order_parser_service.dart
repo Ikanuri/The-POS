@@ -286,6 +286,7 @@ class OrderParserService {
             method: m['m'] as String,
             methodName: m['n'] as String?,
             lockedAtMs: m['t'] as int,
+            changeTaken: (m['c'] as int?) ?? 0,
           );
         }).toList();
       } catch (_) {
@@ -386,6 +387,12 @@ class OrderParserService {
     String? storeName,
     List<({int amount, String method, String? methodName, int lockedAtMs})>?
         prabayar,
+    // Kembalian Pra-Bayar yang SUDAH diserahkan di device ini — ikut dibawa
+    // sbg field `c` di entri TERAKHIR (bukan dibagi per entri: penerima
+    // cuma menjumlahkannya, riwayat kembaliannya sendiri list terpisah dari
+    // entri). Penerima versi lama mengabaikan key tak dikenal, jadi tidak
+    // ada mode gagal baru.
+    int prabayarChangeTaken = 0,
   }) {
     final codeParts = items.map((c) {
       final flags = StringBuffer();
@@ -432,14 +439,18 @@ class OrderParserService {
       buf.write('\nNota: $reservedLocalId');
     }
     if (prabayar != null && prabayar.isNotEmpty) {
-      final encoded = jsonEncode(prabayar
-          .map((p) => {
-                'a': p.amount,
-                'm': p.method,
-                if (p.methodName != null) 'n': p.methodName,
-                't': p.lockedAtMs,
-              })
-          .toList());
+      final lastIdx = prabayar.length - 1;
+      final encoded = jsonEncode([
+        for (var i = 0; i < prabayar.length; i++)
+          {
+            'a': prabayar[i].amount,
+            'm': prabayar[i].method,
+            if (prabayar[i].methodName != null) 'n': prabayar[i].methodName,
+            't': prabayar[i].lockedAtMs,
+            if (i == lastIdx && prabayarChangeTaken > 0)
+              'c': prabayarChangeTaken,
+          },
+      ]);
       buf.write('\nPrabayar: $encoded');
     }
     return buf.toString();
@@ -619,12 +630,20 @@ class ParsedPrabayarEntry {
     required this.method,
     this.methodName,
     required this.lockedAtMs,
+    this.changeTaken = 0,
   });
 
   final int amount;
   final String method;
   final String? methodName;
   final int lockedAtMs;
+
+  /// Kembalian Pra-Bayar yang SUDAH fisik diserahkan ke pelanggan di device
+  /// PENGIRIM (field JSON `c`, lihat [OrderParserService.encodeHandoff]).
+  /// Penerima WAJIB mencatatnya (`recordChangeTaken`) — tanpa itu pool
+  /// Pra-Bayar di penerima terhitung penuh & kembalian yang sama tampil lagi
+  /// dgn centang kosong, bisa diserahkan untuk KEDUA kalinya.
+  final int changeTaken;
 }
 
 /// Hasil parsing teks pesanan.
