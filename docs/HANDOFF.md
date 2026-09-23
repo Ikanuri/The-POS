@@ -6,11 +6,44 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 22 September 2026, sesi ketujuh puluh tujuh — 2 fitur baru +
-1 bugfix sync SERIUS + 1 perbaikan data satu-kali-jalan susulannya.
-Commits `97b604a` (fitur), `3d45833` (fix DP pre-order), `2944a1f`
-(repair data). Versi kerja **2.69.2+152**. schemaVersion TETAP **45**
-(tidak ada migrasi baru sesi ini)._
+_Update sesi 23 September 2026, sesi ketujuh puluh delapan — 1 bugfix
+Pra-Bayar (laporan user via 2 screenshot). Commit `c4d1c87`. Versi kerja
+**2.69.3+153** (PATCH — murni bugfix). schemaVersion TETAP **45**._
+
+**Bug — kalkulator "Tambah Bayar" Pra-Bayar tidak ikut `poolAvailable`
+setelah kembalian diambil**. Laporan user: kembalian Pra-Bayar yang SUDAH
+dicentang "sudah diambil", lalu barang ditambah lagi → kalkulator
+"Tambah Bayar" salah tampil "Sisa tagihan Rp 0" padahal seharusnya
+pelanggan bayar penuh tambahan itu (uang kembalian yang sudah di tangan
+pelanggan TIDAK BOLEH dipakai lagi menutup belanja baru).
+
+**Root cause** (1 baris, `_addPrabayar` di `cart_sheet.dart`):
+`remaining` dihitung dari `prabayarNotifier.totalLocked` MENTAH, bukan
+`poolAvailable` (`totalLocked - changeTakenTotal`, getter yang MEMANG
+sudah ada persis utk kasus ini — lihat dok
+`CartPrabayarNotifier.poolAvailable`). Footer keranjang
+(`_PrabayarFooterSummary`) & `payment_screen.dart` (`_prabayarPool`)
+SUDAH benar pakai pool ini sejak awal — cuma titik pengisian
+"Tambah Bayar" ini yang terlewat, beda dari bug Item 65/77
+sesi-sesi lalu (yang soal Lunasi Hutang/Pre-order tidak ikut kehitung,
+di sheet YANG SAMA tapi baris kode LAIN — sudah difix lebih dulu,
+komentarnya masih ada di atas baris yang di-fix sesi ini).
+
+**Cara verifikasi** (dgn angka SAMA PERSIS dari screenshot user):
+Pra-Bayar Rp84.900 di keranjang Rp30.000 → kembalian Rp54.900 muncul,
+dicentang "sudah diambil" → pool = 84.900-54.900 = 30.000 (pas, sisa/
+kembalian hilang). Tambah barang Rp20.000 → total 50.000, footer
+keranjang BENAR tampil "Sisa Rp20.000" (pool 30.000 tetap, 50.000-30.000
+=20.000) — tapi kalkulator "Tambah Bayar" (bug) tampil "Sisa tagihan
+Rp0" krn 50.000-84.900 (totalLocked mentah) di-clamp ke 0.
+
+**Fix**: `poolAvailable` dipakai di titik itu (sama seperti footer &
+payment_screen). Test baru
+`test/cart_sheet_prabayar_change_taken_remaining_test.dart` (widget
+test, mereplikasi skenario di atas persis). Revert-verified (gagal
+sensible "Found 0 widgets" — bukti nominal yang tampil memang Rp0).
+Regression 64 test Pra-Bayar terkait semua lulus. `flutter analyze` 0
+issue.
 
 **Susulan — perbaikan data satu-kali-jalan** (permintaan user langsung
 setelah fix `3d45833`: "buatkan satu kali jalan" utk baris yang SUDAH

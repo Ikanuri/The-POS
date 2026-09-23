@@ -7,6 +7,11 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-23 (sesi ketujuh puluh delapan — kalkulator Tambah Bayar Pra-Bayar tidak pakai poolAvailable)
+
+- `c4d1c87` — fix(kasir): kalkulator Tambah Bayar Pra-Bayar pakai
+  totalLocked mentah, bukan poolAvailable
+
 ## 2026-09-22 (sesi ketujuh puluh tujuh — filter status Laporan Transaksi + bawa centang saat Susun Ulang + fix DP pre-order ter-revert usulan basi + perbaikan data satu-kali-jalan)
 
 - `2944a1f` — fix(sync): perbaikan data satu-kali-jalan utk

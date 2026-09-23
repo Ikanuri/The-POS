@@ -8,6 +8,17 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 23 September 2026 (sesi ketujuh puluh delapan)
+
+### 🐛 Perbaikan
+- **Kalkulator "Tambah Bayar" Pra-Bayar sekarang menghitung "Sisa
+  tagihan" dengan benar setelah kembalian diambil.** Sebelumnya, kalau
+  kembalian Pra-Bayar sudah diserahkan ke pelanggan & dicentang "sudah
+  diambil", lalu kasir menambah belanjaan lagi, kalkulator ini bisa
+  keliru menampilkan "Sisa tagihan Rp 0" — padahal pelanggan seharusnya
+  membayar penuh tambahan belanjanya (uang kembalian yang sudah di
+  tangan pelanggan tidak boleh dipakai lagi menutup belanja baru).
+
 ## 22 September 2026 (sesi ketujuh puluh tujuh)
 
 ### 🐛 Perbaikan
