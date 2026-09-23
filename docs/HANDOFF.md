@@ -7,8 +7,42 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [PLAN.md](../PLAN.md).
 
 _Update sesi 23 September 2026, sesi ketujuh puluh delapan — 1 bugfix
-Pra-Bayar (laporan user via 2 screenshot). Commit `c4d1c87`. Versi kerja
-**2.69.3+153** (PATCH — murni bugfix). schemaVersion TETAP **45**._
+Pra-Bayar (laporan user via 2 screenshot, commit `c4d1c87`) + AUDIT
+menyeluruh Pra-Bayar atas permintaan user (commit `0329583`, 4 bug
+keuangan). Versi kerja **2.69.4+154** (PATCH — murni bugfix).
+schemaVersion TETAP **45**. **2 hal MENUNGGU jawaban user — lihat PLAN.md
+Item 84** (data build 7–9 Sep; konflik desain footer vs Item 65)._
+
+**Audit Pra-Bayar (`0329583`)** — metode: tulis probe yang mereplikasi
+checkout sungguhan (`buildPrabayarCheckout` + `saveTransaction`) lalu
+jalankan fungsi yang dipakai sync/tambah bayar/tambah belanjaan. Temuan
+(semua terbukti reproduksi, revert-verified):
+1. **Invariant `amount` gross dilanggar 2 fungsi.** Sejak `191570c` (9
+   Sep) baris Pra-Bayar ditulis `amount` GROSS & potongan kembalian
+   pre-checkout di `prabayarChangeTakenBeforeCheckout`; header
+   `transactions.paid` = NET. `_reconcileTransactionTotals` &
+   `_computePaymentDelta` tetap menjumlah `amount` mentah → nota
+   berhutang jadi lunas + kembalian fiktif tiap dihitung ulang, dan
+   pelunasan PAS menyuruh kembalian dobel. **Aturan**: SIAPA PUN yang
+   menghitung "dibayar" dari baris pembayaran WAJIB mengurangi kolom itu
+   juga, analog `changeGiven` (sekarang: reconcile, payment delta, Tutup
+   Kasir, Arus Kas — semua sudah).
+2. **Transfer QR** tidak membawa `changeTakenTotal` → field `c` di entri
+   Pra-Bayar TERAKHIR (`encodeHandoff(prabayarChangeTaken:)`), dicatat di
+   3 penerima (`kasir_screen` keranjang aktif & antrian tertahan,
+   `paste_order_sheet`).
+3. **Layar bayar**: `_dueNow` (= `_grandTotal - _prabayarCredit`,
+   credit dijepit 0.._total) dipakai tombol Bayar, keypad, QRIS & gerbang
+   Item 65 — dulu `_grandTotal` penuh walau kartu Pra-Bayar bilang sisa.
+4. **Hapus entri Pra-Bayar** yang bikin pool negatif ditolak (dialog).
+
+Yang SUDAH dicek aman: semua jalur tahan/lanjut pesanan (4 titik) bawa
+`prabayarChangeTaken`; pembersihan setelah checkout/kosongkan keranjang;
+Tutup Kasir & Arus Kas (sudah net sejak `191570c`); struk (display).
+Test baru: `prabayar_change_taken_reconcile_test.dart` (4),
+`payment_screen_prabayar_due_now_test.dart` (2), +2 di
+`order_parser_prabayar_test.dart`, +1 di `kasir_handoff_prabayar_test.dart`,
++1 di `cart_sheet_prabayar_change_taken_remaining_test.dart`.
 
 **Bug — kalkulator "Tambah Bayar" Pra-Bayar tidak ikut `poolAvailable`
 setelah kembalian diambil**. Laporan user: kembalian Pra-Bayar yang SUDAH

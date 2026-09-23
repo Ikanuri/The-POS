@@ -11,6 +11,27 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 23 September 2026 (sesi ketujuh puluh delapan)
 
 ### 🐛 Perbaikan
+- **Nota Pra-Bayar yang masih berhutang tidak lagi berubah sendiri jadi
+  "lunas".** Sebelumnya, kalau kembalian Pra-Bayar sudah diambil pelanggan
+  sebelum bayar, nota yang masih menyisakan hutang bisa mendadak tercatat
+  lunas (lengkap dengan kembalian yang tidak pernah ada) setelah sinkron
+  antar-HP, tambah belanjaan, atau retur — hutangnya hilang dari catatan.
+- **Tidak ada lagi perintah memberi kembalian dua kali.** Melunasi sisa
+  nota Pra-Bayar (lewat "Tambah Bayar" atau tambah belanjaan) dengan uang
+  pas sebelumnya bisa memunculkan "kembalian" sebesar kembalian yang sudah
+  diambil pelanggan sebelumnya.
+- **Transfer pesanan lewat QR kini ikut membawa catatan "kembalian sudah
+  diambil".** Sebelumnya HP penerima menampilkan lagi kembalian yang sama
+  dengan kotak centang kosong, sehingga bisa terserahkan untuk kedua
+  kalinya.
+- **Tombol Bayar, "Uang Pas", dan QRIS kini menagih sisa setelah
+  Pra-Bayar, bukan total penuh.** Sebelumnya layar bayar menulis "Sisa
+  Rp30.000" di kartu Pra-Bayar tetapi tombolnya "Bayar Rp80.000", dan
+  QRIS menagih total penuh lalu menyuruh memberi kembalian tunai.
+- **Entri Pra-Bayar yang kembaliannya sudah dicentang diambil tidak bisa
+  dihapus begitu saja.** Aplikasi akan meminta Anda membatalkan dulu
+  catatan kembaliannya (kalau memang belum diserahkan), supaya uang yang
+  sudah keluar dari laci tidak hilang dari catatan.
 - **Kalkulator "Tambah Bayar" Pra-Bayar sekarang menghitung "Sisa
   tagihan" dengan benar setelah kembalian diambil.** Sebelumnya, kalau
   kembalian Pra-Bayar sudah diserahkan ke pelanggan & dicentang "sudah
