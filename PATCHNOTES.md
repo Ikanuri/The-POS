@@ -11,6 +11,13 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 23 September 2026 (sesi ketujuh puluh delapan)
 
 ### 🐛 Perbaikan
+- **Kembalian yang sudah dicentang "sudah diambil/dipakai" tidak lagi
+  tercetak atau tampil lagi di struk berikutnya.** Sebelumnya, kalau
+  kembalian dari transaksi awal sudah dicentang selesai (misalnya dipakai
+  potong tagihan Tambah Belanjaan), lalu ada tagihan lain yang belum
+  terbayar penuh, struk cetak maupun bagikan bisa menampilkan lagi
+  kembalian lama itu berbarengan dengan sisa tagihan yang masih nyata —
+  membingungkan kasir maupun pembeli.
 - **Nota Pra-Bayar yang masih berhutang tidak lagi berubah sendiri jadi
   "lunas".** Sebelumnya, kalau kembalian Pra-Bayar sudah diambil pelanggan
   sebelum bayar, nota yang masih menyisakan hutang bisa mendadak tercatat

@@ -9,9 +9,47 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 _Update sesi 23 September 2026, sesi ketujuh puluh delapan — 1 bugfix
 Pra-Bayar (laporan user via 2 screenshot, commit `c4d1c87`) + AUDIT
 menyeluruh Pra-Bayar atas permintaan user (commit `0329583`, 4 bug
-keuangan). Versi kerja **2.69.4+154** (PATCH — murni bugfix).
+keuangan) + fix kembalian basi tercetak/dibagikan lagi (commit
+`e27bf8a`). Versi kerja **2.69.5+155** (PATCH — murni bugfix).
 schemaVersion TETAP **45**. **2 hal MENUNGGU jawaban user — lihat PLAN.md
 Item 84** (data build 7–9 Sep; konflik desain footer vs Item 65)._
+
+**Fix kembalian basi tercetak/dibagikan lagi (`e27bf8a`)** — laporan user
+LANGSUNG setelah sesi audit di atas, disertai screenshot struk cetak
+sungguhan. Kembalian yang SUDAH dicentang "sudah diambil/dipakai"
+(`changeTaken`) tercetak/tampil LAGI di share & cetak ESC/POS kalau ronde
+pembayaran SETELAHNYA kebetulan `changeGiven`-nya 0 — `latestChangeGiven`
+(share) & 2 duplikat logika sepadan di `printer_service.dart` (cetak
+tunggal & gabungan) mencari "baris TERAKHIR yang masih py kembalian",
+melompat mundur ke baris lama yg sudah selesai kalau baris terbaru
+kebetulan 0. `changeTaken` sebelumnya PURE KOSMETIK (cuma gambar status
+kotak centang, tak pernah dibaca fungsi ringkasan manapun) — sekarang
+baris yg `changeTaken=true` dilewati di ketiga titik pencarian itu.
+
+**Keputusan scope (dibahas eksplisit dgn user sebelum eksekusi)**: ada 2
+opsi — (A) rombak total jadi SUM `changeGiven` dari SEMUA baris yg
+`changeTaken=false` lintas ronde, unifikasi in-app+share+cetak ke SATU
+rumus; (B) tambal sempit — biarkan pola "cari baris terakhir" apa
+adanya, cuma lewati baris yg sudah dicentang. **User pilih (B)**: in-app
+(`_kembalianGabungan`) TIDAK disentuh (sudah benar utk kasus ini lewat
+jalur berbeda, `_latestPayment` bukan "cari mundur"), risiko regresi
+jauh lebih kecil (test coverage in-app/dibayarDisplay tidak tersentuh
+sama sekali). User mengonfirmasi kasus "2 kembalian menggantung
+sekaligus" (celah yg TIDAK ditutup opsi B) SANGAT jarang di pemakaian
+nyata — kembalian yg tidak diserahkan langsung biasanya memang dipakai
+motong tagihan berikutnya, bukan menumpuk. Kalau nanti user melaporkan
+skenario itu benar terjadi, opsi A masih relevan dieksekusi — TIDAK
+dicatat sbg PLAN.md item baru krn user sudah eksplisit "hampir tidak
+pernah terjadi", bukan pekerjaan menggantung.
+
+Test: `receipt_change_taken_stale_kembali_test.dart` (fungsi murni
+`latestChangeGiven` + widget `_ReceiptPaper`), `printer_service_
+change_taken_stale_kembali_test.dart` (ESC/POS, `PrinterService.
+debugBuildBytes`). Revert-verified (3 gagal sensible tanpa fix, TERMASUK
+regresi lama `receipt_tempo_and_kembali_test.dart` — kembalian yg
+GENUINELY belum dicentang/masih menggantung — dibuktikan TETAP hijau
+tanpa perubahan, fix tidak menyentuh kasus itu). 244 test di 72 file
+terkait (receipt/printer/prabayar/debt/tempo/tambah-belanjaan) lulus.
 
 **Audit Pra-Bayar (`0329583`)** — metode: tulis probe yang mereplikasi
 checkout sungguhan (`buildPrabayarCheckout` + `saveTransaction`) lalu

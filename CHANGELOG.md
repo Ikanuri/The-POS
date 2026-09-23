@@ -7,8 +7,10 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
-## 2026-09-23 (sesi ketujuh puluh delapan — kalkulator Tambah Bayar Pra-Bayar tidak pakai poolAvailable + audit Pra-Bayar)
+## 2026-09-23 (sesi ketujuh puluh delapan — kalkulator Tambah Bayar Pra-Bayar tidak pakai poolAvailable + audit Pra-Bayar + kembalian basi tercetak/dibagikan lagi)
 
+- `e27bf8a` — fix(kasir): centang "kembalian sudah diambil/dipakai" kini
+  benar-benar mencegah kembalian basi tercetak/dibagikan lagi
 - `0329583` — fix(kasir): audit Pra-Bayar — 4 bug keuangan (hutang
   hilang, kembalian dobel)
 - `c4d1c87` — fix(kasir): kalkulator Tambah Bayar Pra-Bayar pakai
