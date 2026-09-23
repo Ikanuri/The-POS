@@ -958,9 +958,12 @@ class PrinterService {
           .fold<int>(0, (s, p) => s + p.changeGiven);
       final netPaid = tx.paid - sumChangeGiven;
 
+      // Baris yang `changeTaken`-nya sudah dicentang (sudah diambil/dipakai
+      // potong tagihan tambahan) DILEWATI — sama pola dgn `latestChangeGiven`
+      // di `receipt_screen.dart` (lihat dok di sana utk bug yg diperbaiki).
       TransactionPayment? latestWithChange;
       for (final p in payments) {
-        if (p.voided || p.changeGiven <= 0) continue;
+        if (p.voided || p.changeGiven <= 0 || p.changeTaken) continue;
         if (latestWithChange == null ||
             p.paidAt.isAfter(latestWithChange.paidAt)) {
           latestWithChange = p;
@@ -1529,10 +1532,12 @@ class PrinterService {
     // (uang tender kotor, Item 9 lama) DIHAPUS, "Sisa" jadi kondisional
     // (bukan selalu tampil apa pun kondisinya) — konsisten dgn struk
     // tunggal & in-app/share.
+    // Baris yang `changeTaken`-nya sudah dicentang DILEWATI — sama pola dgn
+    // `latestChangeGiven` di `receipt_screen.dart` (lihat dok di sana).
     TransactionPayment? latestWithChange;
     for (final pays in paymentsByTx.values) {
       for (final p in pays) {
-        if (p.voided || p.changeGiven <= 0) continue;
+        if (p.voided || p.changeGiven <= 0 || p.changeTaken) continue;
         if (latestWithChange == null ||
             p.paidAt.isAfter(latestWithChange.paidAt)) {
           latestWithChange = p;

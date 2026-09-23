@@ -93,10 +93,23 @@ int grossReceived(List<TransactionPayment> payments) =>
 /// diberikan dipakai ulang sbg pembayaran baru (mis. tambah belanjaan) —
 /// akar masalah sama dgn [netRemainingOwed]. Dipakai juga oleh
 /// `printer_service.dart` (struk cetak ESC/POS) via logika sepadan.
+///
+/// Bug dilaporkan user (screenshot): baris yang `changeGiven`-nya sudah
+/// dicentang "sudah diambil/dipakai" (`changeTaken`, checkbox di Ringkasan
+/// struk & kalkulator "Tambah Bayar" mode tambah belanjaan) TETAP
+/// terpilih di sini kalau ronde SETELAHNYA kebetulan tidak menyisakan
+/// kembalian baru (`changeGiven == 0`, mis. dibayar pas/masih kurang) —
+/// kembalian yang SUDAH selesai (sudah diberikan, atau sudah dipakai
+/// potong tagihan tambahan) muncul lagi di struk seolah masih harus
+/// diserahkan, BERSAMAAN dgn baris "Sisa" utk tagihan yang genuinely
+/// masih kurang. Centang itu sekarang punya arti sungguhan di sini
+/// (bukan cuma status kotak centang di kartu riwayat) — baris yang sudah
+/// dicentang dilewati saat mencari kembalian yang PALING AKHIR & MASIH
+/// aktif.
 int latestChangeGiven(List<TransactionPayment> payments) {
   TransactionPayment? latest;
   for (final p in payments) {
-    if (p.voided || p.changeGiven <= 0) continue;
+    if (p.voided || p.changeGiven <= 0 || p.changeTaken) continue;
     if (latest == null || p.paidAt.isAfter(latest.paidAt)) latest = p;
   }
   return latest?.changeGiven ?? 0;
