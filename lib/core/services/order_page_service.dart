@@ -353,8 +353,8 @@ body{
    yang dipakai selang-seling memaksa browser mendeteksi perubahan. */
 @keyframes badge-incr{0%{transform:scale(1);}40%{transform:scale(1.34);}100%{transform:scale(1);}}
 @keyframes badge-incr2{0%{transform:scale(1);}40%{transform:scale(1.34);}100%{transform:scale(1);}}
-.pc-qty.badge-incr{animation:badge-incr .3s cubic-bezier(.3,1.4,.5,1);}
-.pc-qty.badge-incr2{animation:badge-incr2 .3s cubic-bezier(.3,1.4,.5,1);}
+.pc-qty.badge-incr,.mb-badge.badge-incr{animation:badge-incr .3s cubic-bezier(.3,1.4,.5,1);}
+.pc-qty.badge-incr2,.mb-badge.badge-incr2{animation:badge-incr2 .3s cubic-bezier(.3,1.4,.5,1);}
 /* Blueprint §3/§6 — micro-interaction ikon: memantul sekali saat qty
    produknya berubah. Murni delight, tidak fungsional (Lottie di blueprint
    diganti animasi CSS sederhana, sesuai saran blueprint sendiri untuk
@@ -363,7 +363,8 @@ body{
 @keyframes icon-pop{0%{transform:scale(1);}35%{transform:scale(1.18) rotate(-6deg);}100%{transform:scale(1);}}
 .prow-icon.icon-pop{animation:icon-pop .34s cubic-bezier(.3,1.4,.5,1);}
 @media (prefers-reduced-motion: reduce){
-  .pc-qty.badge-incr,.pc-qty.badge-incr2,.prow-icon.icon-pop{animation:none;}
+  .pc-qty.badge-incr,.pc-qty.badge-incr2,.mb-badge.badge-incr,.mb-badge.badge-incr2,
+  .prow-icon.icon-pop{animation:none;}
   .pc-minus,.pc-add,.page{transition:none;}
 }
 
@@ -636,6 +637,9 @@ var sheetOpen = false; // hindari renderCartSheet() sia-sia saat sheet tertutup
 var itemModalProduct = null; // produk aktif di modal tap-item (Item 14)
 var itemModalUnitId = null; // satuan/varian aktif di modal
 var itemModalQty = 1;
+var _mbBadgeCount = 0; // qty terakhir dirender di badge tombol utama — dipakai
+                        // renderCartBar() utk tahu kapan HARUS retrigger animasi
+                        // (badge per-baris sudah begini, tombol utama belum, Item 79 lanjutan).
 
 // ── Toggle terang/gelap manual — menimpa prefers-color-scheme, disimpan
 // per-browser lewat localStorage supaya pilihan bertahan saat file dibuka lagi.
@@ -1131,7 +1135,20 @@ function renderCartBar(){
   var n = cartCount();
   var orderMode = document.getElementById('app').classList.contains('order-mode');
   document.getElementById('mainBtnWrap').classList.toggle('hidden', n === 0);
-  document.getElementById('mbBadge').textContent = fmtQty(n);
+  var mbBadge = document.getElementById('mbBadge');
+  mbBadge.textContent = fmtQty(n);
+  // Blueprint §4 — badge per-baris SELALU memantul saat qty berubah; badge di
+  // tombol utama sebelumnya cuma ganti teks diam-diam, beda perilaku dari
+  // baris. Retrigger animasi yang sama di sini, HANYA saat n benar-benar
+  // berubah (bukan tiap renderCartBar() dipanggil, mis. buka/tutup ringkasan
+  // pesanan tanpa ubah qty) — trik nama kelas berselang sama seperti
+  // syncProwControls() supaya animasi restart walau nama kelas sebelumnya sama.
+  if (n !== _mbBadgeCount) {
+    var wasFirst = mbBadge.classList.contains('badge-incr');
+    mbBadge.classList.remove('badge-incr', 'badge-incr2');
+    mbBadge.classList.add(wasFirst ? 'badge-incr2' : 'badge-incr');
+    _mbBadgeCount = n;
+  }
   document.getElementById('mbTotal').textContent = rp(cartTotal());
   document.getElementById('mbLabel').textContent =
       orderMode ? 'Kirim via WhatsApp' : 'Lihat Pesanan';
