@@ -7,6 +7,11 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-24 (sesi kedelapan puluh — polish katalog HTML: badge tombol utama ikut memantul)
+
+- `9cb3b90` — fix(katalog): badge angka di tombol utama katalog HTML kini
+  ikut memantul
+
 ## 2026-09-24 (sesi ketujuh puluh sembilan — audit sync & Pra-Bayar susulan: data lama salah + changeTaken tidak ikut sync)
 
 - `a244f86` — fix(sync): centang "kembalian sudah diambil/dipakai" tidak
