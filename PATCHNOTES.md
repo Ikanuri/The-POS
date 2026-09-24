@@ -8,6 +8,20 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 24 September 2026 (sesi ketujuh puluh sembilan)
+
+### 🐛 Perbaikan
+- **Centang "kembalian sudah diambil/dipakai" sekarang ikut tersinkron ke
+  semua HP toko.** Sebelumnya, kalau Anda mencentangnya di satu HP,
+  HP lain yang sudah lebih dulu punya nota yang sama tidak pernah tahu —
+  kembalian yang sudah beres bisa tercetak atau tampil lagi seolah masih
+  harus diserahkan kalau struk itu dicetak ulang dari HP yang berbeda.
+- **Nota Pra-Bayar lama yang sempat tercatat salah (dari sekitar 9–23
+  September) sekarang otomatis diperbaiki sendiri saat aplikasi dibuka.**
+  Nota yang statusnya sempat keliru tersimpan "lunas" padahal masih ada
+  sisa (atau sebaliknya) akan kembali menunjukkan status yang benar —
+  termasuk kalau sebelumnya sempat "menghilang" dari Buku Hutang.
+
 ## 23 September 2026 (sesi ketujuh puluh delapan)
 
 ### 🐛 Perbaikan

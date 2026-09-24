@@ -6,7 +6,75 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 23 September 2026, sesi ketujuh puluh delapan — 1 bugfix
+_Update sesi 24 September 2026, sesi ketujuh puluh sembilan — audit sync
+& Pra-Bayar SUSULAN (permintaan user "audit lagi", marathon 2 batch, 2
+commit): `4055691` (repair data satu-kali-jalan KEDUA) + `a244f86`
+(changeTaken ikut sync). Versi kerja **2.69.7+157** (PATCH — murni
+bugfix). schemaVersion TETAP **45** (tidak ada migrasi — OR-merge pakai
+kolom yang sudah ada)._
+
+**Metode audit yang dipakai (berguna diulang)**: setelah fix `e27bf8a`
+(sesi 78) selesai, ditanya balik "audit lagi" — bukan menganggap selesai,
+tapi ditelusuri 2 pertanyaan lanjutan: (1) "kode-nya sudah benar SEKARANG,
+tapi apakah ada DATA LAMA yang terlanjur salah sebelum fix ini ada &
+tidak akan pernah membetulkan diri sendiri?", (2) "field yang baru jadi
+berbobot sungguhan ini — apakah field itu sendiri PUNYA jalur ke semua
+tempat yang butuh tahu (termasuk sync antar-device)?". Kedua pertanyaan
+ini pola yang SAMA yang sebelumnya menemukan `repairStalePreorderPaidStatus`
+(sesi lalu) — cek lagi pola ini tiap kali sebuah kolom/flag baru saja
+"naik pangkat" dari kosmetik jadi load-bearing.
+
+**Temuan 1 — data lama salah tidak membetulkan diri sendiri (`4055691`)**:
+nota yang checkout-nya terjadi di jendela `191570c` (9 Sep, amount
+Pra-Bayar mulai GROSS) s/d `0329583` (kemarin, reconcile baru mengurangi
+potongan) & TIDAK PERNAH disentuh mutasi apa pun lagi (tambah belanjaan/
+retur/edit/batal bayar/sync) TETAP salah selamanya — dibuktikan lewat
+probe (nota dibuka/dicetak TANPA aksi mutasi apa pun, status tetap salah).
+Blast radius SEMPIT (dicek eksplisit): Laporan Ringkasan/omzet AMAN
+(dihitung dari `total`/item, bukan `paid`), Tutup Kasir AMAN (sudah
+agregat langsung dari baris `transaction_payments` sejak `191570c`,
+bukan dari `tx.paid`) — yang salah HANYA `transactions.paid/status/
+changeAmount` nota yang kena, dampak ke Buku Hutang (status salah
+"lunas" sembunyikan hutang) & filter status Laporan Transaksi. Fix:
+`repairStalePrabayarPaidAccounting()` (pola sama `repairStalePreorderPaidStatus`)
+paksa `reconcileTransactionsByIds` sekali lagi utk nota kandidat (py
+baris pembayaran dgn `prabayar_change_taken_before_checkout > 0`).
+**Efek samping yang user WAJIB tahu** (bukan bug baru): nota lama yg
+"lunas"-nya salah bisa MUNCUL LAGI sbg hutang di Buku Hutang setelah
+diperbaiki — itu koreksi yang benar, bisa mengejutkan kalau tak diduga.
+
+**Temuan 2 — `changeTaken` tidak ikut sync sama sekali (`a244f86`)**:
+ditanya balik user "apakah berlaku ke HP client juga?" — jawab: YA,
+simetris ke SEMUA device (fungsi `mergeRows` yang sama dipakai kedua
+arah client→host & host→client, exclusion-nya tidak owner-spesifik).
+Dibuktikan lewat probe 2-device: HP A mencentang, HP B (sudah py salinan
+baris itu) tidak pernah menerima update. Fix: kedua titik toggle
+(`_toggleChangeTaken`/`_toggleUnclaimedChangeTaken`) sekarang mencap
+`updatedAt`; `mergeRows` case `transaction_payments` diganti dari
+last-write-wins AMBIL-SELURUH-BARIS jadi **OR-merge per kolom** (`voided`
+& `change_taken` masing² `MAX()`, setara boolean OR, HANYA bisa
+false→true lewat sync). **Kenapa BUKAN last-write-wins polos** (keputusan
+desain penting, jangan diubah tanpa alasan baru): `voided` & `changeTaken`
+berbagi SATU `updated_at` yang sama — last-write-wins ambil-seluruh-baris
+berisiko device yang HANYA meng-update `changeTaken` (timestamp lebih
+baru, tidak tahu soal void yg terjadi di device lain) MEMBALIK `voided`
+balik ke false saat sync — pembayaran yg sudah dibatalkan hidup lagi
+diam-diam. Dibuktikan via test regresi eksplisit (skenario itu
+direplikasi, gagal tanpa OR-merge, lulus dengannya).
+
+Test: `prabayar_paid_accounting_repair_test.dart` (5), `transaction_
+payments_change_taken_sync_test.dart` (5, termasuk skenario proteksi
+`voided` di atas + skenario "undo lokal sebelum sync tetap normal
+konfirmasi TIDAK terhalang OR-merge"). Revert-verified kedua fix
+terpisah. 139 file terkait (sync/receipt/printer/prabayar/payment/void/
+lan) dijalankan — 5 gagal SEMUANYA flake LAN-socket resource-contention
+yg sudah berulang kali didokumentasikan sesi-sesi sebelumnya (lulus
+bersih saat diisolasi satu-satu, dibuktikan bukan diasumsikan).
+
+_Ringkasan sesi sebelumnya (78) di bawah ini dipertahankan sbg histori
+teknis:_
+
+Sesi ketujuh puluh delapan — 1 bugfix
 Pra-Bayar (laporan user via 2 screenshot, commit `c4d1c87`) + AUDIT
 menyeluruh Pra-Bayar atas permintaan user (commit `0329583`, 4 bug
 keuangan) + fix kembalian basi tercetak/dibagikan lagi (commit

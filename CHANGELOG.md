@@ -7,6 +7,14 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-24 (sesi ketujuh puluh sembilan — audit sync & Pra-Bayar susulan: data lama salah + changeTaken tidak ikut sync)
+
+- `a244f86` — fix(sync): centang "kembalian sudah diambil/dipakai" tidak
+  ikut sync antar-device
+- `4055691` — fix(kasir): perbaikan data satu-kali-jalan KEDUA —
+  transactions.paid/status/changeAmount salah krn potongan Pra-Bayar
+  tidak dikurangi
+
 ## 2026-09-23 (sesi ketujuh puluh delapan — kalkulator Tambah Bayar Pra-Bayar tidak pakai poolAvailable + audit Pra-Bayar + kembalian basi tercetak/dibagikan lagi)
 
 - `e27bf8a` — fix(kasir): centang "kembalian sudah diambil/dipakai" kini
