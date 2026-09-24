@@ -9408,6 +9408,79 @@ class AppDatabase extends _$AppDatabase {
     return rows.length;
   }
 
+  /// Perbaikan data satu-kali-jalan KEDUA (permintaan user, susulan audit
+  /// Pra-Bayar) — dipanggil tiap startup dari `main.dart`, pola SAMA
+  /// PERSIS `repairStalePreorderPaidStatus`/`backfillMissingPayments`.
+  ///
+  /// Antara commit `191570c` (9 Sep — `amount` baris Pra-Bayar mulai
+  /// ditulis GROSS) dan `0329583` (kemarin — `_reconcileTransactionTotals`/
+  /// `_computePaymentDelta` akhirnya ikut mengurangi
+  /// `prabayarChangeTakenBeforeCheckout`), nota yang checkout-nya memakai
+  /// kembalian Pra-Bayar yang SUDAH diambil sebelum checkout mendapat
+  /// `transactions.paid`/`status`/`changeAmount` yang TERLANJUR salah
+  /// (membengkak sebesar potongan itu, bisa nota berhutang tersimpan
+  /// seolah lunas). Nilai itu TETAP salah selamanya kalau nota itu tidak
+  /// pernah disentuh fungsi mutasi apa pun lagi (tambah belanjaan, retur,
+  /// edit item, batal bayar, sync) — TIDAK ADA jalur app yang memicu
+  /// `_reconcileTransactionTotals` sekadar krn nota dibuka/dilihat/dicetak.
+  ///
+  /// Fix-nya sendiri (`0329583`) sudah membuat perhitungan BENAR utk
+  /// pemanggilan BERIKUTNYA — fungsi ini murni memaksa satu kali
+  /// pemanggilan tambahan utk nota yang sempat lolos jendela waktu itu,
+  /// supaya datanya ikut benar tanpa menunggu nota itu disentuh lagi.
+  ///
+  /// Candidate: nota TIDAK void yang punya minimal satu baris pembayaran
+  /// (tidak dibatalkan) dgn `prabayar_change_taken_before_checkout > 0` —
+  /// satu-satunya kombinasi yang BISA terpengaruh bug ini (nota tanpa
+  /// potongan Pra-Bayar sama sekali sudah benar sejak awal, hitung ulang
+  /// jadi no-op). `reconcileTransactionsByIds` (fungsi lama, tidak
+  /// diubah) aman & idempoten dipanggil ulang — dipakai apa adanya, bukan
+  /// duplikasi logika.
+  ///
+  /// **Efek samping yang WAJIB diketahui user** (bukan bug baru, koreksi
+  /// data yg jujur): nota yang sebelumnya salah tersimpan "lunas" bisa
+  /// muncul lagi di Buku Hutang/filter status Laporan Transaksi sbg
+  /// "Kurang" setelah diperbaiki — itu status yang BENAR, cuma baru
+  /// kelihatan sekarang.
+  ///
+  /// Mengembalikan jumlah nota yang NILAINYA benar-benar berubah (bukan
+  /// jumlah kandidat yang diperiksa) — 0 = tidak ada yang perlu, kasus
+  /// normal jangka panjang setelah semua device pernah start dgn fix ini.
+  Future<int> repairStalePrabayarPaidAccounting() async {
+    final rows = await customSelect(
+      'SELECT DISTINCT t.id AS id FROM transactions t '
+      'JOIN transaction_payments tp ON tp.transaction_id = t.id '
+      "WHERE t.status != 'void' AND NOT tp.voided "
+      'AND tp.prabayar_change_taken_before_checkout > 0',
+      readsFrom: {transactions, transactionPayments},
+    ).get();
+    if (rows.isEmpty) return 0;
+    final ids = rows.map((r) => r.data['id'] as String).toSet();
+
+    final before = <String, Transaction>{};
+    for (final id in ids) {
+      final t = await (select(transactions)..where((t) => t.id.equals(id)))
+          .getSingleOrNull();
+      if (t != null) before[id] = t;
+    }
+
+    await reconcileTransactionsByIds(ids);
+
+    var fixedCount = 0;
+    for (final entry in before.entries) {
+      final after = await (select(transactions)
+            ..where((t) => t.id.equals(entry.key)))
+          .getSingleOrNull();
+      if (after == null) continue;
+      if (after.paid != entry.value.paid ||
+          after.status != entry.value.status ||
+          after.changeAmount != entry.value.changeAmount) {
+        fixedCount++;
+      }
+    }
+    return fixedCount;
+  }
+
   /// Label ringkas satu baris Laci Meja utk pesan "dilewati" — dipakai
   /// [applyLaciMejaProposals] saat baris gagal diterapkan (transaksi
   /// terkait belum tersinkron).

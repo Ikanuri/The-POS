@@ -94,6 +94,12 @@ Future<void> _runStartupMaintenance(ProviderContainer container) async {
       // `repairStalePreorderPaidStatus`). Idempotent, no-op begitu semua
       // device pernah start dgn versi ini.
       await db.repairStalePreorderPaidStatus();
+      // Perbaikan data satu kali jalan KEDUA (permintaan user, susulan
+      // audit Pra-Bayar) — bereskan transactions.paid/status/changeAmount
+      // yang TERLANJUR salah sebelum fix `_reconcileTransactionTotals`/
+      // `_computePaymentDelta` ada (lihat dok
+      // `repairStalePrabayarPaidAccounting`). Idempotent.
+      await db.repairStalePrabayarPaidAccounting();
     } catch (_) {
       // Non-fatal — laporan & struk tetap berfungsi tanpa pre-aggregate.
     }
