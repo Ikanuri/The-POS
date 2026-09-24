@@ -189,8 +189,24 @@ tiap sesi tanpa pandang isi:
 
 ## Perintah
 
-- Analisa: `/opt/flutter/bin/flutter analyze` (binary di `/opt/flutter/bin`;
-  jalankan tanpa root bila memungkinkan — peringatan root tidak menggagalkan).
+- **Setup environment (jalankan di AWAL tiap sesi baru, sebelum perintah lain
+  di bawah)** — cek dulu apakah `/opt/flutter/bin/flutter` ada; **kalau
+  container/sandbox tidak punya Flutter SDK preinstalled** (beda dari device
+  fisik), pasang manual:
+  ```bash
+  cd /tmp && curl -sS -o flutter.tar.xz \
+    https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.24.5-stable.tar.xz
+  tar -xf flutter.tar.xz
+  git config --global --add safe.directory /tmp/flutter
+  export PATH="/tmp/flutter/bin:$PATH"
+  cd /home/user/The-POS && flutter pub get
+  ```
+  Versi tarball sama dengan yang dipakai `.github/workflows/build-apk.yml` —
+  samakan kalau versi CI berubah. `export PATH` di atas hanya berlaku shell
+  session itu; ulangi (atau taruh di `~/.bashrc`) tiap sesi/shell baru.
+- Analisa: `flutter analyze` (kalau pakai instalasi manual di atas, binary
+  ada di `/tmp/flutter/bin`; kalau preinstalled, biasanya di `/opt/flutter/bin`
+  — jalankan tanpa root bila memungkinkan, peringatan root tidak menggagalkan).
 - Wajib `flutter analyze` bersih (0 issue) sebelum commit.
 - Build APK via GitHub Actions (`.github/`), fat APK armeabi-v7a +
   arm64-v8a (HP kelas bawah/lama masih banyak yang 32-bit murni — crash

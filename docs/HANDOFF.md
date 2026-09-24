@@ -331,15 +331,10 @@ void_test.dart` + `hutang_tab_nota_list_test.dart` +
 saat diisolasi, flake resource-contention environment yang sudah
 berulang kali didokumentasikan, tidak terkait perubahan sesi ini.
 
-**Catatan lingkungan (kalau melanjutkan sesi di container/sandbox
-BARU)**: Flutter SDK TIDAK preinstalled di container remote ini (beda
-dari `/opt/flutter/bin` yang disebut CLAUDE.md) — didownload manual dari
-`storage.googleapis.com/flutter_infra_release/releases/stable/linux/
-flutter_linux_3.24.5-stable.tar.xz` (versi sama dgn
-`.github/workflows/build-apk.yml`) ke `/tmp/flutter`, `git config
---global --add safe.directory /tmp/flutter` (dubious ownership),
-`export PATH="/tmp/flutter/bin:$PATH"` sebelum `flutter pub get`/
-`analyze`/`test`. Kalau container baru lagi, ulangi langkah ini dulu.
+**Catatan lingkungan**: langkah setup Flutter SDK di container/sandbox
+tanpa `/opt/flutter/bin` preinstalled sekarang didokumentasikan di
+[CLAUDE.md](../CLAUDE.md) §Perintah (bagian "Setup environment") — jangan
+diulang di sini lagi, cukup rujuk ke sana.
 
 _Ringkasan sesi sebelumnya di bawah ini dipertahankan sbg histori
 teknis:_
