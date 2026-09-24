@@ -8,6 +8,15 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 24 September 2026 (sesi kedelapan puluh)
+
+### 🐛 Perbaikan
+- **Katalog HTML (bagikan lewat WhatsApp)**: badge angka jumlah barang di
+  tombol "Lihat Pesanan"/"Kirim via WhatsApp" sekarang ikut sedikit
+  memantul setiap kali jumlahnya berubah — sebelumnya cuma angkanya
+  berganti diam-diam, beda dari badge di tiap baris produk yang sudah
+  lebih dulu begini.
+
 ## 24 September 2026 (sesi ketujuh puluh sembilan)
 
 ### 🐛 Perbaikan

@@ -6,12 +6,29 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 24 September 2026, sesi ketujuh puluh sembilan — audit sync
-& Pra-Bayar SUSULAN (permintaan user "audit lagi", marathon 2 batch, 2
-commit): `4055691` (repair data satu-kali-jalan KEDUA) + `a244f86`
-(changeTaken ikut sync). Versi kerja **2.69.7+157** (PATCH — murni
-bugfix). schemaVersion TETAP **45** (tidak ada migrasi — OR-merge pakai
-kolom yang sudah ada)._
+_Update sesi 24 September 2026, sesi kedelapan puluh — user upload
+blueprint UI/UX Telegram Mini App (`DurgerKingBot`) minta dibandingkan
+dgn katalog HTML (`order_page_service.dart`). Temuan: implementasi
+katalog SUDAH dibangun eksplisit mengacu blueprint ini (komentar kode
+mengutip "Blueprint §2/§4/§5/§6/§7" di titik relevan) — satu
+halaman-dua-mode, MainButton pengganti, toast, pill "Tambah"→lingkaran
+qty, badge retrigger per-baris, ikon memantul, state "tutup", semua
+sudah selaras. Satu gap kecil ditemukan & diperbaiki: badge di tombol
+AKSI UTAMA (`mbBadge`) sebelumnya cuma ganti teks diam-diam saat qty
+berubah, tidak ikut memantul spt badge per-baris (`.pc-qty`) — sekarang
+disamakan pakai trik kelas berselang yg sama (`badge-incr`/`badge-incr2`),
+hanya retrigger saat count BENAR-BENAR berubah (var `_mbBadgeCount`,
+bukan tiap `renderCartBar()` dipanggil). Commit `9cb3b90`. Versi kerja
+**2.69.8+158** (PATCH — murni polish, bukan fitur baru). schemaVersion
+TETAP **45** (tidak ada perubahan DB). CATATAN: `flutter` TIDAK
+terinstal di environment sesi ini (`/opt/flutter` tidak ada) — perubahan
+CSS/JS di dalam raw-string Dart tidak divalidasi via `flutter analyze`/
+`flutter test` sesi ini, hanya diperiksa manual (diff kecil, murni
+tambah kelas CSS + 1 fungsi JS baru, tidak menyentuh sintaks Dart di
+luar string). Sesi sebelumnya (79) — audit sync & Pra-Bayar SUSULAN
+(permintaan user "audit lagi", marathon 2 batch, 2 commit): `4055691`
+(repair data satu-kali-jalan KEDUA) + `a244f86` (changeTaken ikut
+sync)._
 
 **Metode audit yang dipakai (berguna diulang)**: setelah fix `e27bf8a`
 (sesi 78) selesai, ditanya balik "audit lagi" — bukan menganggap selesai,
