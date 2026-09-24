@@ -742,14 +742,20 @@ void main() {
 
     expect(result.html.contains('@keyframes badge-incr'), isTrue);
     expect(result.html.contains('@keyframes icon-pop'), isTrue);
-    expect(result.html.contains('.pc-qty.badge-incr{animation:badge-incr .3s'),
+    expect(
+        result.html
+            .contains('.pc-qty.badge-incr,.mb-badge.badge-incr{animation:badge-incr .3s'),
         isTrue);
     expect(result.html.contains('.prow-icon.icon-pop{animation:icon-pop .34s'),
         isTrue);
+    // Item 80 — badge di tombol aksi utama (mbBadge) ikut animasi
+    // bump/pop yang sama dengan badge per-baris (pc-qty), termasuk
+    // dikecualikan bareng saat prefers-reduced-motion.
     expect(
         result.html.contains('@media (prefers-reduced-motion: reduce){\n'
-            '  .pc-qty.badge-incr,.pc-qty.badge-incr2,'
-            '.prow-icon.icon-pop{animation:none;}'),
+            '  .pc-qty.badge-incr,.pc-qty.badge-incr2,.mb-badge.badge-incr,'
+            '.mb-badge.badge-incr2,\n'
+            '  .prow-icon.icon-pop{animation:none;}'),
         isTrue);
 
     // Toggle list<->tile: fade opacity out, ganti mode, fade in -- bukan
@@ -767,6 +773,34 @@ void main() {
             '  var saved = null;'),
         isTrue,
         reason: 'initLayout tetap sederhana, tidak ikut disentuh trik fade');
+
+    await db.close();
+  });
+
+  test(
+      'Item 80 — badge di tombol aksi utama (mbBadge) retrigger animasi '
+      'bump SAMA seperti badge per-baris, hanya saat jumlah barang '
+      'benar-benar berubah (bukan tiap renderCartBar() dipanggil)',
+      () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    final result = await OrderPageService.generateHtml(
+        db: db, storeName: 'Toko Berkah');
+
+    // Var pelacak qty terakhir yang dirender -- syarat supaya animasi HANYA
+    // retrigger saat count berubah, bukan tiap kali renderCartBar() jalan
+    // (mis. buka/tutup ringkasan pesanan tanpa ubah qty).
+    expect(result.html.contains('var _mbBadgeCount = 0;'), isTrue);
+    expect(
+        result.html.contains('if (n !== _mbBadgeCount) {\n'
+            '    var wasFirst = mbBadge.classList.contains(\'badge-incr\');\n'
+            '    mbBadge.classList.remove(\'badge-incr\', \'badge-incr2\');\n'
+            '    mbBadge.classList.add(wasFirst ? \'badge-incr2\' : \'badge-incr\');\n'
+            '    _mbBadgeCount = n;\n'
+            '  }'),
+        isTrue,
+        reason: 'renderCartBar() harus retrigger kelas badge-incr/2 pada '
+            'mbBadge dgn trik nama berselang yg sama dgn syncProwControls(), '
+            'dan HANYA saat n berubah');
 
     await db.close();
   });
