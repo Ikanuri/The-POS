@@ -417,15 +417,20 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   /// Centang "Pakai kembalian" di kalkulator bayar (mode tambah belanjaan) —
   /// menulis langsung ke baris pembayaran sumbernya, aksi yang SAMA persis
   /// dengan centang kembalian di Ringkasan struk (lihat receipt_screen.dart
-  /// `_toggleChangeTaken`). Murni penanda "sudah dipakai/diambil", tidak
-  /// memengaruhi jumlah yang diinput kasir.
+  /// `_toggleChangeTaken`, TERMASUK alasan `updatedAt` dicap ulang — supaya
+  /// centang ini ikut tersinkron ke device lain, bukan cuma lokal). Murni
+  /// penanda "sudah dipakai/diambil", tidak memengaruhi jumlah yang diinput
+  /// kasir.
   Future<void> _toggleUnclaimedChangeTaken(bool value) async {
     final change = _unclaimedChange;
     if (change == null) return;
     final db = ref.read(databaseProvider);
     await (db.update(db.transactionPayments)
           ..where((t) => t.id.equals(change.id)))
-        .write(TransactionPaymentsCompanion(changeTaken: Value(value)));
+        .write(TransactionPaymentsCompanion(
+      changeTaken: Value(value),
+      updatedAt: Value(DateTime.now()),
+    ));
     if (mounted) setState(() => _unclaimedChangeTaken = value);
   }
 

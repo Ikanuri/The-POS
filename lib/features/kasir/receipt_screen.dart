@@ -1225,11 +1225,24 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   /// beberapa pembayaran bisa punya beberapa kembalian terpisah) — dipakai
   /// untuk nota yang barangnya diambil belakangan, mencegah kasir memberi
   /// kembalian dua kali.
+  ///
+  /// Susulan audit sync (permintaan user, toko dgn >1 device): `updatedAt`
+  /// WAJIB dicap ulang di sini — `dumpSince`/`mergeRows` (Item 81) memfilter
+  /// `transaction_payments` via `updated_at`, tanpa ini centang di device
+  /// INI tidak pernah terkirim ke device lain (kembalian yang sudah selesai
+  /// di sini bisa tercetak/tampil lagi seolah masih aktif di device lain
+  /// yang belum tahu, persis kelas bug yang baru diperbaiki `e27bf8a` —
+  /// versi cross-device-nya). Lihat dok `mergeRows` case
+  /// `transaction_payments` utk cara nilainya digabung (OR-merge, TIDAK
+  /// bisa ter-revert oleh sync dari device yang belum tahu).
   Future<void> _toggleChangeTaken(String paymentId, bool value) async {
     final db = ref.read(databaseProvider);
     await (db.update(db.transactionPayments)
           ..where((t) => t.id.equals(paymentId)))
-        .write(TransactionPaymentsCompanion(changeTaken: Value(value)));
+        .write(TransactionPaymentsCompanion(
+      changeTaken: Value(value),
+      updatedAt: Value(DateTime.now()),
+    ));
     await _load();
   }
 

@@ -164,11 +164,21 @@ class TransactionPayments extends Table {
   /// dihitung ulang dari kondisi TERKINI.
   IntColumn get changeGiven => integer().withDefault(const Constant(0))();
 
-  /// true bila kembalian baris pembayaran INI sudah diserahkan ke pembeli.
-  /// Per-pembayaran (bukan per-transaksi) — nota dengan beberapa pembayaran
-  /// (tambah bayar/tambah belanjaan) bisa punya beberapa kembalian terpisah,
-  /// masing-masing dengan status ambil sendiri-sendiri. Murni per-perangkat
-  /// (tidak ikut sync — sama seperti `Transactions.changeTaken`).
+  /// true bila kembalian baris pembayaran INI sudah diserahkan/dipakai
+  /// (mis. dipakai lagi menutup Tambah Belanjaan) — dicentang manual kasir
+  /// di Ringkasan struk/kalkulator Tambah Bayar. Per-pembayaran (bukan
+  /// per-transaksi) — nota dengan beberapa pembayaran (tambah bayar/tambah
+  /// belanjaan) bisa punya beberapa kembalian terpisah, masing-masing
+  /// dengan status ambil sendiri-sendiri.
+  ///
+  /// IKUT SYNC sejak audit Pra-Bayar (susulan `e27bf8a` — centang ini
+  /// dipakai `latestChangeGiven`/`printer_service.dart` utk menentukan
+  /// baris "Kembali" mana yang masih harus dicetak/dibagikan, jadi tidak
+  /// lagi boleh berhenti di satu device saja). Digabung via OR-MERGE
+  /// (bukan last-write-wins polos) di `mergeRows` case
+  /// `transaction_payments` — SATU-SATUNYA arah perubahan yang mungkin
+  /// lewat sync adalah false→true, tidak pernah sebaliknya (lihat
+  /// komentar panjang di titik itu utk alasannya).
   BoolColumn get changeTaken => boolean().withDefault(const Constant(false))();
 
   /// true bila pembayaran ini DIBATALKAN (fitur "Batalkan Pembayaran") —
@@ -228,8 +238,10 @@ class TransactionPayments extends Table {
   /// tabel ini (`changeGiven`/`sisaAfter`/`prabayarChangeTakenBeforeCheckout`)
   /// SENGAJA tidak ikut memicu kolom ini — semuanya immutable, ditulis
   /// SEKALI saat baris dibuat (lihat dok masing-masing), bukan field yang
-  /// genuinely berubah pasca-insert. `changeTaken` JUGA tidak ikut — murni
-  /// per-device (lihat dok kolom itu), sama seperti `Transactions.changeTaken`.
+  /// genuinely berubah pasca-insert. `changeTaken` IKUT memicu kolom ini
+  /// sejak audit Pra-Bayar (susulan `e27bf8a`) — lihat dok kolom itu &
+  /// `mergeRows` case `transaction_payments` (OR-merge, bukan last-write-
+  /// wins polos).
   DateTimeColumn get updatedAt => dateTime().nullable()();
 
   @override

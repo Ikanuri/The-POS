@@ -7740,36 +7740,64 @@ class AppDatabase extends _$AppDatabase {
               // Item 81 — `transaction_payments` KHUSUS: baris yang sudah
               // ada (`INSERT OR IGNORE` di bawah akan no-op) masih bisa
               // punya `voided` yang genuinely berubah setelah tersinkron
-              // pertama kali (`voidPayment` — "Batalkan Pembayaran") — sama
-              // pola persis dgn `transactions`/`transaction_items` di atas,
-              // last-write-wins by `updated_at`. Kolom lain (`amount`,
-              // `changeGiven`, `sisaAfter`, dst) SENGAJA tidak ikut —
-              // semuanya immutable, ditulis SEKALI saat baris dibuat, bukan
-              // field yang genuinely berubah pasca-insert.
+              // pertama kali (`voidPayment` — "Batalkan Pembayaran"). Kolom
+              // lain (`amount`, `changeGiven`, `sisaAfter`, dst) SENGAJA
+              // tidak ikut — semuanya immutable, ditulis SEKALI saat baris
+              // dibuat, bukan field yang genuinely berubah pasca-insert.
+              //
+              // Susulan audit sync (permintaan user, toko dgn >1 device) —
+              // `changeTaken` ("kembalian sudah diambil/dipakai") IKUT di
+              // sini sejak baris ini jadi berbobot sungguhan (bukan cuma
+              // status kotak centang, lihat dok kolom & `e27bf8a`): tanpa
+              // ini, centang yang ditandai di SATU device tidak pernah
+              // sampai ke device lain yang sudah lebih dulu menerima baris
+              // ini — kembalian yang sudah selesai di satu HP bisa
+              // tercetak/tampil lagi seolah masih aktif di HP lain.
+              //
+              // `voided` DAN `changeTaken` di-OR-MERGE (bukan last-write-
+              // wins ambil SELURUH baris apa adanya spt `transactions`/
+              // `transaction_items` di atas) — SENGAJA beda pola: kedua
+              // kolom ini SATU `updated_at` yang SAMA, jadi timestamp tidak
+              // bisa membedakan "yang barusan berubah kolom mana". Kalau
+              // dipakai last-write-wins mentah (ambil seluruh nilai row
+              // pengirim krn timestamp-nya lebih baru), device yang HANYA
+              // meng-update `changeTaken` (tanpa tahu device lain SUDAH
+              // memvoid baris yang sama) bisa TIDAK SENGAJA membalik
+              // `voided` balik ke false saat disinkron — meng-hidupkan
+              // lagi pembayaran yang sudah dibatalkan. OR-merge (`MAX`,
+              // setara boolean OR utk 0/1) aman dari itu: kedua kolom
+              // HANYA bisa berubah dari false→true lewat sync, tidak
+              // pernah sebaliknya — konsisten dgn sifat aslinya sendiri
+              // (voidPayment sudah idempotent/tidak pernah membatalkan
+              // pembatalan; changeTaken yang di-uncheck LOKAL sebelum
+              // sempat sync tetap berfungsi normal, cuma undo yang SUDAH
+              // terlanjur sync ke device lain tidak ikut mundur — arah
+              // aman: tidak pernah salah menyembunyikan kembalian yang
+              // genuinely masih aktif).
               if (tableName == 'transaction_payments') {
                 final incomingUpdatedAt = row['updated_at'];
                 if (incomingUpdatedAt is int) {
-                  final existingFull = await customSelect(
-                    'SELECT updated_at FROM "transaction_payments" '
+                  final incomingVoided =
+                      (row['voided'] == 1 || row['voided'] == true) ? 1 : 0;
+                  final incomingChangeTaken =
+                      (row['change_taken'] == 1 || row['change_taken'] == true)
+                          ? 1
+                          : 0;
+                  await customUpdate(
+                    'UPDATE transaction_payments SET '
+                    'voided = MAX(voided, ?), '
+                    'change_taken = MAX(change_taken, ?), '
+                    'updated_at = MAX(updated_at, ?) '
                     'WHERE id = ?',
-                    variables: [Variable<Object>(pkVal)],
-                  ).getSingleOrNull();
-                  final existingUpdatedAt =
-                      existingFull?.data['updated_at'] as int?;
-                  if (existingUpdatedAt == null ||
-                      incomingUpdatedAt > existingUpdatedAt) {
-                    await customUpdate(
-                      'UPDATE transaction_payments SET voided = ?, '
-                      'updated_at = ? WHERE id = ?',
-                      variables: [
-                        Variable<Object>(row['voided'] ?? 0),
-                        Variable<Object>(incomingUpdatedAt),
-                        Variable<Object>(pkVal),
-                      ],
-                      updates: {transactionPayments},
-                      updateKind: UpdateKind.update,
-                    );
-                  }
+                    variables: [
+                      Variable<Object>(incomingVoided),
+                      Variable<Object>(incomingChangeTaken),
+                      Variable<Object>(incomingUpdatedAt),
+                      Variable<Object>(pkVal),
+                    ],
+                    updates: {transactionPayments},
+                    updateKind: UpdateKind.update,
+                  );
                 }
               }
               continue;
