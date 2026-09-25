@@ -8,6 +8,23 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 25 September 2026 (sesi kedelapan puluh satu)
+
+### ✨ Fitur Baru
+- **Sekarang bisa: pelanggan sekaligus melunasi hutang lama + belanja
+  baru dalam SATU nota, walau uangnya cuma cukup utk hutangnya (tidak
+  cukup utk belanja baru sepenuhnya).** Sebelumnya, kalau ada pelunasan
+  hutang/pre-order aktif di keranjang, seluruh transaksi akan DITOLAK
+  kalau uang yang diterima kasir belum menutup semuanya (belanja +
+  hutang) — walau uangnya sebenarnya sudah cukup utk melunasi hutangnya
+  sendiri. Sekarang, hutang/pre-order lama tetap lunas penuh seperti
+  biasa, dan belanja barunya saja yang tercatat kurang bayar (bisa
+  dilunasi belakangan) — persis kasus umum "sekalian bayar hutang &
+  belanja" tapi uangnya pas-pasan.
+- Tombol "Bayar Nanti" kini dinonaktifkan selama masih ada pelunasan
+  hutang/pre-order aktif di keranjang (harus lewat tombol "Bayar" biasa),
+  supaya uang pelunasan hutang tetap benar-benar diterima kasir.
+
 ## 24 September 2026 (sesi kedelapan puluh)
 
 ### 🐛 Perbaikan

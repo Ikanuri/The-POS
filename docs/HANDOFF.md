@@ -6,29 +6,50 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 24 September 2026, sesi kedelapan puluh — user upload
-blueprint UI/UX Telegram Mini App (`DurgerKingBot`) minta dibandingkan
-dgn katalog HTML (`order_page_service.dart`). Temuan: implementasi
-katalog SUDAH dibangun eksplisit mengacu blueprint ini (komentar kode
-mengutip "Blueprint §2/§4/§5/§6/§7" di titik relevan) — satu
-halaman-dua-mode, MainButton pengganti, toast, pill "Tambah"→lingkaran
-qty, badge retrigger per-baris, ikon memantul, state "tutup", semua
-sudah selaras. Satu gap kecil ditemukan & diperbaiki: badge di tombol
-AKSI UTAMA (`mbBadge`) sebelumnya cuma ganti teks diam-diam saat qty
-berubah, tidak ikut memantul spt badge per-baris (`.pc-qty`) — sekarang
-disamakan pakai trik kelas berselang yg sama (`badge-incr`/`badge-incr2`),
-hanya retrigger saat count BENAR-BENAR berubah (var `_mbBadgeCount`,
-bukan tiap `renderCartBar()` dipanggil). Commit `9cb3b90`. Versi kerja
-**2.69.8+158** (PATCH — murni polish, bukan fitur baru). schemaVersion
-TETAP **45** (tidak ada perubahan DB). CATATAN: `flutter` TIDAK
-terinstal di environment sesi ini (`/opt/flutter` tidak ada) — perubahan
-CSS/JS di dalam raw-string Dart tidak divalidasi via `flutter analyze`/
-`flutter test` sesi ini, hanya diperiksa manual (diff kecil, murni
-tambah kelas CSS + 1 fungsi JS baru, tidak menyentuh sintaks Dart di
-luar string). Sesi sebelumnya (79) — audit sync & Pra-Bayar SUSULAN
-(permintaan user "audit lagi", marathon 2 batch, 2 commit): `4055691`
-(repair data satu-kali-jalan KEDUA) + `a244f86` (changeTaken ikut
-sync)._
+_Update sesi 25 September 2026, sesi kedelapan puluh satu — permintaan
+user (ditandai "menyangkut keuangan"): checkout dgn Lunasi Hutang/
+Pelunasi Pre-order aktif dulu DITOLAK SELURUHNYA (Item 65 gate) kalau
+uang yang diterima kasir belum menutup grand total (belanja + hutang)
+penuh — walau uangnya sebenarnya sudah cukup utk hutangnya sendiri.
+Kasus nyata: pelanggan sekaligus mau melunasi hutang lama + belanja
+baru satu nota, uangnya cukup utk hutang tapi tidak utk belanja baru
+sepenuhnya. Fix (`c6146cf`): gerbang di `_onBayarPressed`
+(`payment_screen.dart`) direlaksasi dari `result < _dueNow` jadi
+`result < _settlementTotal` — settlement (uang pelanggan LAIN) tetap
+WAJIB diterima fisik penuh sebelum diproses lunas, tapi belanja baru
+nota INI SENDIRI sekarang boleh kurang bayar. Tidak perlu perubahan di
+`buildPrabayarCheckout`/`saveTransactionWithDebtSettlements` sama sekali
+— `paidAmountNow` yang lebih kecil dari `cartTotal` SUDAH otomatis
+menghasilkan status `kurang_bayar` (bukan `lunas`) tanpa kembalian
+fiktif, jadi konsisten otomatis dgn SEMUA tampilan struk (in-app/share/
+print) & kalkulator checkout/Pra-Bayar yang sudah ada — tidak ada celah
+baru di situ. Celah TERPISAH yang ikut ditutup di commit yang sama:
+tombol "Bayar Nanti" (tempo, 0 uang fisik) dulu SAMA SEKALI tidak dijaga
+terhadap settlement aktif (bisa meloloskan hutang lunas tanpa uang
+sepeser pun) — sekarang dinonaktifkan selama `_settlementTotal > 0`.
+Test baru/diperbarui: `payment_screen_settlement_grandtotal_test.dart`
+(6 test, revert-verify dibuktikan: 3 test baru/diubah GAGAL sensible
+kalau fix di-revert, 3 test lama tetap hijau). Sekalian dibersihkan:
+PLAN.md Item 79/80 (`da80b9f`) — catatan lama bilang "belum di-merge ke
+main, jangan digabung" ternyata sudah lama jadi ancestor `origin/main`
+lewat commit sesi lain (`91147a6`..`9cb3b90`, katalog HTML), item usang
+dihapus. Versi kerja **2.70.0+159** (MINOR — kemampuan baru yg terlihat
+user, bukan cuma bugfix). schemaVersion TETAP **45** (tidak ada
+perubahan DB). **PENTING (git branch)**: branch tugas sesi ini,
+`claude/kategori-produk-qty-harga-mqjh21`, ternyata SUDAH fully-merged
+ke main sebelum sesi ini mulai (0 commit unik vs `origin/main`) — nama
+branch itu SENDIRI adalah sisa tugas KATALOG HTML lama (Item 79/80,
+lihat di atas), TIDAK ADA hubungannya dgn tugas checkout/Pra-Bayar sesi
+ini. Branch direstart dari `origin/main` (`git checkout -B <branch>
+origin/main`) lalu dipakai utk tugas BARU yang sama sekali beda topik —
+kalau sesi depan dapat nama branch ini lagi, JANGAN asumsikan isinya
+soal katalog/kategori produk, cek dulu commit-nya.
+
+_Sesi-sesi sebelumnya (78-80): kalkulator Tambah Bayar Pra-Bayar,
+audit Pra-Bayar 4-bug keuangan, kembalian basi tercetak/dibagikan lagi,
+audit sync susulan (data lama salah + changeTaken tidak ikut sync),
+polish badge katalog HTML — lihat [CHANGELOG.md](../CHANGELOG.md) untuk
+hash & detail per-commit, tidak diulang di sini._
 
 **Metode audit yang dipakai (berguna diulang)**: setelah fix `e27bf8a`
 (sesi 78) selesai, ditanya balik "audit lagi" — bukan menganggap selesai,
