@@ -106,24 +106,6 @@ tinggi). Rekomendasi: opsi 1.
 
 ---
 
-## Item 79/80 — Redesain UX katalog HTML — SELESAI di `claude/kategori-produk-qty-harga-mqjh21`, BELUM ke `main`
-
-Item 79 (4 milestone: auto-match ikon, toggle List↔Tile, qty control,
-transisi smooth) + Item 80 (fix bug tile mode + redesain UI/UX mengikuti
-blueprint Mini App: dua halaman, expanded pill, tombol utama mengambang
-berisi total, toast/closed-state) sudah dieksekusi & dipush ke branch
-`claude/kategori-produk-qty-harga-mqjh21`. **User eksplisit: JANGAN merge
-ke `main`.** Tanya dulu kalau mau digabung ke `main`.
-
-**Catatan sisa (belum dikerjakan, sengaja):** blueprint §3 menyebut
-placeholder *shimmer* untuk ikon produk. TIDAK diimplementasikan karena di
-katalog ini ikonnya emoji/CSS yang render seketika — tidak ada gambar
-remote yang perlu ditunggu, jadi skeleton hanya akan menambah jeda semu.
-Kalau nanti ikon produk diganti gambar sungguhan (mis. foto produk yang
-di-embed), shimmer baru relevan dan sebaiknya ditambahkan.
-
----
-
 ## Item 48 — Kotak warna avatar produk di kasir dibuat soft/pastel (18 Juli, BELUM dieksekusi — user setuju, siap eksekusi)
 
 **Konteks**: BUKAN aksen fungsional bermakna (beda dari kerjaan Item
