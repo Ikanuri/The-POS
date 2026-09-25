@@ -649,9 +649,13 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   int get _preorderSettlementTotal =>
       _preorderSettlementEntries.fold<int>(0, (s, e) => s + e.amount);
 
-  /// Item 65 — nominal gabungan Lunasi Hutang + Pelunasi Pre-order, dipakai
-  /// gerbang keypad (lihat `_onBayarPressed`) supaya uang yang benar-benar
-  /// diterima kasir WAJIB menutup [_grandTotal], bukan cuma [_total].
+  /// Item 65, direlaksasi Item 85 — nominal gabungan Lunasi Hutang +
+  /// Pelunasi Pre-order, dipakai gerbang keypad (lihat `_onBayarPressed`)
+  /// supaya uang yang benar-benar diterima kasir WAJIB MINIMAL menutup
+  /// nominal ini sendiri (uang pelanggan lain, tidak boleh diproses lunas
+  /// dari kredit) — TIDAK lagi wajib menutup [_grandTotal] penuh, boleh
+  /// kurang di porsi [_total] (belanja baru nota ini sendiri, jatuh ke
+  /// `kurang_bayar`, lihat dok gerbang di `_onBayarPressed`).
   int get _settlementTotal => _debtSettlementTotal + _preorderSettlementTotal;
 
   /// Total keseluruhan yang perlu DITERIMA kasir dari pelanggan: total
@@ -2102,7 +2106,18 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                   Expanded(
                     flex: 2,
                     child: FilledButton(
-                      onPressed: (_isSaving || !_bayarEnabled)
+                      // Item 85 — "Bayar Nanti" = 0 uang fisik diterima
+                      // SEKARANG, jadi TIDAK PERNAH bisa menutup pelunasan
+                      // hutang/pre-order aktif (beda dari belanja baru
+                      // sendiri yang memang boleh tempo) — dulu tombol ini
+                      // sama sekali tidak dijaga (_onBayarNantiPressed
+                      // langsung confirm tanpa cek _settlementTotal), celah
+                      // yang persis sama dgn yang Item 65 coba tutup di
+                      // kalkulator tunai. Kasir WAJIB lewat "Bayar" (keypad)
+                      // supaya minimal _settlementTotal tetap diterima fisik.
+                      onPressed: (_isSaving ||
+                              !_bayarEnabled ||
+                              _settlementTotal > 0)
                           ? null
                           : _onBayarNantiPressed,
                       style: FilledButton.styleFrom(
@@ -2214,20 +2229,26 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         ),
       );
       if (result == null) return; // dibatalkan
-      // Item 65 — kalau ada pelunasan hutang/pre-order aktif, uang yang
-      // diketik kasir WAJIB menutup _grandTotal (nominal settlement beku
-      // & TIDAK boleh "kurang_bayar" diam-diam — beda dari belanja baru
-      // sendiri yang memang boleh kurang_bayar/tempo). Tanpa gerbang ini,
-      // hutang/pre-order pelanggan lain bisa tercatat lunas walau kasir
-      // belum benar-benar menerima uangnya.
-      if (_settlementTotal > 0 && result < _dueNow) {
+      // Item 65, direlaksasi Item 85 — kalau ada pelunasan hutang/pre-order
+      // aktif, uang yang diketik kasir WAJIB MINIMAL menutup _settlementTotal
+      // (nominal settlement beku TETAP TIDAK BOLEH "kurang_bayar" diam-diam —
+      // itu uang pelanggan LAIN, harus benar-benar diterima fisik SEBELUM
+      // diproses lunas). Tapi TIDAK lagi wajib menutup _dueNow penuh: kasus
+      // nyata (permintaan user) — pelanggan sekaligus melunasi hutang lama +
+      // belanja baru dalam SATU nota, uangnya cukup utk hutang tapi tidak
+      // utk belanja baru sepenuhnya. Sisa _total yang belum tertutup jatuh
+      // ke `kurang_bayar` pada nota BARU ini SAJA (lihat `buildPrabayarCheckout`
+      // — `combinedPaid < cartTotal` sudah otomatis menghasilkan status itu
+      // dari `paidAmountNow` yang lebih kecil dari _total), pelunasan hutang/
+      // pre-order-nya sendiri TETAP lunas penuh seperti biasa.
+      if (_settlementTotal > 0 && result < _settlementTotal) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text(
-                'Uang diterima ${formatRupiah(result)} belum menutup Total '
-                'Diterima ${formatRupiah(_dueNow)} (Belanja + '
-                'Hutang/Pre-order) — tambah uang, atau lepas dulu entri '
-                'pelunasan yang tidak jadi diproses sekarang.'),
+                'Uang diterima ${formatRupiah(result)} belum menutup '
+                'pelunasan Hutang/Pre-order ${formatRupiah(_settlementTotal)} '
+                '— tambah uang, atau lepas dulu entri pelunasan yang tidak '
+                'jadi diproses sekarang.'),
             duration: const Duration(seconds: 5),
           ));
         }
