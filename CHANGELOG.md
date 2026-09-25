@@ -9,6 +9,8 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-09-25 (sesi kedelapan puluh satu — checkout boleh sebagian lunas kalau uang cukup lunasi hutang tapi tidak cukup utk belanja baru)
 
+- `31fcf4b` — test(kasir): buktikan checkout partial-settlement (Item 85,
+  c6146cf) konsisten di struk print/share & sync antar device
 - `da80b9f` — docs: hapus Item 79/80 dari PLAN.md -- sudah lama merge ke
   main
 - `c6146cf` — fix(kasir): checkout tidak lagi ditolak total kalau uang

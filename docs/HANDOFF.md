@@ -33,17 +33,49 @@ kalau fix di-revert, 3 test lama tetap hijau). Sekalian dibersihkan:
 PLAN.md Item 79/80 (`da80b9f`) — catatan lama bilang "belum di-merge ke
 main, jangan digabung" ternyata sudah lama jadi ancestor `origin/main`
 lewat commit sesi lain (`91147a6`..`9cb3b90`, katalog HTML), item usang
-dihapus. Versi kerja **2.70.0+159** (MINOR — kemampuan baru yg terlihat
-user, bukan cuma bugfix). schemaVersion TETAP **45** (tidak ada
-perubahan DB). **PENTING (git branch)**: branch tugas sesi ini,
+dihapus. Merge ke `main` (`428ddaa`, atas permintaan user "merge ke
+main") clean (no-conflict, diverifikasi via `git merge-tree` dulu).
+
+Susulan (masih sesi yg sama): user tanya balik "Perubahan besar tadi
+apakah sudah ditest di poin 2 dan 3?" (poin 2 = konsistensi display
+in-app/share/print/kalkulator, poin 3 = sync antar device, dari
+permintaan awal). Jawaban jujur: BELUM ada test langsung — sebelumnya
+cuma disimpulkan logis (tidak ada perubahan di `buildPrabayarCheckout`/
+`saveTransactionWithDebtSettlements`, jadi "harusnya" tetap konsisten).
+Ditutup dgn test baru `debt_settlement_partial_new_tx_display_sync_test.dart`
+(`31fcf4b`) yang membangun skenario lewat `saveTransactionWithDebtSettlements`
+PERSIS spt jalur produksi (bukan insert manual DB), membuktikan: cetak
+ESC/POS & share/in-app nota BARU (kurang_bayar) menampilkan "Sisa" benar
+TANPA "Kembali" fiktif; nota LAMA yg ikut dilunasi tidak lagi tampilkan
+"Sisa"; DAN `dumpSince`/`mergeRows` host->klien membawa KEDUA nota
+dengan benar (termasuk skenario watermark: device lain sudah sync SAAT
+nota lama masih tempo, lalu checkout gabungan terjadi SETELAHNYA —
+update `updated_at` nota lama tetap ikut dump susulan). Revert-verify:
+mutasi manual sementara di `remaining` (`printer_service.dart`, SUDAH
+dikembalikan) memang bikin test "Sisa" gagal dgn pesan masuk akal —
+bukan assertion vakum. Kesimpulan: poin 2 & 3 SEKARANG benar-benar
+teruji, bukan cuma disimpulkan. User SEBELUMNYA juga sempat melaporkan
+"kembalian tidak muncul lagi" di struk print/share — investigasi
+(unit test `buildPrabayarCheckout` langsung + full suite) tidak
+menemukan bug, ternyata APK yang dites user MASIH BUILD LAMA (belum
+pakai commit terbaru) — bukan regresi nyata, sudah dikonfirmasi user
+sendiri setelah build ulang.
+
+Versi kerja **2.70.0+160** (BUILD naik krn ada commit baru/rilis
+susulan; MINOR/PATCH TETAP krn commit susulan ini test-only, tidak ada
+perubahan kode `lib/`). schemaVersion TETAP **45** (tidak ada perubahan
+DB). **PENTING (git branch)**: branch tugas sesi ini,
 `claude/kategori-produk-qty-harga-mqjh21`, ternyata SUDAH fully-merged
 ke main sebelum sesi ini mulai (0 commit unik vs `origin/main`) — nama
 branch itu SENDIRI adalah sisa tugas KATALOG HTML lama (Item 79/80,
 lihat di atas), TIDAK ADA hubungannya dgn tugas checkout/Pra-Bayar sesi
 ini. Branch direstart dari `origin/main` (`git checkout -B <branch>
-origin/main`) lalu dipakai utk tugas BARU yang sama sekali beda topik —
-kalau sesi depan dapat nama branch ini lagi, JANGAN asumsikan isinya
-soal katalog/kategori produk, cek dulu commit-nya.
+origin/main`) DUA KALI di sesi ini (sekali di awal, sekali lagi setelah
+merge ke main supaya susulan test ini juga mulai dari titik yg sudah
+ter-merge) — kalau sesi depan dapat nama branch ini lagi, JANGAN
+asumsikan isinya soal katalog/kategori produk, cek dulu commit-nya, dan
+jangan kaget kalau branch-nya "kosong" (0 commit unik) — itu NORMAL utk
+branch ini, restart dari `origin/main` adalah pola yang benar di sini.
 
 _Sesi-sesi sebelumnya (78-80): kalkulator Tambah Bayar Pra-Bayar,
 audit Pra-Bayar 4-bug keuangan, kembalian basi tercetak/dibagikan lagi,
