@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:the_pos/core/database/app_database.dart';
 import 'package:the_pos/core/services/printer_service.dart';
 import 'package:the_pos/core/theme/app_theme.dart';
+import 'package:the_pos/core/utils/change_display.dart';
 import 'package:the_pos/features/kasir/receipt_screen.dart';
 
 import 'helpers/pump_app.dart';
@@ -20,9 +21,10 @@ import 'helpers/pump_app.dart';
 /// disumbangkan ke ringkasan "Kembalian" SAAT INI begitu ada ronde "Tambah
 /// Belanjaan" (`note == 'Tambah belanjaan'`, ditulis oleh
 /// `_confirmAddItems` di payment_screen.dart) berikutnya pada nota yang
-/// SAMA — root cause & fix: `totalPrabayarChangeTakenBeforeCheckout` /
-/// `_hasLaterAddItemsRound` di receipt_screen.dart, duplikat inline di
-/// printer_service.dart (struk tunggal & gabungan).
+/// SAMA. Sejak Item 88 dijaga oleh aturan "last state" (`lastStateChange`,
+/// `core/utils/change_display.dart`): kembalian = ronde pembayaran TERAKHIR
+/// saja (changeGiven + potongan pre-checkout di baris itu), sumber yang
+/// sama utk in-app, share & cetak.
 void main() {
   late AppDatabase db;
   setUp(() => db = AppDatabase(NativeDatabase.memory()));
@@ -78,7 +80,7 @@ void main() {
             note: const Value('Tambah belanjaan')));
   }
 
-  group('totalPrabayarChangeTakenBeforeCheckout (fungsi murni)', () {
+  group('lastStateChange (fungsi murni)', () {
     test(
         'SKENARIO DILAPORKAN USER: begitu ada ronde Tambah Belanjaan, '
         'potongan pre-checkout ronde ASLI TIDAK ikut dihitung lagi (harus 0)',
@@ -89,10 +91,13 @@ void main() {
           prabayarCut: 105150, addItemsChangeGiven: 115750);
 
       final payments = await db.getPaymentsForTx(txId);
+      final tx = await (db.select(db.transactions)
+            ..where((t) => t.id.equals(txId)))
+          .getSingle();
 
-      expect(totalPrabayarChangeTakenBeforeCheckout(payments), 0,
-          reason: 'BUG: sebelum fix ini akan 105150 (potongan pre-checkout '
-              'ronde ASLI yang sudah diberikan ke pelanggan), bukan 0');
+      expect(lastStateChange(tx, payments), 115750,
+          reason: 'BUG lama: 115.750 + 105.150 (potongan pre-checkout ronde '
+              'ASLI yang sudah diberikan ke pelanggan)');
     });
 
     test(
@@ -111,8 +116,11 @@ void main() {
               prabayarChangeTakenBeforeCheckout: const Value(600)));
 
       final payments = await db.getPaymentsForTx(txId);
+      final tx = await (db.select(db.transactions)
+            ..where((t) => t.id.equals(txId)))
+          .getSingle();
 
-      expect(totalPrabayarChangeTakenBeforeCheckout(payments), 600,
+      expect(lastStateChange(tx, payments), 600,
           reason: 'perilaku lama (fix 22ba425) TIDAK BOLEH berubah tanpa '
               'ronde Tambah Belanjaan');
     });

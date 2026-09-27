@@ -7,6 +7,7 @@ import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../database/app_database.dart';
+import '../utils/change_display.dart';
 import '../utils/preorder_calc.dart';
 
 /// Nomor urut nota saja, tanpa kode kasir & tanggal. localId berformat
@@ -504,6 +505,9 @@ class PrinterService {
     // sisa; sengaja tidak dihitung ulang di sini). null = tidak dicetak sama
     // sekali (nota lunas, toggle mati, atau QRIS belum dikonfigurasi).
     String? qrData,
+    // Item 88 — mode "Gabungkan kembalian belum diambil" dari struk in-app:
+    // nominal gabungan pengganti kembalian last-state. null = normal.
+    int? mergedUnclaimedChange,
   }) async {
     final mac = await getSavedMac();
     if (mac == null || mac.isEmpty) return false;
@@ -532,6 +536,7 @@ class PrinterService {
       preorderDeposit: preorderDeposit,
       qrData: qrData,
       settings: settings,
+      mergedUnclaimedChange: mergedUnclaimedChange,
     );
 
     return _writeBytes(bytes, settings);
@@ -654,6 +659,7 @@ class PrinterService {
     Map<String, double> preorderDeposit = const {},
     String? qrData,
     required PrinterSettings settings,
+    int? mergedUnclaimedChange,
   }) =>
       _buildBytes(
         tx: tx,
@@ -675,6 +681,7 @@ class PrinterService {
         preorderDeposit: preorderDeposit,
         qrData: qrData,
         settings: settings,
+        mergedUnclaimedChange: mergedUnclaimedChange,
       );
 
   // ── Build ESC/POS bytes ──────────────────────────────────────────────────
@@ -699,6 +706,7 @@ class PrinterService {
     Map<String, double> preorderDeposit = const {},
     String? qrData,
     required PrinterSettings settings,
+    int? mergedUnclaimedChange,
   }) async {
     final w = settings.charWidth;
     final profile = await CapabilityProfile.load();
@@ -958,52 +966,21 @@ class PrinterService {
           .fold<int>(0, (s, p) => s + p.changeGiven);
       final netPaid = tx.paid - sumChangeGiven;
 
-      // Baris yang `changeTaken`-nya sudah dicentang (sudah diambil/dipakai
-      // potong tagihan tambahan) DILEWATI — sama pola dgn `latestChangeGiven`
-      // di `receipt_screen.dart` (lihat dok di sana utk bug yg diperbaiki).
-      TransactionPayment? latestWithChange;
-      for (final p in payments) {
-        if (p.voided || p.changeGiven <= 0 || p.changeTaken) continue;
-        if (latestWithChange == null ||
-            p.paidAt.isAfter(latestWithChange.paidAt)) {
-          latestWithChange = p;
-        }
-      }
-      // Bug dilaporkan user (screenshot): kembalian Pra-Bayar yg diambil
-      // SEBELUM checkout (`prabayarChangeTakenBeforeCheckout`, kolom
-      // TERPISAH dari `changeGiven` momen checkout) tidak pernah dihitung
-      // di sini — nota yg SEMUA kembaliannya dari potongan pre-checkout
-      // (bukan `changeGiven` momen checkout) tidak pernah menampilkan
-      // baris "Kembali" sama sekali di struk cetak, padahal SUDAH benar
-      // di kartu Riwayat Pembayaran in-app (fix commit `191570c`) — SUM
-      // SEMUA baris (bukan cuma baris terakhir, beda dari `changeGiven`
-      // momen checkout) krn tiap baris Pra-Bayar potensial py potongan
-      // sendiri-sendiri. Lihat `totalPrabayarChangeTakenBeforeCheckout` /
-      // `_kembalianGabungan` di receipt_screen.dart utk fix analog.
-      //
-      // Bug lanjutan dilaporkan user: begitu ada ronde "Tambah Belanjaan"
-      // (`note == 'Tambah belanjaan'`) SETELAH ronde checkout asli, ronde
-      // asli (& potongan pre-checkout-nya) sudah TUNTAS/historis — sudah
-      // diberikan ke pelanggan & sudah benar tampil di baris Riwayat
-      // Pembayaran-nya sendiri. Jangan ikut dijumlahkan lagi ke ringkasan
-      // SAAT INI. Fix analog di `totalPrabayarChangeTakenBeforeCheckout`
-      // (receipt_screen.dart).
-      final hasLaterAddItemsRound =
-          payments.any((p) => !p.voided && p.note == 'Tambah belanjaan');
-      final totalPrabayarChangeTaken = hasLaterAddItemsRound
-          ? 0
-          : payments.where((p) => !p.voided).fold<int>(
-              0, (s, p) => s + (p.prabayarChangeTakenBeforeCheckout ?? 0));
+      // Item 88 — "Kembali" = keadaan TERAKHIR nota (lihat
+      // `core/utils/change_display.dart`), sumber yang SAMA dgn struk in-app
+      // & share. Centang "sudah diambil" tidak lagi menghapus baris ini.
+      // Mode gabungan (tombol di struk in-app) memakai jumlah semua
+      // kembalian yang belum diambil sbg gantinya.
       final kembalianGabungan =
-          (latestWithChange?.changeGiven ?? 0) + totalPrabayarChangeTaken;
-      // "Bayar" HARUS Total + Kembalian (bukan netPaid mentah) saat ada
-      // baris Kembalian — supaya "Total = Bayar - Kembalian" konsisten di
-      // struk. netPaid dipakai HANYA saat tak ada kembalian (dipasangkan
-      // dgn Sisa) — lihat dibayarDisplay() di receipt_screen.dart utk
-      // penjelasan lengkap bug yg diperbaiki di sini.
-      final bayar = kembalianGabungan > 0
-          ? tx.total + kembalianGabungan
-          : (netPaid > 0 ? netPaid : 0);
+          mergedUnclaimedChange ?? lastStateChange(tx, payments);
+      // "Bayar" = Total + Kembalian saat ada kembalian last-state (supaya
+      // "Total = Bayar - Kembalian" konsisten); mode gabungan & tanpa
+      // kembalian memakai netPaid (+ kembalian gabungan).
+      final bayar = mergedUnclaimedChange != null
+          ? (netPaid > 0 ? netPaid : 0) + mergedUnclaimedChange
+          : (kembalianGabungan > 0
+              ? tx.total + kembalianGabungan
+              : (netPaid > 0 ? netPaid : 0));
       out.addAll(bodyLR('Bayar', 'Rp ${_fmtNum(bayar + debtSettlementTotal)}'));
 
       // Item 49b — ringkasan 3-baris (state akhir akumulatif): Total /
@@ -1021,7 +998,9 @@ class PrinterService {
       // Bayar` di atas, `receipt_screen.dart`) SUDAH BENAR pakai 2 `if`
       // independen sejak awal; jalur cetak ini yang menyimpang.
       if (kembalianGabungan > 0) {
-        out.addAll(bodyText('Kembali', styles: const PosStyles(bold: true)));
+        out.addAll(bodyText(
+            mergedUnclaimedChange != null ? 'Kembali (gabungan)' : 'Kembali',
+            styles: const PosStyles(bold: true)));
         out.addAll(wideNominal('Rp ${_fmtNum(kembalianGabungan)}'));
       }
       if (tx.status == 'kurang_bayar' || tx.status == 'tempo') {
@@ -1439,30 +1418,12 @@ class PrinterService {
     var grandTotal = 0;
     var grandPaid = 0;
     var grandSisa = 0;
-    // Bug dilaporkan user (screenshot) — sama fix dgn struk tunggal di atas
-    // & Ringkasan on-screen (`_kembalianGabungan` di receipt_screen.dart):
-    // kembalian pre-checkout Pra-Bayar (`prabayarChangeTakenBeforeCheckout`)
-    // SUM dari SEMUA nota dalam gabungan ini, TIDAK boleh diabaikan.
-    //
-    // Bug lanjutan dilaporkan user: per-nota, kalau nota itu SUDAH punya
-    // ronde "Tambah Belanjaan" (`note == 'Tambah belanjaan'`) setelah ronde
-    // checkout asli, ronde asli (& potongan pre-checkout-nya) sudah
-    // TUNTAS/historis — jangan ikut disumbangkan ke `grandPrabayarChangeTaken`.
-    // Fix analog di `totalPrabayarChangeTakenBeforeCheckout`
-    // (receipt_screen.dart).
-    var grandPrabayarChangeTaken = 0;
     for (final tx in txs) {
       grandTotal += tx.total;
       final pays = paymentsByTx[tx.id] ?? const <TransactionPayment>[];
       final sumChangeGiven = pays
           .where((p) => !p.voided)
           .fold<int>(0, (s, p) => s + p.changeGiven);
-      final txHasLaterAddItemsRound =
-          pays.any((p) => !p.voided && p.note == 'Tambah belanjaan');
-      if (!txHasLaterAddItemsRound) {
-        grandPrabayarChangeTaken += pays.where((p) => !p.voided).fold<int>(
-            0, (s, p) => s + (p.prabayarChangeTakenBeforeCheckout ?? 0));
-      }
       // NET (dikurangi kembalian yg dipakai ulang sbg pembayaran) — bukan
       // `tx.paid` mentah, sama akar masalah dgn Item 23 di struk tunggal.
       final rawNetPaid = tx.paid - sumChangeGiven;
@@ -1532,26 +1493,15 @@ class PrinterService {
     // (uang tender kotor, Item 9 lama) DIHAPUS, "Sisa" jadi kondisional
     // (bukan selalu tampil apa pun kondisinya) — konsisten dgn struk
     // tunggal & in-app/share.
-    // Baris yang `changeTaken`-nya sudah dicentang DILEWATI — sama pola dgn
-    // `latestChangeGiven` di `receipt_screen.dart` (lihat dok di sana).
-    TransactionPayment? latestWithChange;
-    for (final pays in paymentsByTx.values) {
-      for (final p in pays) {
-        if (p.voided || p.changeGiven <= 0 || p.changeTaken) continue;
-        if (latestWithChange == null ||
-            p.paidAt.isAfter(latestWithChange.paidAt)) {
-          latestWithChange = p;
-        }
-      }
-    }
     out.addAll(gen.text('Total Tagihan', styles: const PosStyles(bold: true)));
     out.addAll(wideNominal('Rp ${_fmtNum(grandTotal)}'));
-    // Sama fix dgn struk tunggal di atas: kembalian GABUNGAN (checkout-
-    // moment `latestWithChange` + `grandPrabayarChangeTaken` pre-checkout
-    // Pra-Bayar, SUM seluruh nota dlm gabungan ini) — bukan checkout-moment
-    // saja.
-    final grandKembalian =
-        (latestWithChange?.changeGiven ?? 0) + grandPrabayarChangeTaken;
+    // Item 88 — "last state" nota gabungan: kalau masih ada sisa di nota
+    // mana pun -> Sisa saja; kalau semua lunas -> kembalian ronde
+    // pembayaran TERAKHIR lintas nota (sumber sama dgn struk tunggal,
+    // `core/utils/change_display.dart`). Centang tidak mengubah angka.
+    final grandKembalian = grandSisa > 0
+        ? 0
+        : latestRoundChange(paymentsByTx.values.expand((p) => p));
     // "Terbayar" HARUS Total + Kembalian saat ada kembalian (bukan grandPaid
     // net) — supaya "Total Tagihan = Terbayar - Kembalian" konsisten, sama
     // fix dgn struk tunggal di atas.
@@ -1559,10 +1509,6 @@ class PrinterService {
         grandKembalian > 0 ? grandTotal + grandKembalian : grandPaid;
     out.addAll(gen.text(_rowLR('Terbayar', 'Rp ${_fmtNum(grandBayar)}', w)));
 
-    // Sama fix dgn struk tunggal di atas: Kembalian & Sisa BUKAN saling
-    // meniadakan — nota gabungan yang pembayaran terakhirnya sempat
-    // memberi kembalian TAPI masih menyisakan tagihan (mis. sisa dari
-    // nota lain dlm gabungan itu) wajib menampilkan KEDUANYA.
     if (grandKembalian > 0) {
       out.addAll(gen.text('Kembalian', styles: const PosStyles(bold: true)));
       out.addAll(wideNominal('Rp ${_fmtNum(grandKembalian)}'));

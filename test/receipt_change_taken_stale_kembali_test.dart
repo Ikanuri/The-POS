@@ -3,6 +3,7 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:the_pos/core/database/app_database.dart';
+import 'package:the_pos/core/utils/change_display.dart';
 import 'package:the_pos/features/kasir/receipt_screen.dart';
 
 import 'helpers/pump_app.dart';
@@ -19,10 +20,10 @@ import 'helpers/pump_app.dart';
 /// lama, uang fisiknya bukan uang baru) -> sisa Rp2.750 genuinely belum
 /// terbayar.
 ///
-/// `latestChangeGiven` (dipakai share `_ReceiptPaper`) & pola sepadan di
-/// `printer_service.dart` (cetak ESC/POS, struk tunggal & gabungan) SEKARANG
-/// melewati baris yang `changeTaken`-nya sudah dicentang saat mencari
-/// kembalian yang PALING AKHIR & MASIH aktif.
+/// Item 88 — dulu diselesaikan dgn melewati baris yang dicentang; sekarang
+/// lewat aturan "last state" (`lastStateChange`, sumber sama in-app/share/
+/// cetak): nota yang masih kurang TIDAK menampilkan Kembali sama sekali,
+/// terlepas dari centang.
 void main() {
   late AppDatabase db;
   const txId = 'tx1';
@@ -95,14 +96,15 @@ void main() {
   }
 
   test(
-      'latestChangeGiven (fungsi murni, dipakai share) melewati baris yg '
-      'changeTaken=true, TIDAK resurface kembalian basi', () async {
+      'lastStateChange (fungsi murni, dipakai in-app/share/cetak): nota '
+      'masih kurang -> tanpa Kembali, TIDAK resurface kembalian basi',
+      () async {
     await seedScenario();
     final payments = await db.getPaymentsForTx(txId);
     final tx = await (db.select(db.transactions)..where((t) => t.id.equals(txId)))
         .getSingle();
 
-    expect(latestChangeGiven(payments), 0,
+    expect(lastStateChange(tx, payments), 0,
         reason: 'tanpa fix: kembalian basi 6.250 (sudah dicentang) '
             'ditemukan lagi krn ronde tambahan changeGiven-nya 0');
     expect(netRemainingOwed(tx, payments), 2750,

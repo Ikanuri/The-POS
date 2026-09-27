@@ -142,6 +142,9 @@ PrabayarCheckoutResult buildPrabayarCheckout({
   // nota LAMA, jadi WAJIB dikeluarkan dari baris nota BARU — kalau tidak,
   // uang yang sama tercatat dua kali (dobel di Tutup Kasir).
   Map<String, int> settlementAllocations = const {},
+  // Item 88 — riwayat "kembalian sudah diambil" (lihat
+  // [prabayarChangeTakenCuts]); kosong = atribusi pola lama.
+  List<ChangeTakenEntry> changeTakes = const [],
 }) {
   final rawLockedSum = prabayarEntries.fold<int>(0, (s, e) => s + e.amount);
   final effectiveChangeTaken = changeTakenTotal < 0
@@ -180,7 +183,8 @@ PrabayarCheckoutResult buildPrabayarCheckout({
   // Invariant yang benar SEKARANG: Σ(amount - changeGiven -
   // prabayarChangeTakenBeforeCheckout) == combinedPaid (bukan lagi
   // Σ amount == combinedPaid, karena amount sekarang gross).
-  final cutAmounts = prabayarChangeTakenCuts(prabayarEntries, changeTakenTotal);
+  final cutAmounts = prabayarChangeTakenCuts(prabayarEntries, changeTakenTotal,
+      takes: changeTakes);
 
   final payments = <TransactionPaymentsCompanion>[
     for (final p in prabayarEntries)
@@ -236,17 +240,55 @@ PrabayarCheckoutResult buildPrabayarCheckout({
 /// `prabayarChangeTakenBeforeCheckout`) & [planPrabayarSettlementFunding]
 /// (porsi entri yang MASIH tersedia utk pelunasan) supaya keduanya pasti
 /// memakai pembagian yang sama.
+///
+/// Item 88 — kalau riwayat [takes] tersedia, tiap kembalian yang diambil
+/// ditempelkan ke entri RONDE-nya sendiri (entri terakhir yang dikunci
+/// SEBELUM kembalian itu diambil; meluber mundur ke entri lebih lama kalau
+/// nominalnya melebihi entri itu). Struk "last state" membaca potongan di
+/// baris pembayaran TERAKHIR sbg kembalian ronde terakhir — tanpa atribusi
+/// per ronde, kembalian ronde 1 yang sudah diambil ikut tertempel ke entri
+/// ronde 2 & terbaca sbg kembalian terakhir (menumpuk).
 Map<String, int> prabayarChangeTakenCuts(
-    List<PrabayarEntry> entries, int changeTakenTotal) {
+    List<PrabayarEntry> entries, int changeTakenTotal,
+    {List<ChangeTakenEntry> takes = const []}) {
   final raw = entries.fold<int>(0, (s, e) => s + e.amount);
   var remainingCut =
       changeTakenTotal < 0 ? 0 : (changeTakenTotal > raw ? raw : changeTakenTotal);
   final cuts = <String, int>{};
-  for (final e in entries.reversed) {
-    if (remainingCut <= 0) break;
-    final cut = remainingCut < e.amount ? remainingCut : e.amount;
-    cuts[e.id] = cut;
-    remainingCut -= cut;
+  int capacity(PrabayarEntry e) => e.amount - (cuts[e.id] ?? 0);
+  void place(int index, int amount) {
+    var rem = amount;
+    for (var i = index; i >= 0 && rem > 0; i--) {
+      final c = capacity(entries[i]);
+      if (c <= 0) continue;
+      final cut = rem < c ? rem : c;
+      cuts[entries[i].id] = (cuts[entries[i].id] ?? 0) + cut;
+      rem -= cut;
+    }
+    for (var i = index + 1; i < entries.length && rem > 0; i++) {
+      final c = capacity(entries[i]);
+      if (c <= 0) continue;
+      final cut = rem < c ? rem : c;
+      cuts[entries[i].id] = (cuts[entries[i].id] ?? 0) + cut;
+      rem -= cut;
+    }
+  }
+
+  final sortedTakes = [...takes]..sort((a, b) => a.takenAt.compareTo(b.takenAt));
+  for (final t in sortedTakes) {
+    if (remainingCut <= 0 || entries.isEmpty) break;
+    final amount = t.amount < remainingCut ? t.amount : remainingCut;
+    var index = 0;
+    for (var i = 0; i < entries.length; i++) {
+      if (!entries[i].lockedAt.isAfter(t.takenAt)) index = i;
+    }
+    place(index, amount);
+    remainingCut -= amount;
+  }
+  // Tanpa riwayat (atau sisa yang tidak tercatat di riwayat): pola lama,
+  // dari entri PALING BARU mundur.
+  if (remainingCut > 0 && entries.isNotEmpty) {
+    place(entries.length - 1, remainingCut);
   }
   return cuts;
 }
@@ -307,8 +349,10 @@ PrabayarSettlementFundingPlan planPrabayarSettlementFunding({
   required List<({String key, int amount})> targets,
   required String cashMethod,
   String? cashMethodName,
+  List<ChangeTakenEntry> changeTakes = const [],
 }) {
-  final cuts = prabayarChangeTakenCuts(prabayarEntries, changeTakenTotal);
+  final cuts = prabayarChangeTakenCuts(prabayarEntries, changeTakenTotal,
+      takes: changeTakes);
   final available = <String, int>{
     for (final e in prabayarEntries) e.id: e.amount - (cuts[e.id] ?? 0),
   };
@@ -722,6 +766,11 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       ? 0
       : ref.read(cartPrabayarProvider(_cartId).notifier).changeTakenTotal;
 
+  /// Riwayat per-entri [_changeTakenTotal] (Item 88 — atribusi per ronde).
+  List<ChangeTakenEntry> get _changeTakes => _isAddMode
+      ? const []
+      : ref.read(cartPrabayarProvider(_cartId).notifier).changeTakenEntries;
+
   int get _lockedSum =>
       _prabayarEntries.fold<int>(0, (s, e) => s + e.amount);
 
@@ -1027,6 +1076,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         ],
         cashMethod: debtSettlementMethod,
         cashMethodName: debtSettlementMethodName,
+        changeTakes: _changeTakes,
       );
 
       // Fitur Pra-Bayar — komposisi gabungan (entri terkunci + pilihan
@@ -1045,6 +1095,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         genId: _uuid.v4,
         changeTakenTotal: _changeTakenTotal,
         settlementAllocations: fundingPlan.entryAllocations,
+        changeTakes: _changeTakes,
       );
 
       // "Batalkan & Susun Ulang" (lihat dok `CartMeta.replacesTxId`) — nota
