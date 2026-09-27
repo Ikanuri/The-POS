@@ -136,12 +136,20 @@ PrabayarCheckoutResult buildPrabayarCheckout({
   required String kasirId,
   required String Function() genId,
   int changeTakenTotal = 0,
+  // Item 86 — porsi tiap entri Pra-Bayar (by `PrabayarEntry.id`) yang
+  // dipakai melunasi hutang/pre-order LAMA (lihat
+  // [planPrabayarSettlementFunding]). Porsi itu dicatat sbg pembayaran di
+  // nota LAMA, jadi WAJIB dikeluarkan dari baris nota BARU — kalau tidak,
+  // uang yang sama tercatat dua kali (dobel di Tutup Kasir).
+  Map<String, int> settlementAllocations = const {},
 }) {
   final rawLockedSum = prabayarEntries.fold<int>(0, (s, e) => s + e.amount);
   final effectiveChangeTaken = changeTakenTotal < 0
       ? 0
       : (changeTakenTotal > rawLockedSum ? rawLockedSum : changeTakenTotal);
-  final poolTersedia = rawLockedSum - effectiveChangeTaken;
+  final totalAllocated =
+      settlementAllocations.values.fold<int>(0, (s, v) => s + v);
+  final poolTersedia = rawLockedSum - effectiveChangeTaken - totalAllocated;
   final combinedPaid = poolTersedia + paidAmountNow;
   final status = (isTempo && combinedPaid == 0)
       ? 'tempo'
@@ -172,34 +180,28 @@ PrabayarCheckoutResult buildPrabayarCheckout({
   // Invariant yang benar SEKARANG: Σ(amount - changeGiven -
   // prabayarChangeTakenBeforeCheckout) == combinedPaid (bukan lagi
   // Σ amount == combinedPaid, karena amount sekarang gross).
-  var remainingCut = effectiveChangeTaken;
-  // Susulan (permintaan user): berapa dari `amount` ASLI entri ini yang
-  // dipotong sbg kembalian yang SUDAH diambil SEBELUM checkout — metadata
-  // MURNI utk `TransactionPayments.prabayarChangeTakenBeforeCheckout`
-  // (lihat dok kolom itu).
-  final cutAmounts = <String, int>{};
-  for (final e in prabayarEntries.reversed) {
-    if (remainingCut <= 0) continue;
-    final cut = remainingCut < e.amount ? remainingCut : e.amount;
-    cutAmounts[e.id] = cut;
-    remainingCut -= cut;
-  }
+  final cutAmounts = prabayarChangeTakenCuts(prabayarEntries, changeTakenTotal);
 
   final payments = <TransactionPaymentsCompanion>[
     for (final p in prabayarEntries)
-      TransactionPaymentsCompanion.insert(
-        id: genId(),
-        transactionId: txId,
-        amount: p.amount,
-        method: p.method,
-        methodName: Value(p.methodName),
-        paidAt: Value(p.lockedAt),
-        kasirId: Value(kasirId),
-        changeGiven: const Value(0),
-        prabayarChangeTakenBeforeCheckout: cutAmounts.containsKey(p.id)
-            ? Value(cutAmounts[p.id])
-            : const Value.absent(),
-      ),
+      // Item 86 — `amount` = gross entri DIKURANGI porsi yang pindah ke
+      // pelunasan nota lama. Entri yang habis total terpakai pelunasan
+      // (sisa 0, pasti tanpa potongan kembalian — alokasi cuma mengambil
+      // dari porsi yang belum dipotong) tidak ditulis sama sekali.
+      if (p.amount - (settlementAllocations[p.id] ?? 0) > 0)
+        TransactionPaymentsCompanion.insert(
+          id: genId(),
+          transactionId: txId,
+          amount: p.amount - (settlementAllocations[p.id] ?? 0),
+          method: p.method,
+          methodName: Value(p.methodName),
+          paidAt: Value(p.lockedAt),
+          kasirId: Value(kasirId),
+          changeGiven: const Value(0),
+          prabayarChangeTakenBeforeCheckout: cutAmounts.containsKey(p.id)
+              ? Value(cutAmounts[p.id])
+              : const Value.absent(),
+        ),
     if (paidAmountNow > 0)
       TransactionPaymentsCompanion.insert(
         id: genId(),
@@ -225,6 +227,129 @@ PrabayarCheckoutResult buildPrabayarCheckout({
     payments: payments,
     displayMethodType: displayMethodType,
     displayMethodName: displayMethodName,
+  );
+}
+
+/// Potongan "kembalian sudah diambil sebelum checkout" per entri Pra-Bayar
+/// (by `PrabayarEntry.id`) — dipotong dari entri PALING BARU dikunci dulu
+/// (mundur). Dipakai bersama [buildPrabayarCheckout] (metadata
+/// `prabayarChangeTakenBeforeCheckout`) & [planPrabayarSettlementFunding]
+/// (porsi entri yang MASIH tersedia utk pelunasan) supaya keduanya pasti
+/// memakai pembagian yang sama.
+Map<String, int> prabayarChangeTakenCuts(
+    List<PrabayarEntry> entries, int changeTakenTotal) {
+  final raw = entries.fold<int>(0, (s, e) => s + e.amount);
+  var remainingCut =
+      changeTakenTotal < 0 ? 0 : (changeTakenTotal > raw ? raw : changeTakenTotal);
+  final cuts = <String, int>{};
+  for (final e in entries.reversed) {
+    if (remainingCut <= 0) break;
+    final cut = remainingCut < e.amount ? remainingCut : e.amount;
+    cuts[e.id] = cut;
+    remainingCut -= cut;
+  }
+  return cuts;
+}
+
+/// Satu potongan sumber dana utk SATU target pelunasan (hutang/pre-order):
+/// nominal + metode pembayaran yang dicatat di nota LAMA.
+typedef SettlementFundingChunk = ({
+  int amount,
+  String method,
+  String? methodName,
+});
+
+/// Hasil [planPrabayarSettlementFunding].
+class PrabayarSettlementFundingPlan {
+  const PrabayarSettlementFundingPlan({
+    required this.entryAllocations,
+    required this.chunksByTarget,
+    required this.poolToSettlement,
+  });
+
+  /// Porsi tiap entri Pra-Bayar yang dipakai pelunasan — diteruskan ke
+  /// `buildPrabayarCheckout(settlementAllocations: ...)`.
+  final Map<String, int> entryAllocations;
+
+  /// Sumber dana tiap target (key dari pemanggil), urut: porsi Pra-Bayar
+  /// dulu, lalu (kalau masih kurang) uang yang diterima SEKARANG.
+  final Map<String, List<SettlementFundingChunk>> chunksByTarget;
+
+  /// Total pool Pra-Bayar yang terpakai pelunasan.
+  final int poolToSettlement;
+}
+
+/// Item 86 (permintaan user) — Pra-Bayar di keranjang BOLEH ikut melunasi
+/// "Lunasi Hutang"/"Pelunasi Pre-order" (dulu Item 65 cuma mengizinkan
+/// Pra-Bayar menutup belanja baru, padahal footer keranjang sudah
+/// menghitung terhadap total gabungan — layar Bayar lalu menagih ulang
+/// nominal hutang secara tunai & mengembalikan kelebihan Pra-Bayar sbg
+/// kembalian).
+///
+/// Prioritas SAMA dgn Item 85: pool Pra-Bayar menutup pelunasan DULU (urut
+/// [targets] apa adanya), sisanya baru ke belanja. Pool diambil dari entri
+/// PALING LAMA dulu, hanya dari porsi yang BELUM dipotong kembalian yang
+/// sudah diambil ([prabayarChangeTakenCuts]) — uang yang sudah kembali ke
+/// tangan pelanggan tidak mungkin dipakai melunasi apa pun.
+///
+/// Bagian target yang tidak tertutup pool dibiayai uang yang diterima
+/// SEKARANG ([cashMethod]/[cashMethodName]) — pemanggil yang menjamin uang
+/// itu memang cukup (gerbang `_onBayarPressed`).
+///
+/// Akuntansi (anti dobel): porsi pool yang dipakai pelunasan dicatat HANYA
+/// di nota LAMA (lewat chunk), dan dikeluarkan dari baris Pra-Bayar nota
+/// BARU (lewat [PrabayarSettlementFundingPlan.entryAllocations]) — pola
+/// SAMA PERSIS jalur tunai (uang tunai yang diterima juga dipecah: porsi
+/// pelunasan cuma tercatat di nota lama).
+PrabayarSettlementFundingPlan planPrabayarSettlementFunding({
+  required List<PrabayarEntry> prabayarEntries,
+  required int changeTakenTotal,
+  required List<({String key, int amount})> targets,
+  required String cashMethod,
+  String? cashMethodName,
+}) {
+  final cuts = prabayarChangeTakenCuts(prabayarEntries, changeTakenTotal);
+  final available = <String, int>{
+    for (final e in prabayarEntries) e.id: e.amount - (cuts[e.id] ?? 0),
+  };
+  final entryAllocations = <String, int>{};
+  final chunksByTarget = <String, List<SettlementFundingChunk>>{};
+  var poolToSettlement = 0;
+  for (final t in targets) {
+    var need = t.amount;
+    final chunks = <SettlementFundingChunk>[];
+    for (final e in prabayarEntries) {
+      if (need <= 0) break;
+      final avail = available[e.id] ?? 0;
+      if (avail <= 0) continue;
+      final take = avail < need ? avail : need;
+      available[e.id] = avail - take;
+      entryAllocations[e.id] = (entryAllocations[e.id] ?? 0) + take;
+      poolToSettlement += take;
+      need -= take;
+      // Gabungkan dgn chunk sebelumnya kalau metodenya sama persis — satu
+      // baris pembayaran di nota lama, bukan dipecah tanpa alasan.
+      final i = chunks.indexWhere(
+          (c) => c.method == e.method && c.methodName == e.methodName);
+      if (i >= 0) {
+        chunks[i] = (
+          amount: chunks[i].amount + take,
+          method: e.method,
+          methodName: e.methodName,
+        );
+      } else {
+        chunks.add((amount: take, method: e.method, methodName: e.methodName));
+      }
+    }
+    if (need > 0) {
+      chunks.add((amount: need, method: cashMethod, methodName: cashMethodName));
+    }
+    chunksByTarget[t.key] = chunks;
+  }
+  return PrabayarSettlementFundingPlan(
+    entryAllocations: entryAllocations,
+    chunksByTarget: chunksByTarget,
+    poolToSettlement: poolToSettlement,
   );
 }
 
@@ -610,15 +735,13 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   /// total keranjang — kasir tidak perlu lagi pilih metode/nominal apa pun
   /// di layar ini, cukup tombol konfirmasi "Selesaikan Transaksi".
   ///
-  /// Item 65 — WAJIB `_settlementTotal == 0` juga: Pra-Bayar cuma menutup
-  /// [_total] (belanja baru), TIDAK PERNAH menutup pelunasan hutang/
-  /// pre-order (uang fisik terpisah yang harus diterima kasir SEKARANG,
-  /// beda dari kredit Pra-Bayar yang sudah "nempel" sejak sebelum layar
-  /// ini dibuka) — tanpa syarat ini, tombol pintas "Selesaikan Transaksi"
-  /// bisa meloloskan checkout TANPA kasir pernah menerima uang tambahan
-  /// utk pelunasan itu, padahal nominalnya tetap diproses lunas penuh.
+  /// Item 86 — pool Pra-Bayar sekarang BOLEH ikut menutup pelunasan
+  /// hutang/pre-order (dulu Item 65 mewajibkan `_settlementTotal == 0` di
+  /// sini), jadi syaratnya: pool menutup [_grandTotal] (belanja + seluruh
+  /// pelunasan), bukan cuma [_total]. Uang pelunasan tetap benar-benar
+  /// sudah diterima — lewat Pra-Bayar yang dikunci sebelumnya.
   bool get _prabayarCoversTotal =>
-      _prabayarPool > 0 && _prabayarPool >= _total && _settlementTotal == 0;
+      _prabayarPool > 0 && _prabayarPool >= _grandTotal;
 
   /// Fitur "Lunasi Hutang" — entri yang dikunci di keranjang ini (nota
   /// sumber & nominal SUDAH ditentukan sejak kasir centang di sheet "Pilih
@@ -649,13 +772,9 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   int get _preorderSettlementTotal =>
       _preorderSettlementEntries.fold<int>(0, (s, e) => s + e.amount);
 
-  /// Item 65, direlaksasi Item 85 — nominal gabungan Lunasi Hutang +
-  /// Pelunasi Pre-order, dipakai gerbang keypad (lihat `_onBayarPressed`)
-  /// supaya uang yang benar-benar diterima kasir WAJIB MINIMAL menutup
-  /// nominal ini sendiri (uang pelanggan lain, tidak boleh diproses lunas
-  /// dari kredit) — TIDAK lagi wajib menutup [_grandTotal] penuh, boleh
-  /// kurang di porsi [_total] (belanja baru nota ini sendiri, jatuh ke
-  /// `kurang_bayar`, lihat dok gerbang di `_onBayarPressed`).
+  /// Nominal gabungan Lunasi Hutang + Pelunasi Pre-order. Bagian yang tidak
+  /// tertutup Pra-Bayar ([_settlementDueCash]) WAJIB diterima fisik
+  /// minimal penuh (Item 65/85); porsi belanja [_total] boleh kurang_bayar.
   int get _settlementTotal => _debtSettlementTotal + _preorderSettlementTotal;
 
   /// Total keseluruhan yang perlu DITERIMA kasir dari pelanggan: total
@@ -668,12 +787,21 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   int get _grandTotal =>
       _total + _debtSettlementTotal + _preorderSettlementTotal;
 
-  /// Porsi [_total] (belanja baru) yang SUDAH tertutup kredit Pra-Bayar.
-  /// Dijepit ke 0.._total: pool melebihi total TIDAK ikut menutup pelunasan
-  /// hutang/pre-order (Item 65 — kelebihannya jadi kembalian saat
-  /// checkout), dan pool negatif tidak menambah tagihan (sama dgn jepitan
-  /// `effectiveChangeTaken` di [buildPrabayarCheckout]).
-  int get _prabayarCredit => _prabayarPool.clamp(0, _total).toInt();
+  /// Item 86 — porsi pool Pra-Bayar yang dipakai melunasi hutang/pre-order.
+  /// Pelunasan DIDAHULUKAN (prioritas sama Item 85), jadi pool menutup
+  /// [_settlementTotal] dulu sebelum menyentuh belanja.
+  int get _poolToSettlement =>
+      _prabayarPool.clamp(0, _settlementTotal).toInt();
+
+  /// Sisa pelunasan hutang/pre-order yang BELUM tertutup Pra-Bayar — WAJIB
+  /// diterima fisik SEKARANG sebelum pelunasan diproses (gerbang
+  /// `_onBayarPressed`, tombol "Bayar Nanti").
+  int get _settlementDueCash => _settlementTotal - _poolToSettlement;
+
+  /// Kredit Pra-Bayar total (pelunasan + belanja). Dijepit ke
+  /// 0.._grandTotal: kelebihan pool di atas total gabungan jadi kembalian
+  /// saat checkout, pool negatif tidak menambah tagihan.
+  int get _prabayarCredit => _prabayarPool.clamp(0, _grandTotal).toInt();
 
   /// Uang yang BENAR-BENAR harus diterima kasir SEKARANG. Bug (audit
   /// Pra-Bayar): tombol Bayar, keypad ("Uang Pas"), nominal QRIS & gerbang
@@ -871,6 +999,36 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
               itemCompanions[i].id.value,
       };
 
+      // Metode utk bagian pelunasan yang dibayar uang SEKARANG (bukan dari
+      // Pra-Bayar). Redesain toggle (permintaan user): entri pelunasan TIDAK
+      // punya kalkulator metode sendiri — kasir menerima SATU nominal fisik
+      // gabungan, jadi metodenya ikut metode FINAL di layar Bayar.
+      // Pengecualian 'tempo' (Bayar Nanti = tidak ada uang diterima) jatuh
+      // ke 'tunai' — kontradiktif dipakai sbg metode pelunasan nota LAMA
+      // yang justru butuh uang sungguhan (dalam praktik tidak terjadi lagi:
+      // "Bayar Nanti" nonaktif selama `_settlementDueCash > 0`, jadi bagian
+      // uang-sekarang pasti 0 saat tempo).
+      final debtSettlementMethod =
+          _selectedMethodType == 'tempo' ? 'tunai' : _selectedMethodType;
+      final debtSettlementMethodName =
+          _selectedMethodType == 'tempo' ? null : _selectedMethod?.name;
+
+      // Item 86 — bagi pool Pra-Bayar ke pelunasan hutang/pre-order DULU
+      // (lihat dok [planPrabayarSettlementFunding]), sisa target dibiayai
+      // uang sekarang. Key target: 'd:<entryId>' hutang, 'p:<preorderId>'.
+      final fundingPlan = planPrabayarSettlementFunding(
+        prabayarEntries: _prabayarEntries,
+        changeTakenTotal: _changeTakenTotal,
+        targets: [
+          for (final e in _debtSettlementEntries)
+            (key: 'd:${e.id}', amount: e.amount),
+          for (final e in _preorderSettlementEntries)
+            (key: 'p:${e.preorderEntryId}', amount: e.amount),
+        ],
+        cashMethod: debtSettlementMethod,
+        cashMethodName: debtSettlementMethodName,
+      );
+
       // Fitur Pra-Bayar — komposisi gabungan (entri terkunci + pilihan
       // sekarang) diekstrak ke [buildPrabayarCheckout] (fungsi murni, lihat
       // dok di sana) supaya bisa diuji langsung tanpa widget PaymentScreen.
@@ -886,6 +1044,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         kasirId: device.deviceCode,
         genId: _uuid.v4,
         changeTakenTotal: _changeTakenTotal,
+        settlementAllocations: fundingPlan.entryAllocations,
       );
 
       // "Batalkan & Susun Ulang" (lihat dok `CartMeta.replacesTxId`) — nota
@@ -947,68 +1106,53 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         );
       }
 
-      // Fitur "Lunasi Hutang" — rencana FIFO SUDAH beku sejak entri dibuat
-      // (`DebtSettlementEntry.targetInvoices`, lihat dok
-      // `saveTransactionWithDebtSettlements`) — dipakai apa adanya di sini.
-      //
-      // Redesain toggle (permintaan user): entri lagi TIDAK punya kalkulator
-      // metode terpisah (`e.method`/`e.methodName` cuma placeholder 'tunai'
-      // sejak dibuat di `_DebtSettlementCartRow`) — kasir cuma menerima SATU
-      // nominal fisik gabungan (belanja + turut lunasi hutang) sekali jalan,
-      // jadi metode entri di sini DITIMPA mengikuti metode FINAL yang kasir
-      // pilih di layar Bayar ([_selectedMethodType]/[_selectedMethod]),
-      // BUKAN placeholder-nya. Pengecualian: 'tempo' (Bayar Nanti) berarti
-      // TIDAK ada uang fisik diterima sama sekali utk nota baru — kontradiktif
-      // dipakai sbg metode pelunasan nota LAMA yang justru butuh uang
-      // sungguhan berpindah tangan sekarang, jadi jatuh ke 'tunai' (asumsi
-      // paling aman/netral, bukan klaim metode spesifik yang tidak pernah
-      // dipilih kasir).
-      final debtSettlementMethod =
-          _selectedMethodType == 'tempo' ? 'tunai' : _selectedMethodType;
-      final debtSettlementMethodName =
-          _selectedMethodType == 'tempo' ? null : _selectedMethod?.name;
-      // Redesain kedua (permintaan user): SATU entri = SATU nota sumber
-      // (bukan lagi rencana FIFO beku lintas-nota) — tiap entri dipetakan
-      // jadi grup `debtSettlements` dgn SATU target (dirinya sendiri).
-      // `saveTransactionWithDebtSettlements` tetap generik menerima banyak
-      // target per grup (tidak diubah), sekarang kebetulan selalu 1.
-      final debtSettlements = _debtSettlementEntries
-          .map((e) => (
-                customerName: e.customerName,
-                amount: e.amount,
-                targets: [
-                  (
-                    invoiceId: e.invoiceId,
-                    invoiceLocalId: e.invoiceLocalId,
-                    invoiceDate: e.invoiceDate,
-                    amount: e.amount,
-                  ),
-                ],
-                method: debtSettlementMethod,
-                methodName: debtSettlementMethodName,
-              ))
-          .toList();
+      // Fitur "Lunasi Hutang" — SATU entri = SATU nota sumber (redesain
+      // kedua), nominal beku sejak dicentang. Item 86: satu entri bisa
+      // dibiayai beberapa sumber (porsi Pra-Bayar per metode + uang
+      // sekarang) — tiap sumber jadi SATU grup `debtSettlements` sendiri
+      // (target & nota sama) supaya metode tiap pembayaran di nota lama
+      // tetap akurat utk Tutup Kasir. `saveTransactionWithDebtSettlements`
+      // menggabungkan kembali baris ringkasan struk per nota.
+      final debtSettlements = [
+        for (final e in _debtSettlementEntries)
+          for (final c in fundingPlan.chunksByTarget['d:${e.id}'] ??
+              const <SettlementFundingChunk>[])
+            (
+              customerName: e.customerName,
+              amount: c.amount,
+              targets: [
+                (
+                  invoiceId: e.invoiceId,
+                  invoiceLocalId: e.invoiceLocalId,
+                  invoiceDate: e.invoiceDate,
+                  amount: c.amount,
+                ),
+              ],
+              method: c.method,
+              methodName: c.methodName,
+            ),
+      ];
 
       // Fitur "Pelunasi Pre-order" — arsitektur IDENTIK dgn `debtSettlements`
-      // di atas, termasuk aturan fallback "tempo -> tunai" yg SAMA
-      // (`debtSettlementMethod`/`debtSettlementMethodName` — pelunasan
-      // pre-order LAMA juga butuh uang sungguhan sekarang, kontradiktif
-      // dgn 'tempo' utk nota BARU).
-      final preorderSettlements = _preorderSettlementEntries
-          .map((e) => (
-                preorderEntryId: e.preorderEntryId,
-                invoiceId: e.invoiceId,
-                invoiceLocalId: e.invoiceLocalId,
-                invoiceDate: e.invoiceDate,
-                customerName: e.customerName,
-                amount: e.amount,
-                method: debtSettlementMethod,
-                methodName: debtSettlementMethodName,
-                // Item 66 — toggle opsional per-baris, lihat dok
-                // `PreorderSettlementEntry.fulfillOnSettle`.
-                fulfillOnSettle: e.fulfillOnSettle,
-              ))
-          .toList();
+      // di atas (satu grup per sumber dana, pre-order yang sama).
+      final preorderSettlements = [
+        for (final e in _preorderSettlementEntries)
+          for (final c in fundingPlan.chunksByTarget['p:${e.preorderEntryId}'] ??
+              const <SettlementFundingChunk>[])
+            (
+              preorderEntryId: e.preorderEntryId,
+              invoiceId: e.invoiceId,
+              invoiceLocalId: e.invoiceLocalId,
+              invoiceDate: e.invoiceDate,
+              customerName: e.customerName,
+              amount: c.amount,
+              method: c.method,
+              methodName: c.methodName,
+              // Item 66 — toggle opsional per-baris, lihat dok
+              // `PreorderSettlementEntry.fulfillOnSettle`.
+              fulfillOnSettle: e.fulfillOnSettle,
+            ),
+      ];
 
       await db.saveTransactionWithDebtSettlements(
         tx: txCompanion,
@@ -2109,15 +2253,12 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                       // Item 85 — "Bayar Nanti" = 0 uang fisik diterima
                       // SEKARANG, jadi TIDAK PERNAH bisa menutup pelunasan
                       // hutang/pre-order aktif (beda dari belanja baru
-                      // sendiri yang memang boleh tempo) — dulu tombol ini
-                      // sama sekali tidak dijaga (_onBayarNantiPressed
-                      // langsung confirm tanpa cek _settlementTotal), celah
-                      // yang persis sama dgn yang Item 65 coba tutup di
-                      // kalkulator tunai. Kasir WAJIB lewat "Bayar" (keypad)
-                      // supaya minimal _settlementTotal tetap diterima fisik.
+                      // sendiri yang memang boleh tempo). Item 86: kalau
+                      // pelunasannya SUDAH tertutup penuh Pra-Bayar
+                      // ([_settlementDueCash] 0), belanja boleh tempo lagi.
                       onPressed: (_isSaving ||
                               !_bayarEnabled ||
-                              _settlementTotal > 0)
+                              _settlementDueCash > 0)
                           ? null
                           : _onBayarNantiPressed,
                       style: FilledButton.styleFrom(
@@ -2196,10 +2337,9 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     if (_isQrisNominalLocked) {
       // QR sudah menyisipkan nominal [_dueNow] (lihat `_QrisDisplay` di
       // bawah) — pelanggan scan & bayar PENUH itu, jadi `_tendered` (porsi
-      // belanja BARU saja, exclude settlement — lihat dok
-      // `_settlementTotal`) = _dueNow - _settlementTotal = sisa belanja
-      // setelah kredit Pra-Bayar.
-      setState(() => _tendered = _total - _prabayarCredit);
+      // belanja BARU saja) = _dueNow dikurangi bagian pelunasan yang
+      // dibayar uang sekarang ([_settlementDueCash], Item 86).
+      setState(() => _tendered = _dueNow - _settlementDueCash);
       await _confirm();
       return;
     }
@@ -2241,12 +2381,16 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       // — `combinedPaid < cartTotal` sudah otomatis menghasilkan status itu
       // dari `paidAmountNow` yang lebih kecil dari _total), pelunasan hutang/
       // pre-order-nya sendiri TETAP lunas penuh seperti biasa.
-      if (_settlementTotal > 0 && result < _settlementTotal) {
+      //
+      // Item 86 — yang wajib ditutup uang sekarang cuma bagian pelunasan
+      // yang BELUM tertutup Pra-Bayar ([_settlementDueCash]).
+      final dueCash = _settlementDueCash;
+      if (dueCash > 0 && result < dueCash) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text(
                 'Uang diterima ${formatRupiah(result)} belum menutup '
-                'pelunasan Hutang/Pre-order ${formatRupiah(_settlementTotal)} '
+                'pelunasan Hutang/Pre-order ${formatRupiah(dueCash)} '
                 '— tambah uang, atau lepas dulu entri pelunasan yang tidak '
                 'jadi diproses sekarang.'),
             duration: const Duration(seconds: 5),
@@ -2254,7 +2398,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         }
         return;
       }
-      setState(() => _tendered = result - _settlementTotal);
+      setState(() => _tendered = result - dueCash);
     }
     await _confirm();
   }

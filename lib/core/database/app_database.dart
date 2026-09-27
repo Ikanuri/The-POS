@@ -3459,6 +3459,22 @@ class AppDatabase extends _$AppDatabase {
       );
       if (debtSettlements.isEmpty && preorderSettlements.isEmpty) return;
       final detail = <Map<String, dynamic>>[];
+      // Item 86 — satu nota/pre-order bisa datang dalam BEBERAPA grup
+      // (satu per sumber dana: porsi Pra-Bayar per metode + uang sekarang,
+      // lihat `planPrabayarSettlementFunding` di payment_screen.dart).
+      // Pembayarannya tetap dicatat per grup (metode akurat), tapi baris
+      // ringkasan struk digabung per nota/pre-order supaya tidak tampil
+      // dobel.
+      void addDetail(String key, Map<String, dynamic> line) {
+        final i = detail.indexWhere((d) => d['_key'] == key);
+        if (i >= 0) {
+          detail[i]['amount'] =
+              (detail[i]['amount'] as int) + (line['amount'] as int);
+        } else {
+          detail.add({...line, '_key': key});
+        }
+      }
+
       for (final ds in debtSettlements) {
         if (ds.targets.isEmpty || ds.amount <= 0) continue;
         final txIds = ds.targets.map((t) => t.invoiceId).toList();
@@ -3470,7 +3486,7 @@ class AppDatabase extends _$AppDatabase {
           kasirId: kasirId,
         );
         for (final t in ds.targets) {
-          detail.add({
+          addDetail('debt:${t.invoiceId}', {
             'invoiceId': t.invoiceId,
             'invoiceLocalId': t.invoiceLocalId,
             'invoiceDate': t.invoiceDate.millisecondsSinceEpoch,
@@ -3480,8 +3496,38 @@ class AppDatabase extends _$AppDatabase {
           });
         }
       }
+      // Pre-order yang DP-nya SUDAH terkumpul di grup sebelumnya dalam
+      // checkout INI (grup sumber dana berikutnya utk pre-order yang sama)
+      // vs yang di-skip krn sudah terkumpul lewat jalur lain.
+      final collectedHere = <String, String>{}; // preorderEntryId -> txId
+      final skippedHere = <String>{};
       for (final ps in preorderSettlements) {
         if (ps.amount <= 0) continue;
+        if (skippedHere.contains(ps.preorderEntryId)) continue;
+        final collectedTxId = collectedHere[ps.preorderEntryId];
+        if (collectedTxId != null) {
+          // Sumber dana berikutnya utk pre-order yang sama: baris notanya
+          // sudah dinaikkan oleh `collectPreorderDeposit` di grup pertama,
+          // cukup catat pembayarannya (metode grup ini).
+          await addPaymentToTransaction(
+            txId: collectedTxId,
+            amount: ps.amount,
+            method: ps.method,
+            methodName: ps.methodName,
+            kasirId: kasirId,
+            note: _kPreorderDepositNote,
+          );
+          addDetail('preorder:${ps.preorderEntryId}', {
+            'invoiceId': ps.invoiceId,
+            'invoiceLocalId': ps.invoiceLocalId,
+            'invoiceDate': ps.invoiceDate.millisecondsSinceEpoch,
+            'amount': ps.amount,
+            'customerName': ps.customerName,
+            'type': 'preorder',
+            'preorderEntryId': ps.preorderEntryId,
+          });
+          continue;
+        }
         final owed = await collectPreorderDeposit(
           preorderEntryId: ps.preorderEntryId,
           amount: ps.amount,
@@ -3493,7 +3539,11 @@ class AppDatabase extends _$AppDatabase {
         // null = tidak ada apa pun yg perlu dikumpulkan LAGI utk entri ini
         // (sudah terkumpul lewat jalur lain di antara pilih & bayar) —
         // skip diam-diam, lihat dok fungsi ini.
-        if (owed == null) continue;
+        if (owed == null) {
+          skippedHere.add(ps.preorderEntryId);
+          continue;
+        }
+        collectedHere[ps.preorderEntryId] = ps.invoiceId;
         // Item 66 (susulan, opsional per-baris) — DP-nya sudah benar²
         // terkumpul barusan (owed != null), jadi kalau kasir centang
         // "Sekaligus penuhi", langsung penuhi qty PENUH entri ini di
@@ -3503,7 +3553,7 @@ class AppDatabase extends _$AppDatabase {
           await fulfillPreorderEntry(ps.preorderEntryId,
               locallyModified: locallyModified, deviceCode: kasirId);
         }
-        detail.add({
+        addDetail('preorder:${ps.preorderEntryId}', {
           'invoiceId': ps.invoiceId,
           'invoiceLocalId': ps.invoiceLocalId,
           'invoiceDate': ps.invoiceDate.millisecondsSinceEpoch,
@@ -3512,6 +3562,9 @@ class AppDatabase extends _$AppDatabase {
           'type': 'preorder',
           'preorderEntryId': ps.preorderEntryId,
         });
+      }
+      for (final d in detail) {
+        d.remove('_key');
       }
       if (detail.isNotEmpty) {
         // `dumpSince` (sync host->klien) filter transaksi dgn `WHERE
