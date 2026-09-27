@@ -9,6 +9,8 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-09-27 (sesi kedelapan puluh dua — Pra-Bayar melunasi hutang/pre-order, Laci Meja ikut pelanggan terkini nota, struk "last state")
 
+- `2b4c87e` — fix(struk): kembalian yg cuma terjadi sekali di ronde lama
+  tetap tampil (struk gross)
 - `e7ecb49` — fix(struk): kembalian "last state" konsisten
   in-app/share/cetak + tombol gabung kembalian belum diambil
 - `cc50d3e` — fix(laci-meja): pre-order/titip/pinjaman ikut pelanggan

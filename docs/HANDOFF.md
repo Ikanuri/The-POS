@@ -55,6 +55,14 @@ terpisah di `claude/kategori-produk-qty-harga-mqjh21`:
    kembalian Pra-Bayar pre-checkout kini diatribusikan per RONDE
    (`prabayarChangeTakenCuts(takes:)`, pakai `ChangeTakenEntry.takenAt`)
    supaya potongan ronde lama tidak terbaca sbg kembalian ronde terakhir.
+   Susulan `2b4c87e` (laporan user, screenshot): kalau ronde TERAKHIR
+   tanpa kembalian (mis. Tambah Belanjaan dibayar pas), baris Kembali
+   jatuh ke kembalian terakhir yang BELUM dicentang dari ronde sebelumnya
+   (`displayedChangePayment`) — struk tetap gross & tombol gabung tidak
+   muncul krn kembaliannya cuma sekali. Kembalian ronde lama yang SUDAH
+   dicentang tetap dianggap selesai (dipakai ulang) & tidak tampil;
+   konsekuensinya baris Kembalian in-app ronde lama hilang begitu
+   dicentang.
    Catatan: nota LAMA (sebelum commit ini) masih pakai atribusi lama
    (potongan di entri terbaru) — untuk nota lama yang punya >1 ronde
    Pra-Bayar dgn kembalian dicentang, angka Kembali bisa tetap menumpuk.
@@ -66,8 +74,8 @@ terpisah di `claude/kategori-produk-qty-harga-mqjh21`:
 Laporan user yang DIABAIKAN atas permintaan user: pre-order yang sudah
 dipenuhi di host muncul lagi setelah sync (kemungkinan host lupa
 memenuhi; jalur `applyLaciMejaProposals` sudah menjaga
-fulfilled_at/cancelled_at). Versi kerja **2.71.0+161** (MINOR — fitur
-baru terlihat user). schemaVersion TETAP **45**. Branch tugas ini
+fulfilled_at/cancelled_at). Versi kerja **2.71.1+162** (2.71.0 MINOR fitur baru, +PATCH susulan
+`2b4c87e`). schemaVersion TETAP **45**. Branch tugas ini
 (nama warisan katalog HTML) sudah DUA kali direstart dari `origin/main` —
 lihat catatan branch di sesi 81 di CHANGELOG; pola itu normal di sini.
 
