@@ -6,82 +6,75 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 25 September 2026, sesi kedelapan puluh satu — permintaan
-user (ditandai "menyangkut keuangan"): checkout dgn Lunasi Hutang/
-Pelunasi Pre-order aktif dulu DITOLAK SELURUHNYA (Item 65 gate) kalau
-uang yang diterima kasir belum menutup grand total (belanja + hutang)
-penuh — walau uangnya sebenarnya sudah cukup utk hutangnya sendiri.
-Kasus nyata: pelanggan sekaligus mau melunasi hutang lama + belanja
-baru satu nota, uangnya cukup utk hutang tapi tidak utk belanja baru
-sepenuhnya. Fix (`c6146cf`): gerbang di `_onBayarPressed`
-(`payment_screen.dart`) direlaksasi dari `result < _dueNow` jadi
-`result < _settlementTotal` — settlement (uang pelanggan LAIN) tetap
-WAJIB diterima fisik penuh sebelum diproses lunas, tapi belanja baru
-nota INI SENDIRI sekarang boleh kurang bayar. Tidak perlu perubahan di
-`buildPrabayarCheckout`/`saveTransactionWithDebtSettlements` sama sekali
-— `paidAmountNow` yang lebih kecil dari `cartTotal` SUDAH otomatis
-menghasilkan status `kurang_bayar` (bukan `lunas`) tanpa kembalian
-fiktif, jadi konsisten otomatis dgn SEMUA tampilan struk (in-app/share/
-print) & kalkulator checkout/Pra-Bayar yang sudah ada — tidak ada celah
-baru di situ. Celah TERPISAH yang ikut ditutup di commit yang sama:
-tombol "Bayar Nanti" (tempo, 0 uang fisik) dulu SAMA SEKALI tidak dijaga
-terhadap settlement aktif (bisa meloloskan hutang lunas tanpa uang
-sepeser pun) — sekarang dinonaktifkan selama `_settlementTotal > 0`.
-Test baru/diperbarui: `payment_screen_settlement_grandtotal_test.dart`
-(6 test, revert-verify dibuktikan: 3 test baru/diubah GAGAL sensible
-kalau fix di-revert, 3 test lama tetap hijau). Sekalian dibersihkan:
-PLAN.md Item 79/80 (`da80b9f`) — catatan lama bilang "belum di-merge ke
-main, jangan digabung" ternyata sudah lama jadi ancestor `origin/main`
-lewat commit sesi lain (`91147a6`..`9cb3b90`, katalog HTML), item usang
-dihapus. Merge ke `main` (`428ddaa`, atas permintaan user "merge ke
-main") clean (no-conflict, diverifikasi via `git merge-tree` dulu).
+_Update sesi 27 September 2026, sesi kedelapan puluh dua — tiga batch
+dari laporan user, dikerjakan berurutan (disetujui user) & di-commit
+terpisah di `claude/kategori-produk-qty-harga-mqjh21`:
 
-Susulan (masih sesi yg sama): user tanya balik "Perubahan besar tadi
-apakah sudah ditest di poin 2 dan 3?" (poin 2 = konsistensi display
-in-app/share/print/kalkulator, poin 3 = sync antar device, dari
-permintaan awal). Jawaban jujur: BELUM ada test langsung — sebelumnya
-cuma disimpulkan logis (tidak ada perubahan di `buildPrabayarCheckout`/
-`saveTransactionWithDebtSettlements`, jadi "harusnya" tetap konsisten).
-Ditutup dgn test baru `debt_settlement_partial_new_tx_display_sync_test.dart`
-(`31fcf4b`) yang membangun skenario lewat `saveTransactionWithDebtSettlements`
-PERSIS spt jalur produksi (bukan insert manual DB), membuktikan: cetak
-ESC/POS & share/in-app nota BARU (kurang_bayar) menampilkan "Sisa" benar
-TANPA "Kembali" fiktif; nota LAMA yg ikut dilunasi tidak lagi tampilkan
-"Sisa"; DAN `dumpSince`/`mergeRows` host->klien membawa KEDUA nota
-dengan benar (termasuk skenario watermark: device lain sudah sync SAAT
-nota lama masih tempo, lalu checkout gabungan terjadi SETELAHNYA —
-update `updated_at` nota lama tetap ikut dump susulan). Revert-verify:
-mutasi manual sementara di `remaining` (`printer_service.dart`, SUDAH
-dikembalikan) memang bikin test "Sisa" gagal dgn pesan masuk akal —
-bukan assertion vakum. Kesimpulan: poin 2 & 3 SEKARANG benar-benar
-teruji, bukan cuma disimpulkan. User SEBELUMNYA juga sempat melaporkan
-"kembalian tidak muncul lagi" di struk print/share — investigasi
-(unit test `buildPrabayarCheckout` langsung + full suite) tidak
-menemukan bug, ternyata APK yang dites user MASIH BUILD LAMA (belum
-pakai commit terbaru) — bukan regresi nyata, sudah dikonfirmasi user
-sendiri setelah build ulang.
+1. **Item 86 — Pra-Bayar ikut melunasi hutang/pre-order (`e8bf0fe`)**.
+   Menutup PLAN Item 84b (konflik footer keranjang vs aturan checkout
+   Item 65). Pool Pra-Bayar menutup pelunasan DULU (prioritas sama Item
+   85), sisa ke belanja. Fungsi murni baru `planPrabayarSettlementFunding`
+   (`payment_screen.dart`) membagi pool per entri (dari entri paling
+   lama, hanya porsi yang belum dipotong kembalian) & menghasilkan
+   "chunk" sumber dana per target; porsi yang dipakai pelunasan dicatat
+   HANYA di nota LAMA (metode ikut entri Pra-Bayar) dan dikeluarkan dari
+   baris Pra-Bayar nota BARU (`buildPrabayarCheckout(settlementAllocations:)`)
+   — pola sama jalur tunai, anti dobel Tutup Kasir, TANPA kolom/migrasi.
+   Getter layar Bayar: `_poolToSettlement`, `_settlementDueCash` (sisa
+   pelunasan yang wajib uang sekarang: gerbang tunai, "Bayar Nanti",
+   QRIS nominal), `_prabayarCoversTotal` kini thd `_grandTotal`.
+   `saveTransactionWithDebtSettlements` menerima beberapa grup sumber
+   dana per nota/pre-order: ringkasan struk digabung satu baris per nota
+   (`_key` internal dibuang sebelum ditulis), DP pre-order dikumpulkan
+   sekali (`collectPreorderDeposit`) + grup berikutnya lewat
+   `addPaymentToTransaction`.
+2. **Item 87 — Laci Meja ikut pelanggan TERKINI nota (`cc50d3e`)**. Ganti
+   pelanggan nota tidak menyentuh salinan beku di preorder_entries/
+   left_behind_items/borrowed_items (sengaja, keputusan lama). Query
+   pencocokan (`getCustomerOutstandingPreorderDeposit`,
+   `getPreorderSettlementCandidates`, `getLaciMejaPending`,
+   `getOpenPreorderRefsForCustomer`) kini lewat `_laciMejaCustomerMatch`:
+   identitas nota (id menang, lalu nama ad-hoc; Item 58 tetap), salinan
+   beku hanya utk entri tanpa nota / nota tanpa identitas.
+3. **Item 88 — struk "last state" + tombol gabung kembalian
+   (`e7ecb49`)**. Sumber tunggal `lib/core/utils/change_display.dart`
+   (`lastStateChange`, `latestRoundChange`, `unclaimedChangeTotal`,
+   `hasExtraUnclaimedChange`) dipakai in-app, share, cetak tunggal &
+   gabungan (printer + `merged_receipt_screen.dart`). Aturan: nota
+   kurang/tempo -> Sisa saja; lunas -> kembalian ronde pembayaran
+   TERAKHIR (changeGiven + potongan pre-checkout di baris itu); centang
+   TIDAK mengubah angka (membatalkan efek `e27bf8a` di print/share —
+   foto user: dicentang -> "Bayar = Total" tidak cocok riwayat). Fungsi
+   lama `latestChangeGiven`/`totalPrabayarChangeTakenBeforeCheckout`/
+   `_hasLaterAddItemsRound` DIHAPUS. Tombol "Gabungkan kembalian belum
+   diambil" (struk in-app) — state lokal, TIDAK disimpan DB (keputusan
+   user), tapi centang per pembayaran tetap sync (OR-merge) jadi tombol
+   konsisten lintas device; nominal diteruskan ke share
+   (`_ReceiptPaper.mergedUnclaimedChange`) & cetak
+   (`PrinterService.printReceipt(mergedUnclaimedChange:)`). Potongan
+   kembalian Pra-Bayar pre-checkout kini diatribusikan per RONDE
+   (`prabayarChangeTakenCuts(takes:)`, pakai `ChangeTakenEntry.takenAt`)
+   supaya potongan ronde lama tidak terbaca sbg kembalian ronde terakhir.
+   Catatan: nota LAMA (sebelum commit ini) masih pakai atribusi lama
+   (potongan di entri terbaru) — untuk nota lama yang punya >1 ronde
+   Pra-Bayar dgn kembalian dicentang, angka Kembali bisa tetap menumpuk.
+   Test lama yang mengunci perilaku lama (`receipt_tempo_and_kembali_test`,
+   `receipt_change_taken_stale_kembali_test`,
+   `receipt_prabayar_change_taken_*`, `transaction_payments_change_taken_sync_test`)
+   sudah diperbarui ke aturan baru.
 
-Versi kerja **2.70.0+160** (BUILD naik krn ada commit baru/rilis
-susulan; MINOR/PATCH TETAP krn commit susulan ini test-only, tidak ada
-perubahan kode `lib/`). schemaVersion TETAP **45** (tidak ada perubahan
-DB). **PENTING (git branch)**: branch tugas sesi ini,
-`claude/kategori-produk-qty-harga-mqjh21`, ternyata SUDAH fully-merged
-ke main sebelum sesi ini mulai (0 commit unik vs `origin/main`) — nama
-branch itu SENDIRI adalah sisa tugas KATALOG HTML lama (Item 79/80,
-lihat di atas), TIDAK ADA hubungannya dgn tugas checkout/Pra-Bayar sesi
-ini. Branch direstart dari `origin/main` (`git checkout -B <branch>
-origin/main`) DUA KALI di sesi ini (sekali di awal, sekali lagi setelah
-merge ke main supaya susulan test ini juga mulai dari titik yg sudah
-ter-merge) — kalau sesi depan dapat nama branch ini lagi, JANGAN
-asumsikan isinya soal katalog/kategori produk, cek dulu commit-nya, dan
-jangan kaget kalau branch-nya "kosong" (0 commit unik) — itu NORMAL utk
-branch ini, restart dari `origin/main` adalah pola yang benar di sini.
+Laporan user yang DIABAIKAN atas permintaan user: pre-order yang sudah
+dipenuhi di host muncul lagi setelah sync (kemungkinan host lupa
+memenuhi; jalur `applyLaciMejaProposals` sudah menjaga
+fulfilled_at/cancelled_at). Versi kerja **2.71.0+161** (MINOR — fitur
+baru terlihat user). schemaVersion TETAP **45**. Branch tugas ini
+(nama warisan katalog HTML) sudah DUA kali direstart dari `origin/main` —
+lihat catatan branch di sesi 81 di CHANGELOG; pola itu normal di sini.
 
-_Sesi-sesi sebelumnya (78-80): kalkulator Tambah Bayar Pra-Bayar,
-audit Pra-Bayar 4-bug keuangan, kembalian basi tercetak/dibagikan lagi,
-audit sync susulan (data lama salah + changeTaken tidak ikut sync),
-polish badge katalog HTML — lihat [CHANGELOG.md](../CHANGELOG.md) untuk
-hash & detail per-commit, tidak diulang di sini._
+_Sesi-sesi sebelumnya (78-81): kalkulator/audit Pra-Bayar, kembalian
+basi, audit sync susulan, polish badge katalog HTML, checkout sebagian
+lunas saat uang cukup lunasi hutang (Item 85) — lihat
+[CHANGELOG.md](../CHANGELOG.md) untuk hash & detail per-commit._
 
 **Metode audit yang dipakai (berguna diulang)**: setelah fix `e27bf8a`
 (sesi 78) selesai, ditanya balik "audit lagi" — bukan menganggap selesai,

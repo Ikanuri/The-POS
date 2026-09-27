@@ -7,6 +7,15 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-27 (sesi kedelapan puluh dua — Pra-Bayar melunasi hutang/pre-order, Laci Meja ikut pelanggan terkini nota, struk "last state")
+
+- `e7ecb49` — fix(struk): kembalian "last state" konsisten
+  in-app/share/cetak + tombol gabung kembalian belum diambil
+- `cc50d3e` — fix(laci-meja): pre-order/titip/pinjaman ikut pelanggan
+  TERKINI nota setelah ganti pelanggan
+- `e8bf0fe` — fix(kasir): Pra-Bayar di keranjang kini ikut melunasi
+  hutang/pre-order saat checkout
+
 ## 2026-09-25 (sesi kedelapan puluh satu — checkout boleh sebagian lunas kalau uang cukup lunasi hutang tapi tidak cukup utk belanja baru)
 
 - `31fcf4b` — test(kasir): buktikan checkout partial-settlement (Item 85,

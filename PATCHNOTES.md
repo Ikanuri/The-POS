@@ -8,6 +8,36 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 27 September 2026 (sesi kedelapan puluh dua)
+
+### ✨ Fitur Baru
+- **Pra-Bayar di keranjang sekarang benar-benar bisa melunasi hutang &
+  DP pre-order.** Sebelumnya, walau keranjang sudah menunjukkan lunas
+  (Pra-Bayar menutup belanja + hutang), layar Bayar tetap menagih nominal
+  hutang secara tunai lalu mengembalikan kelebihan Pra-Bayar sebagai
+  kembalian. Sekarang Pra-Bayar dipakai melunasi hutang/pre-order lebih
+  dulu, sisanya untuk belanja — kalau sudah cukup, cukup tekan
+  "Selesaikan Transaksi". Pencatatan uangnya tetap satu kali (Tutup Kasir
+  tidak dobel).
+- **Tombol "Gabungkan kembalian belum diambil"** di struk: kalau di satu
+  nota ada beberapa kembalian yang belum diserahkan, tombol ini
+  menjumlahkannya supaya tampil di struk share & cetak. Tombol hilang
+  sendiri begitu semua kembalian dicentang (termasuk dari HP lain setelah
+  sinkron).
+
+### 🐛 Perbaikan
+- **Struk cetak & share selalu menampilkan keadaan terakhir nota.**
+  Mencentang "kembalian sudah diambil" tidak lagi menghapus baris
+  Kembali dari cetakan (dulu "Bayar" jadi sama dengan Total, tidak cocok
+  dengan riwayat pembayaran). Nota yang masih kurang cukup menampilkan
+  Sisa. Kembalian Pra-Bayar dari ronde sebelumnya juga tidak lagi
+  menumpuk ke kembalian terakhir.
+- **Pre-order, titipan & pinjaman ikut pindah saat pelanggan nota
+  diganti.** Sebelumnya, setelah pelanggan di nota diganti, di keranjang
+  pelanggan baru cuma muncul pengingat hutang — chip DP Pre-order,
+  "Pelunasi Pre-order" (termasuk "Sekaligus penuhi") dan pengingat Laci
+  Meja masih menempel di pelanggan lama.
+
 ## 25 September 2026 (sesi kedelapan puluh satu)
 
 ### ✨ Fitur Baru
