@@ -5220,10 +5220,17 @@ class AppDatabase extends _$AppDatabase {
       'FROM preorder_entries po '
       'INNER JOIN transaction_items ti ON ti.id = po.transaction_item_id '
       'INNER JOIN transactions t ON t.id = po.transaction_id '
-      'WHERE po.customer_id = ? AND po.paid = 0 AND po.cancelled_at IS NULL '
+      // Item 87 — identitas TERKINI nota (lihat `_laciMejaCustomerMatch`),
+      // salinan beku `po.customer_id` cuma kalau nota tanpa identitas.
+      'WHERE (t.customer_id = ? OR (t.customer_id IS NULL '
+      '    AND t.customer_name IS NULL AND po.customer_id = ?)) '
+      '  AND po.paid = 0 AND po.cancelled_at IS NULL '
       "  AND t.status != 'void' "
       '  AND (ti.original_price * ti.qty - ti.subtotal) > 0',
-      variables: [Variable.withString(customerId)],
+      variables: [
+        Variable.withString(customerId),
+        Variable.withString(customerId),
+      ],
       readsFrom: {preorderEntries, transactionItems, transactions},
     ).getSingleOrNull();
     final total = (row?.data['total'] as num?)?.toInt() ?? 0;
@@ -8191,17 +8198,26 @@ class AppDatabase extends _$AppDatabase {
     final id = customerId?.trim() ?? '';
     final nama = customerName.trim();
     if (id.isEmpty && nama.isEmpty) return {};
-    final rows = await (select(preorderEntries)
-          ..where((t) =>
-              (id.isNotEmpty
-                  ? t.customerId.equals(id)
-                  : t.customerName.equals(nama)) &
-              t.fulfilledAt.isNull() &
-              t.cancelledAt.isNull() &
-              t.transactionId.isNotNull() &
-              t.transactionId.equals(excludeTransactionId).not())
-          ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
-        .get();
+    // Item 87 — identitas TERKINI nota tertaut, lihat [_laciMejaCustomerMatch].
+    final rows = (await (select(preorderEntries).join([
+      innerJoin(transactions,
+          transactions.id.equalsExp(preorderEntries.transactionId)),
+    ])
+              ..where(_laciMejaCustomerMatch(
+                    frozenId: preorderEntries.customerId,
+                    frozenName: preorderEntries.customerName,
+                    id: id,
+                    nama: nama,
+                  ) &
+                  preorderEntries.fulfilledAt.isNull() &
+                  preorderEntries.cancelledAt.isNull() &
+                  preorderEntries.transactionId
+                      .equals(excludeTransactionId)
+                      .not())
+              ..orderBy([OrderingTerm.asc(preorderEntries.createdAt)]))
+            .get())
+        .map((r) => r.readTable(preorderEntries))
+        .toList();
     final out = <String, ({String transactionId, DateTime createdAt})>{};
     for (final r in rows) {
       // `orderBy` asc + `putIfAbsent` -> baris PERTAMA per productId (paling
@@ -8377,6 +8393,46 @@ class AppDatabase extends _$AppDatabase {
   /// TERDAFTAR: versi lama memisahkan jadi 2 method dan yang berbasis
   /// `customerId` selalu mengembalikan `preorder: 0` — akibatnya pre-order
   /// milik pelanggan terdaftar TIDAK PERNAH muncul di pengingat sama sekali.
+  /// Item 87 (laporan user) — pencocokan pelanggan entri Laci Meja lewat
+  /// identitas TERKINI nota tertautnya, bukan salinan beku di baris entri.
+  ///
+  /// Ketiga tabel Laci Meja menyalin `customer_id`/nama SAAT entri dicatat,
+  /// dan `changeTransactionCustomer` SENGAJA tidak menyalin ulang (lihat dok
+  /// [getCustomerNamesForTransactions] — menulis ulang dari device kasir =
+  /// mutasi master-data yang harus lewat persetujuan owner). Akibatnya
+  /// begitu pelanggan nota diganti, pre-order/titip/pinjaman-nya tetap
+  /// "milik" pelanggan LAMA di keranjang: chip "DP Pre-order" & sheet
+  /// Pelunasi Pre-order (termasuk "Sekaligus penuhi") serta pengingat
+  /// Laci Meja tidak pernah muncul utk pelanggan BARU — hanya chip Hutang
+  /// (yang memang membaca `transactions.customer_id`) yang ikut pindah.
+  ///
+  /// Aturan (model tiga-keadaan `Transactions`, Item 58 tetap berlaku):
+  ///  * [id] terisi (pelanggan terdaftar) -> cocok MURNI lewat
+  ///    `transactions.customer_id` (tidak pernah lewat nama).
+  ///  * ad-hoc -> cocok lewat `transactions.customer_name` pada nota tanpa
+  ///    `customer_id`.
+  ///  * Salinan beku ([frozenId]/[frozenName]) HANYA dipakai kalau nota
+  ///    tidak punya identitas sama sekali, atau entri tidak tertaut nota
+  ///    (`leftOuterJoin` -> kolom `transactions` null) — satu-satunya
+  ///    sumber identitas yang tersisa utk kasus itu.
+  /// WAJIB dipakai di query yang JOIN `transactions` ke entri Laci Meja.
+  Expression<bool> _laciMejaCustomerMatch({
+    required Expression<String> frozenId,
+    required Expression<String> frozenName,
+    required String id,
+    required String nama,
+  }) {
+    final txAnonymous =
+        transactions.customerId.isNull() & transactions.customerName.isNull();
+    if (id.isNotEmpty) {
+      return transactions.customerId.equals(id) |
+          (txAnonymous & frozenId.equals(id));
+    }
+    return (transactions.customerId.isNull() &
+            transactions.customerName.equals(nama)) |
+        (txAnonymous & frozenName.equals(nama));
+  }
+
   Future<LaciMejaPending> getLaciMejaPending({
     String? customerId,
     String? customerName,
@@ -8386,70 +8442,65 @@ class AppDatabase extends _$AppDatabase {
     if (id.isEmpty && nama.isEmpty) return kEmptyLaciMejaPending;
 
     // Titip/Ketinggalan & Pinjaman: cocokkan lewat id kalau pelanggan
-    // terdaftar, kalau tidak lewat nama teksnya.
+    // terdaftar, kalau tidak lewat nama teksnya — identitas TERKINI nota
+    // (Item 87, [_laciMejaCustomerMatch]).
     //
     // Item 60 — JOIN ke `transactions` & kecualikan nota yang sudah di-void
     // (`voidTransaction` tidak menghapus baris Titip/Pinjaman, cuma menulis
     // event 'batal' audit — lihat dok di `voidTransaction`; tabel ini
     // sengaja TIDAK dapat kolom `cancelledAt` baru, status "batal"-nya
     // murni disimpulkan dari status nota induk di sini).
-    final left = id.isNotEmpty
-        ? (await (select(leftBehindItems).join([
-            innerJoin(transactions,
-                transactions.id.equalsExp(leftBehindItems.transactionId)),
-          ])
-                  ..where(leftBehindItems.customerId.equals(id) &
-                      leftBehindItems.collectedAt.isNull() &
-                      transactions.status.isNotValue('void')))
-                .get())
-            .map((r) => r.readTable(leftBehindItems))
-            .toList()
-        : (await (select(leftBehindItems).join([
-            innerJoin(transactions,
-                transactions.id.equalsExp(leftBehindItems.transactionId)),
-          ])
-                  ..where(leftBehindItems.customerNameText.equals(nama) &
-                      leftBehindItems.collectedAt.isNull() &
-                      transactions.status.isNotValue('void')))
-                .get())
-            .map((r) => r.readTable(leftBehindItems))
-            .toList();
-    final borrowed = id.isNotEmpty
-        ? (await (select(borrowedItems).join([
-            innerJoin(transactions,
-                transactions.id.equalsExp(borrowedItems.transactionId)),
-          ])
-                  ..where(borrowedItems.customerId.equals(id) &
-                      borrowedItems.fullyReturnedAt.isNull() &
-                      transactions.status.isNotValue('void')))
-                .get())
-            .map((r) => r.readTable(borrowedItems))
-            .toList()
-        : (await (select(borrowedItems).join([
-            innerJoin(transactions,
-                transactions.id.equalsExp(borrowedItems.transactionId)),
-          ])
-                  ..where(borrowedItems.customerNameText.equals(nama) &
-                      borrowedItems.fullyReturnedAt.isNull() &
-                      transactions.status.isNotValue('void')))
-                .get())
-            .map((r) => r.readTable(borrowedItems))
-            .toList();
+    final left = (await (select(leftBehindItems).join([
+      innerJoin(transactions,
+          transactions.id.equalsExp(leftBehindItems.transactionId)),
+    ])
+              ..where(_laciMejaCustomerMatch(
+                    frozenId: leftBehindItems.customerId,
+                    frozenName: leftBehindItems.customerNameText,
+                    id: id,
+                    nama: nama,
+                  ) &
+                  leftBehindItems.collectedAt.isNull() &
+                  transactions.status.isNotValue('void')))
+            .get())
+        .map((r) => r.readTable(leftBehindItems))
+        .toList();
+    final borrowed = (await (select(borrowedItems).join([
+      innerJoin(transactions,
+          transactions.id.equalsExp(borrowedItems.transactionId)),
+    ])
+              ..where(_laciMejaCustomerMatch(
+                    frozenId: borrowedItems.customerId,
+                    frozenName: borrowedItems.customerNameText,
+                    id: id,
+                    nama: nama,
+                  ) &
+                  borrowedItems.fullyReturnedAt.isNull() &
+                  transactions.status.isNotValue('void')))
+            .get())
+        .map((r) => r.readTable(borrowedItems))
+        .toList();
 
-    // Pre-order: pelanggan TERDAFTAR (id terisi) dicocokkan MURNI lewat
-    // `customerId` (Item 58 — dua pelanggan beda id namanya bisa sama,
-    // JANGAN OR dgn nama), ad-hoc tetap lewat nama (satu-satunya identitas
-    // yg tersedia utk kasus itu). + JOIN produk supaya baris cart bar bisa
+    // Pre-order: pelanggan TERDAFTAR (id terisi) dicocokkan MURNI lewat id
+    // (Item 58 — dua pelanggan beda id namanya bisa sama, JANGAN OR dgn
+    // nama), ad-hoc tetap lewat nama — keduanya identitas TERKINI nota
+    // (Item 87). `leftOuterJoin` ke nota: pre-order tanpa nota tertaut
+    // jatuh ke salinan beku. + JOIN produk supaya baris cart bar bisa
     // menyebut nama produknya.
     final preorders = <PreorderPendingLine>[];
     if (id.isNotEmpty || nama.isNotEmpty) {
       final rows = await (select(preorderEntries).join([
         leftOuterJoin(
             products, products.id.equalsExp(preorderEntries.productId)),
+        leftOuterJoin(transactions,
+            transactions.id.equalsExp(preorderEntries.transactionId)),
       ])
-            ..where((id.isNotEmpty
-                    ? preorderEntries.customerId.equals(id)
-                    : preorderEntries.customerName.equals(nama)) &
+            ..where(_laciMejaCustomerMatch(
+                  frozenId: preorderEntries.customerId,
+                  frozenName: preorderEntries.customerName,
+                  id: id,
+                  nama: nama,
+                ) &
                 preorderEntries.fulfilledAt.isNull() &
                 preorderEntries.cancelledAt.isNull()))
           .get();
@@ -9140,7 +9191,13 @@ class AppDatabase extends _$AppDatabase {
       innerJoin(products, products.id.equalsExp(productUnits.productId)),
       leftOuterJoin(unitTypes, unitTypes.id.equalsExp(productUnits.unitTypeId)),
     ])
-          ..where(preorderEntries.customerId.equals(customerId) &
+          // Item 87 — identitas TERKINI nota, lihat [_laciMejaCustomerMatch].
+          ..where(_laciMejaCustomerMatch(
+                frozenId: preorderEntries.customerId,
+                frozenName: preorderEntries.customerName,
+                id: customerId,
+                nama: '',
+              ) &
               preorderEntries.paid.equals(false) &
               preorderEntries.cancelledAt.isNull() &
               transactions.status.isNotValue('void')))
