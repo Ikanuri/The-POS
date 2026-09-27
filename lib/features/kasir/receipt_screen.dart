@@ -262,6 +262,11 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   /// dibatalkan (bukan akumulatif) — lihat `latestActivePayment`.
   TransactionPayment? get _latestPayment => latestActivePayment(_payments);
 
+  /// Pembayaran yang kembaliannya tampil di Ringkasan (checkbox ikut baris
+  /// ini) — sumber sama dgn share & cetak, lihat `displayedChangePayment`.
+  TransactionPayment? get _shownChangePayment =>
+      displayedChangePayment(_payments);
+
   /// Item 88 — kembalian "last state" (in-app, share & cetak memakai sumber
   /// yang SAMA, lihat `core/utils/change_display.dart`).
   int get _lastStateChange =>
@@ -3467,22 +3472,22 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                           // Item 88 — last state: nota masih kurang ->
                           // tanpa Kembalian (cuma Sisa).
                           if (!isKurangBayar &&
-                              (_latestPayment?.changeGiven ?? 0) > 0)
+                              (_shownChangePayment?.changeGiven ?? 0) > 0)
                             _ChangeTakenRow(
-                              amount: formatRupiah(_latestPayment!.changeGiven),
-                              taken: _latestPayment!.changeTaken,
+                              amount: formatRupiah(_shownChangePayment!.changeGiven),
+                              taken: _shownChangePayment!.changeTaken,
                               color: scheme.tertiary,
                               bold: true,
                               onChanged: isVoid
                                   ? null
                                   : (v) =>
-                                      _toggleChangeTaken(_latestPayment!.id, v),
+                                      _toggleChangeTaken(_shownChangePayment!.id, v),
                             ),
                           // Kembalian Pra-Bayar yang diambil SEBELUM
                           // checkout pada ronde terakhir — SENGAJA baris
                           // terpisah tanpa checkbox (sudah pasti diambil).
                           if (!isKurangBayar &&
-                              (_latestPayment
+                              (_shownChangePayment
                                           ?.prabayarChangeTakenBeforeCheckout ??
                                       0) >
                                   0)
@@ -3503,7 +3508,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                                     ),
                                   ),
                                   Text(
-                                    formatRupiah(_latestPayment!
+                                    formatRupiah(_shownChangePayment!
                                         .prabayarChangeTakenBeforeCheckout!),
                                     style: TextStyle(
                                       fontSize: 11,

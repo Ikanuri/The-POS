@@ -118,6 +118,49 @@ void main() {
     await tester.pump(const Duration(milliseconds: 10));
   });
 
+  group('kembalian cuma SEKALI di ronde lama, tambah barang dibayar pas', () {
+    // Laporan user (screenshot): bayar 150.000 utk 143.350 (kembalian
+    // 6.650, TIDAK dicentang) -> Tambah Belanjaan 14.000 dibayar pas.
+    // Total 157.350; struk harus tetap gross (Bayar 164.000, Kembali 6.650)
+    // & TIDAK menawarkan tombol gabung (tidak ada yang menumpuk).
+    Future<void> seedOnce({bool taken = false}) async {
+      await seedTx(total: 157350, paid: 164000);
+      await pay('p1', 150000, 8, change: 6650, taken: taken);
+      await pay('p2', 14000, 9);
+    }
+
+    test('cetak: Kembali 6.650 & Bayar gross 164.000', () async {
+      await seedOnce();
+      final text = await printText();
+      expect(text.contains('Kembali'), isTrue,
+          reason: 'tanpa fix: ronde terakhir tanpa kembalian -> struk net');
+      expect(text.contains('6,650'), isTrue);
+      expect(text.contains('Rp 164,000'), isTrue);
+    });
+
+    testWidgets('in-app: Dibayar gross, baris Kembalian ada, TANPA tombol '
+        'gabung', (tester) async {
+      await seedOnce();
+      await pumpWithFakeApp(tester,
+          db: db, child: const ReceiptScreen(transactionId: txId));
+      expect(find.text('Tunai · ${formatRupiah(164000)}'), findsOneWidget);
+      expect(find.text('Kembalian'), findsWidgets);
+      expect(find.textContaining('Gabungkan kembalian belum diambil'),
+          findsNothing,
+          reason: 'kembalian cuma satu, bukan menumpuk');
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(milliseconds: 10));
+    });
+
+    test('kalau kembalian ronde lama SUDAH dicentang (dipakai ulang '
+        'memotong tagihan tambahan) -> tidak tampil, Bayar net', () async {
+      await seedOnce(taken: true);
+      final text = await printText();
+      expect(text.contains('Kembali'), isFalse);
+      expect(text.contains('Rp 157,350'), isTrue);
+    });
+  });
+
   group('kembalian menumpuk belum diambil', () {
     Future<void> seedStacked() async {
       await seedTx(total: 100000, paid: 107000);

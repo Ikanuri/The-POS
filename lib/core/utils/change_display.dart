@@ -15,10 +15,10 @@ import '../database/app_database.dart';
 //  * Nota masih kurang (kurang_bayar/tempo) -> hanya Sisa, TANPA Kembali
 //    (inilah yang dulu coba dicapai lewat centang: kembalian ronde lama
 //    tidak boleh muncul bersama Sisa ronde baru).
-//  * Nota lunas -> Kembali dari ronde pembayaran TERAKHIR: `changeGiven`
-//    momen pembayaran itu + kembalian Pra-Bayar yang diambil SEBELUM
-//    checkout yang menempel di baris itu. Centang "sudah diambil" TIDAK
-//    mengubah angka (murni penanda sudah diserahkan).
+//  * Nota lunas -> Kembali dari ronde pembayaran TERAKHIR (`changeGiven`
+//    + kembalian Pra-Bayar pre-checkout di baris itu), dicentang atau
+//    tidak. Kalau ronde terakhir tanpa kembalian, kembalian terakhir yang
+//    BELUM dicentang dari ronde sebelumnya (lihat [displayedChangePayment]).
 // Kembalian yang menumpuk & belum diambil di ronde-ronde lain tidak ikut
 // otomatis — kasir menggabungkannya lewat tombol di struk in-app
 // ([unclaimedChangeTotal]/[hasExtraUnclaimedChange]).
@@ -37,12 +37,41 @@ TransactionPayment? latestActivePayment(Iterable<TransactionPayment> payments) {
 bool _isUnpaidStatus(String status) =>
     status == 'kurang_bayar' || status == 'tempo';
 
-/// Kembalian "last state" ronde terakhir, TANPA memeriksa status nota —
-/// dipakai [lastStateChange] & nota gabungan (status dicek pemanggil).
-int latestRoundChange(Iterable<TransactionPayment> payments) {
+/// Pembayaran yang kembaliannya tampil di baris "Kembali" (status nota
+/// TIDAK diperiksa di sini — lihat [lastStateChange]):
+///  1. Pembayaran TERAKHIR kalau ronde itu menghasilkan kembalian
+///     (changeGiven / potongan Pra-Bayar pre-checkout) — dicentang atau
+///     tidak (foto struk user: centang tidak boleh menghapus Kembali).
+///  2. Kalau ronde terakhir TANPA kembalian (mis. Tambah Belanjaan dibayar
+///     pas), kembalian paling akhir yang BELUM dicentang dari ronde
+///     sebelumnya — laporan user: nota dibayar lebih, kembalian tidak
+///     dicentang, lalu tambah barang dibayar pas -> struk harus tetap
+///     gross (kembaliannya cuma terjadi SEKALI, bukan menumpuk). Kembalian
+///     ronde lama yang SUDAH dicentang dianggap selesai (umumnya dipakai
+///     ulang memotong tagihan tambahan, lihat `e27bf8a`) & tidak tampil.
+TransactionPayment? displayedChangePayment(
+    Iterable<TransactionPayment> payments) {
   final latest = latestActivePayment(payments);
-  if (latest == null) return 0;
-  final v = latest.changeGiven + (latest.prabayarChangeTakenBeforeCheckout ?? 0);
+  if (latest == null) return null;
+  if (latest.changeGiven + (latest.prabayarChangeTakenBeforeCheckout ?? 0) >
+      0) {
+    return latest;
+  }
+  TransactionPayment? fallback;
+  for (final p in payments) {
+    if (p.voided || p.changeTaken || p.changeGiven <= 0) continue;
+    if (fallback == null || !p.paidAt.isBefore(fallback.paidAt)) fallback = p;
+  }
+  return fallback;
+}
+
+/// Nominal kembalian [displayedChangePayment] — changeGiven + potongan
+/// pre-checkout di baris itu. Status nota TIDAK diperiksa (dipakai nota
+/// gabungan, status dicek pemanggil).
+int latestRoundChange(Iterable<TransactionPayment> payments) {
+  final p = displayedChangePayment(payments);
+  if (p == null) return 0;
+  final v = p.changeGiven + (p.prabayarChangeTakenBeforeCheckout ?? 0);
   return v > 0 ? v : 0;
 }
 
@@ -55,9 +84,9 @@ int lastStateChange(Transaction tx, List<TransactionPayment> payments) =>
 /// diambil).
 int _lastStateUnclaimed(Transaction tx, List<TransactionPayment> payments) {
   if (_isUnpaidStatus(tx.status)) return 0;
-  final latest = latestActivePayment(payments);
-  if (latest == null || latest.changeTaken) return 0;
-  return latest.changeGiven > 0 ? latest.changeGiven : 0;
+  final shown = displayedChangePayment(payments);
+  if (shown == null || shown.changeTaken) return 0;
+  return shown.changeGiven > 0 ? shown.changeGiven : 0;
 }
 
 /// Jumlah SEMUA kembalian yang belum dicentang "sudah diambil" di nota ini
