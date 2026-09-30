@@ -3151,7 +3151,8 @@ class _ProductListTileState extends ConsumerState<_ProductListTile> {
         children: [
           InkWell(
             onTap: widget.onTapBody,
-            // Tahan item dengan varian → buka/tutup dropdown varian inline.
+            // Tahan item dengan varian → jalan pintas buka/tutup dropdown varian
+            // inline (cara utama: tombol chevron di kanan).
             onLongPress: hasVariants
                 ? () => setState(() => _expanded = !_expanded)
                 : null,
@@ -3212,16 +3213,6 @@ class _ProductListTileState extends ConsumerState<_ProductListTile> {
                                       fontWeight: FontWeight.w700,
                                       color: cs.error)),
                             ],
-                            if (hasVariants) ...[
-                              const SizedBox(width: 4),
-                              Icon(
-                                _expanded
-                                    ? Icons.expand_less_rounded
-                                    : Icons.expand_more_rounded,
-                                size: 16,
-                                color: cs.onSurfaceVariant,
-                              ),
-                            ],
                           ],
                         ),
                         const SizedBox(height: 2),
@@ -3256,6 +3247,31 @@ class _ProductListTileState extends ConsumerState<_ProductListTile> {
                       ],
                     ),
                   ),
+                  // Usulan user — buka/tutup varian cukup TAP tombol ini (dulu
+                  // hanya tahan item; tahan tetap jalan sbg jalan pintas).
+                  // Area sentuh 40dp, ikonnya sendiri kecil supaya tidak
+                  // mengganggu; jarak ke "+" dijaga agar tidak salah pencet.
+                  if (hasVariants)
+                    Tooltip(
+                      message:
+                          _expanded ? 'Tutup varian' : 'Tampilkan varian',
+                      child: InkWell(
+                        key: const ValueKey('variant-toggle'),
+                        customBorder: const CircleBorder(),
+                        onTap: () => setState(() => _expanded = !_expanded),
+                        child: SizedBox(
+                          width: 40,
+                          height: 40,
+                          child: Icon(
+                            _expanded
+                                ? Icons.expand_less_rounded
+                                : Icons.expand_more_rounded,
+                            size: 22,
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ),
                   const SizedBox(width: 8),
                   detailAsync.maybeWhen(
                     data: (d) => AddControl(
