@@ -6,6 +6,19 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
+_Update susulan sesi 83 (30 Sep) — tiga usulan fitur user, disetujui &
+dikerjakan berurutan 3 -> 2 -> 1 (commit terpisah `bead0ee`, `3bd0ff0`,
+`7b83fcf`): (3) chevron tap 40dp utk buka/tutup varian di daftar kasir
+(`_ProductListTile`, key `variant-toggle`; tahan tetap jalan); (2) kartu
+item kasir menampilkan stok SEMUA satuan setara ("1.250 biji / 125 slop /
+12,5 dus", `lib/core/utils/stock_display.dart`) + ikon kuning (<= minStock
+satuan dasar) / merah (<= 0 atau ditandai Stok Habis), non-stok tanpa
+ikon; (1) tombol "Hitung dari satuan lain" di kartu satuan non-dasar form
+produk (`_ratioReferenceDialog`, `unit_ratio_calc.dart`): jumlah x isi
+satuan acuan -> disimpan SNAPSHOT ke `ratioToBase` (tanpa kolom/migrasi;
+mengubah isi satuan acuan belakangan tidak mengubah satuan turunan).
+Versi kerja **2.72.0+164**, schemaVersion 46.
+
 _Update sesi 30 September 2026, sesi kedelapan puluh tiga — **Item 89
 (kolom `change_reused`, opsi B disetujui user)**. Masalah: satu kolom
 `transaction_payments.change_taken` dipakai utk dua makna ("sudah

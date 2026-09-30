@@ -10,6 +10,22 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ## 30 September 2026 (sesi kedelapan puluh tiga)
 
+### ✨ Fitur Baru
+- **Buka varian cukup dengan satu ketukan.** Produk yang punya varian
+  kini punya tombol panah (▾) di sisi kanan barisnya — ketuk untuk
+  membuka/menutup daftar varian. Menahan baris produk tetap bisa dipakai
+  sebagai jalan pintas.
+- **Stok semua satuan tampil sekaligus di kartu item kasir**, mis.
+  "Stok 1.250 biji / 125 slop / 12,5 dus" (satuan yang sedang dipilih
+  ditebalkan) — tidak perlu lagi menghitung sendiri. Ada juga ikon
+  peringatan: **kuning** kalau stok sudah menipis (di bawah stok
+  minimum), **merah** kalau stok habis.
+- **"Isi per Satuan" bisa dihitung dari satuan lain.** Di pengaturan
+  produk, tombol "Hitung dari satuan lain" membantu mengisi isi satuan
+  besar dari satuan terdekatnya — mis. 1 dus = 4 bal, tanpa harus
+  mengonversi sampai ke satuan dasar (biji) secara manual. Hasilnya
+  tersimpan sebagai isi biasa.
+
 ### 🐛 Perbaikan
 - **Mencentang "kembalian sudah diserahkan" tidak lagi mengubah angka di
   struk.** Sebelumnya, nota yang dibayar lebih lalu ditambah belanjaan
