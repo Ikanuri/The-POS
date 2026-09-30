@@ -51,7 +51,9 @@ void main() {
   }
 
   Future<void> pay(String id, int amount, int hour,
-      {int change = 0, bool taken = false}) async {
+      {int change = 0,
+      bool taken = false,
+      Value<int?> reused = const Value.absent()}) async {
     await db.into(db.transactionPayments).insert(
         TransactionPaymentsCompanion.insert(
             id: id,
@@ -60,7 +62,8 @@ void main() {
             method: 'tunai',
             paidAt: Value(DateTime(2026, 9, 27, hour)),
             changeGiven: Value(change),
-            changeTaken: Value(taken)));
+            changeTaken: Value(taken),
+            changeReused: reused));
   }
 
   /// Skenario PERSIS foto user, kembalian 2.000 SUDAH dicentang diambil.
@@ -93,7 +96,8 @@ void main() {
     return latin1.decode(bytes, allowInvalid: true);
   }
 
-  test('cetak (foto user): kembalian dicentang TETAP tercetak, Bayar = '
+  test(
+      'cetak (foto user): kembalian dicentang TETAP tercetak, Bayar = '
       'uang yang benar-benar diterima', () async {
     await seedPhoto();
     final text = await printText();
@@ -123,10 +127,11 @@ void main() {
     // 6.650, TIDAK dicentang) -> Tambah Belanjaan 14.000 dibayar pas.
     // Total 157.350; struk harus tetap gross (Bayar 164.000, Kembali 6.650)
     // & TIDAK menawarkan tombol gabung (tidak ada yang menumpuk).
-    Future<void> seedOnce({bool taken = false}) async {
+    Future<void> seedOnce(
+        {bool taken = false, Value<int?> reused = const Value.absent()}) async {
       await seedTx(total: 157350, paid: 164000);
       await pay('p1', 150000, 8, change: 6650, taken: taken);
-      await pay('p2', 14000, 9);
+      await pay('p2', 14000, 9, reused: reused);
     }
 
     test('cetak: Kembali 6.650 & Bayar gross 164.000', () async {
@@ -138,7 +143,8 @@ void main() {
       expect(text.contains('Rp 164,000'), isTrue);
     });
 
-    testWidgets('in-app: Dibayar gross, baris Kembalian ada, TANPA tombol '
+    testWidgets(
+        'in-app: Dibayar gross, baris Kembalian ada, TANPA tombol '
         'gabung', (tester) async {
       await seedOnce();
       await pumpWithFakeApp(tester,
@@ -152,9 +158,28 @@ void main() {
       await tester.pump(const Duration(milliseconds: 10));
     });
 
-    test('kalau kembalian ronde lama SUDAH dicentang (dipakai ulang '
-        'memotong tagihan tambahan) -> tidak tampil, Bayar net', () async {
+    test(
+        'Item 89: kembalian ronde lama dicentang "diserahkan" -> struk TETAP '
+        'gross (centang murni pengingat)', () async {
       await seedOnce(taken: true);
+      final text = await printText();
+      expect(text.contains('Kembali'), isTrue,
+          reason: 'tanpa Item 89: dicentang -> dianggap dipakai -> net');
+      expect(text.contains('Rp 164,000'), isTrue);
+    });
+
+    test(
+        'kembalian ronde lama DIPAKAI (change_reused) -> tidak tampil, '
+        'Bayar net', () async {
+      await seedOnce(reused: const Value(6650));
+      final text = await printText();
+      expect(text.contains('Kembali'), isFalse);
+      expect(text.contains('Rp 157,350'), isTrue);
+    });
+
+    test('data LAMA (change_reused null) + dicentang -> aturan lama: net',
+        () async {
+      await seedOnce(taken: true, reused: const Value(null));
       final text = await printText();
       expect(text.contains('Kembali'), isFalse);
       expect(text.contains('Rp 157,350'), isTrue);
@@ -168,7 +193,8 @@ void main() {
       await pay('p2', 52000, 10, change: 2000);
     }
 
-    test('default = ronde terakhir; mode gabungan = jumlah semua belum '
+    test(
+        'default = ronde terakhir; mode gabungan = jumlah semua belum '
         'diambil', () async {
       await seedStacked();
       final payments = await db.getPaymentsForTx(txId);
@@ -186,7 +212,8 @@ void main() {
       expect(merged.contains('Rp 7,000'), isTrue);
     });
 
-    testWidgets('tombol gabung muncul, share ikut; hilang setelah semua '
+    testWidgets(
+        'tombol gabung muncul, share ikut; hilang setelah semua '
         'dicentang', (tester) async {
       await seedStacked();
       await pumpWithFakeApp(tester,
@@ -206,8 +233,7 @@ void main() {
 
       // Kembalian ronde lama dicentang (mis. dari device lain lewat sync)
       // -> tidak ada lagi yang perlu digabung.
-      await (db.update(db.transactionPayments)
-            ..where((t) => t.id.equals('p1')))
+      await (db.update(db.transactionPayments)..where((t) => t.id.equals('p1')))
           .write(const TransactionPaymentsCompanion(changeTaken: Value(true)));
       final tx = await (db.select(db.transactions)
             ..where((t) => t.id.equals(txId)))
@@ -223,22 +249,24 @@ void main() {
     });
   });
 
-  test('atribusi potongan Pra-Bayar per ronde: kembalian ronde 1 yang '
+  test(
+      'atribusi potongan Pra-Bayar per ronde: kembalian ronde 1 yang '
       'diambil TIDAK menempel ke entri ronde 2', () {
     final t0 = DateTime(2026, 9, 27, 9);
-    final a = PrabayarEntry(
-        id: 'a', amount: 300000, method: 'tunai', lockedAt: t0);
+    final a =
+        PrabayarEntry(id: 'a', amount: 300000, method: 'tunai', lockedAt: t0);
     final b = PrabayarEntry(
         id: 'b',
         amount: 115000,
         method: 'tunai',
         lockedAt: t0.add(const Duration(minutes: 20)));
-    final cuts = prabayarChangeTakenCuts([a, b], 46200, takes: [
-      ChangeTakenEntry(
-          id: 'c1',
-          amount: 46200,
-          takenAt: t0.add(const Duration(minutes: 5))),
-    ]);
+    final cuts = prabayarChangeTakenCuts([a, b], 46200,
+        takes: [
+          ChangeTakenEntry(
+              id: 'c1',
+              amount: 46200,
+              takenAt: t0.add(const Duration(minutes: 5))),
+        ]);
     expect(cuts, {'a': 46200},
         reason: 'tanpa atribusi per ronde potongan jatuh ke entri TERBARU '
             '(b) & terbaca sbg kembalian ronde terakhir di struk');

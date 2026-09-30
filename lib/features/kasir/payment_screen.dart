@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
@@ -15,6 +16,7 @@ import '../../core/providers/device_provider.dart';
 import '../../core/providers/laci_meja_provider.dart';
 import '../../core/providers/low_stock_alert_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/change_display.dart';
 import '../../core/utils/input_formatters.dart';
 import '../laci_meja/laci_meja_reminder.dart';
 import 'cart_debt_settlement_provider.dart';
@@ -485,7 +487,14 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   /// jumlah yang diinput kasir (kasir tetap input manual, konsisten dengan
   /// simulasi fisik: kembalian sudah diberikan, pelanggan bayar lagi pakai
   /// uang itu).
-  ({String id, int amount})? _unclaimedChange;
+  /// Item 89 — kembalian ronde lama yang masih boleh dipakai ("Pakai
+  /// kembalian"): Σ SEMUA ronde (bukan cuma pembayaran terakhir), dikurangi
+  /// yang sudah diserahkan/dipakai. 0 = opsi tidak ditawarkan.
+  int _unclaimedChange = 0;
+
+  /// Pilihan kasir "Pakai kembalian" — state lokal; baru ditulis ke DB
+  /// bersama pembayaran (`change_reused`), jadi membatalkan layar ini tidak
+  /// meninggalkan jejak apa pun.
   bool _unclaimedChangeTaken = false;
 
   /// Mode tambah belanjaan: sisa tagihan nota ASLI (sebelum item susulan
@@ -537,7 +546,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       }
     }
 
-    ({String id, int amount})? unclaimedChange;
+    int unclaimedChange = 0;
     int? existingShortfall;
     if (_isAddMode) {
       final origTx = await (db.select(db.transactions)
@@ -545,12 +554,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           .getSingleOrNull();
       if (origTx != null) {
         final origPayments = await db.getPaymentsForTx(widget.addToTxId!);
-        final lastPay = origPayments.isEmpty ? null : origPayments.last;
-        if (lastPay != null &&
-            lastPay.changeGiven > 0 &&
-            !lastPay.changeTaken) {
-          unclaimedChange = (id: lastPay.id, amount: lastPay.changeGiven);
-        }
+        unclaimedChange = reusableChangeTotal(origPayments);
         final shortfall = netRemainingOwed(origTx, origPayments);
         if (shortfall > 0) existingShortfall = shortfall;
       }
@@ -583,24 +587,14 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     }
   }
 
-  /// Centang "Pakai kembalian" di kalkulator bayar (mode tambah belanjaan) —
-  /// menulis langsung ke baris pembayaran sumbernya, aksi yang SAMA persis
-  /// dengan centang kembalian di Ringkasan struk (lihat receipt_screen.dart
-  /// `_toggleChangeTaken`, TERMASUK alasan `updatedAt` dicap ulang — supaya
-  /// centang ini ikut tersinkron ke device lain, bukan cuma lokal). Murni
-  /// penanda "sudah dipakai/diambil", tidak memengaruhi jumlah yang diinput
-  /// kasir.
-  Future<void> _toggleUnclaimedChangeTaken(bool value) async {
-    final change = _unclaimedChange;
-    if (change == null) return;
-    final db = ref.read(databaseProvider);
-    await (db.update(db.transactionPayments)
-          ..where((t) => t.id.equals(change.id)))
-        .write(TransactionPaymentsCompanion(
-      changeTaken: Value(value),
-      updatedAt: Value(DateTime.now()),
-    ));
-    if (mounted) setState(() => _unclaimedChangeTaken = value);
+  /// Centang "Pakai kembalian" di kalkulator bayar (mode tambah belanjaan).
+  /// Item 89 — HANYA state lokal (dulu langsung menulis `change_taken` baris
+  /// sumber, sehingga membatalkan layar Bayar meninggalkan kembalian
+  /// "terpakai" palsu & bercampur dgn makna "sudah diserahkan"). Nominalnya
+  /// ditulis ke `change_reused` baris pembayaran BARU saat konfirmasi.
+  void _toggleUnclaimedChangeTaken(bool value) {
+    if (_unclaimedChange <= 0) return;
+    setState(() => _unclaimedChangeTaken = value);
   }
 
   /// Tulis balik pilihan pelanggan/pegawai ke metadata keranjang agar tetap
@@ -1364,6 +1358,10 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
             paidAt: Value(now),
             kasirId: Value(device.deviceCode),
             note: const Value('Tambah belanjaan'),
+            // Item 89 — kembalian lama yang dipakai sbg bagian pembayaran ini.
+            changeReused: Value(_unclaimedChangeTaken
+                ? math.min(_unclaimedChange, paidAmount)
+                : 0),
           )
         : null;
 
@@ -2412,10 +2410,10 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
           total: _dueNow,
           initial: _tendered,
           methodName: selectedMethod?.name ?? _selectedMethodType,
-          unclaimedChangeAmount: _unclaimedChange?.amount,
+          unclaimedChangeAmount: _unclaimedChange > 0 ? _unclaimedChange : null,
           unclaimedChangeTaken: _unclaimedChangeTaken,
           onToggleUnclaimedChangeTaken:
-              _unclaimedChange == null ? null : _toggleUnclaimedChangeTaken,
+              _unclaimedChange <= 0 ? null : _toggleUnclaimedChangeTaken,
           existingShortfall: _existingShortfall,
         ),
       );

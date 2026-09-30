@@ -3472,9 +3472,9 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                           // Item 88 — last state: nota masih kurang ->
                           // tanpa Kembalian (cuma Sisa).
                           if (!isKurangBayar &&
-                              (_shownChangePayment?.changeGiven ?? 0) > 0)
+                              displayedChangeGiven(_payments) > 0)
                             _ChangeTakenRow(
-                              amount: formatRupiah(_shownChangePayment!.changeGiven),
+                              amount: formatRupiah(displayedChangeGiven(_payments)),
                               taken: _shownChangePayment!.changeTaken,
                               color: scheme.tertiary,
                               bold: true,
@@ -4752,6 +4752,23 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                           onChanged: isVoid
                               ? null
                               : (v) => _toggleChangeTaken(p.id, v),
+                        ),
+                      // Item 89 — kembalian ronde lama yang dipakai membayar
+                      // pembayaran INI ("Pakai kembalian" di layar Bayar).
+                      // Penjelas kenapa angka Dibayar di struk lebih kecil
+                      // dari jumlah `amount` di riwayat.
+                      if (!p.voided && (p.changeReused ?? 0) > 0)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 30, top: 1),
+                          child: Text(
+                            'Termasuk kembalian dipakai '
+                            '${formatRupiah(p.changeReused!)}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontStyle: FontStyle.italic,
+                              color: scheme.tertiary,
+                            ),
+                          ),
                         ),
                       // Sisa tempo per momen (poin 2 & 3 permintaan user) —
                       // pola sama _ChangeTakenRow tapi TANPA centang (sisa

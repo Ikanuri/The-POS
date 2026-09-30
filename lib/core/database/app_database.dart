@@ -304,7 +304,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 45;
+  int get schemaVersion => 46;
 
   /// Key `app_settings` yang BOLEH ikut sync host->klien.
   ///
@@ -930,6 +930,14 @@ class AppDatabase extends _$AppDatabase {
             // lama tetap valid apa adanya (null = belum pernah di-void).
             await _addColumnIfMissing('transaction_payments', 'updated_at',
                 transactionPayments, transactionPayments.updatedAt, m);
+          }
+          if (from < 46) {
+            // Item 89 — `change_reused`: kembalian lama yang dipakai
+            // membayar pembayaran ini (dipisah dari `change_taken`). Aditif
+            // & nullable TANPA isi ulang — null = data lama, tampilan jatuh
+            // ke aturan centang lama. Lihat dok kolom.
+            await _addColumnIfMissing('transaction_payments', 'change_reused',
+                transactionPayments, transactionPayments.changeReused, m);
           }
         },
         beforeOpen: (details) async {

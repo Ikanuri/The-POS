@@ -16,7 +16,8 @@ import 'helpers/pump_app.dart';
 /// kasir — kasir tetap input manual, sesuai simulasi fisik: kembalian sudah
 /// diberikan, pelanggan bayar lagi pakai uang itu). Centang di sini menulis
 /// langsung ke baris pembayaran sumbernya (aksi sama seperti centang di
-/// Ringkasan struk).
+/// Ringkasan struk). Item 89: kini HANYA state lokal; nominalnya ditulis ke
+/// `change_reused` baris pembayaran baru saat konfirmasi.
 void main() {
   late AppDatabase db;
   setUp(() => db = AppDatabase(NativeDatabase.memory()));
@@ -104,9 +105,9 @@ void main() {
   });
 
   testWidgets(
-      'centang "Pakai kembalian" menulis changeTaken=true ke baris '
-      'pembayaran sumbernya DAN checkbox-nya sendiri tampil tercentang '
-      '(bukan cuma nulis DB tapi tampilan beku)', (tester) async {
+      'centang "Pakai kembalian" HANYA state lokal (Item 89: TIDAK menulis '
+      'changeTaken ke DB — dulu bocor kalau layar dibatalkan) & checkbox-nya '
+      'sendiri tampil tercentang (bukan tampilan beku)', (tester) async {
     await seedTxWithUnclaimedChange();
 
     await pumpWithFakeApp(tester,
@@ -132,11 +133,46 @@ void main() {
     final pay1 = await (db.select(db.transactionPayments)
           ..where((t) => t.id.equals('pay1')))
         .getSingle();
-    expect(pay1.changeTaken, isTrue);
+    expect(pay1.changeTaken, isFalse,
+        reason: 'Item 89: centang "pakai" tidak boleh menulis DB sebelum '
+            'pembayaran disimpan (membatalkan layar = tanpa jejak)');
 
     // Toggle balik juga harus tampil (bukan cuma arah true).
     await tester.tap(find.text('Pakai kembalian'));
     await tester.pumpAndSettle();
     expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, isFalse);
+  });
+
+  testWidgets(
+      'Item 89: centang "Pakai kembalian" + konfirmasi menulis '
+      'change_reused ke baris pembayaran BARU (bukan mengubah changeTaken '
+      'baris lama)', (tester) async {
+    await seedTxWithUnclaimedChange();
+
+    await pumpWithFakeApp(tester,
+        db: db,
+        initialPrefs: prefsWithCartItem(),
+        child: const PaymentScreen(addToTxId: 'tx1'));
+
+    await tester.tap(find.text('Bayar ${formatRupiah(3000)}'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Pakai kembalian'));
+    await tester.pumpAndSettle();
+    for (final k in ['3', '0', '00']) {
+      await tester.tap(find.text(k).last);
+      await tester.pump();
+    }
+    await tester.tap(find.text('Bayar').last);
+    await tester.pumpAndSettle();
+
+    final pays = await db.getPaymentsForTx('tx1');
+    expect(pays.length, 2, reason: 'pembayaran tambah belanjaan tersimpan');
+    expect(pays.first.changeTaken, isFalse,
+        reason: 'baris lama tidak disentuh (bukan makna "pakai")');
+    expect(pays.last.amount, 3000);
+    expect(pays.last.changeReused, 3000,
+        reason: 'min(kembalian 5.000, Diterima 3.000)');
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
   });
 }

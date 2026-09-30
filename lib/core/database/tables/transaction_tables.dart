@@ -171,6 +171,10 @@ class TransactionPayments extends Table {
   /// belanjaan) bisa punya beberapa kembalian terpisah, masing-masing
   /// dengan status ambil sendiri-sendiri.
   ///
+  /// Item 89 — sejak `change_reused` ada, kolom ini HANYA pengingat "sudah
+  /// diserahkan" & TIDAK memengaruhi angka struk (kembalian yang DIPAKAI
+  /// membayar ronde berikutnya dicatat di [changeReused]).
+  ///
   /// IKUT SYNC sejak audit Pra-Bayar (susulan `e27bf8a` — centang ini
   /// dipakai `latestChangeGiven`/`printer_service.dart` utk menentukan
   /// baris "Kembali" mana yang masih harus dicetak/dibagikan, jadi tidak
@@ -221,6 +225,23 @@ class TransactionPayments extends Table {
   /// Pembayaran" in-app (`receipt_screen.dart`) utk menampilkan baris
   /// keterangan tambahan, TIDAK PERNAH dipakai utk kalkulasi ulang apa pun.
   IntColumn get prabayarChangeTakenBeforeCheckout => integer().nullable()();
+
+  /// Item 89 — nominal kembalian ronde LAMA yang dipakai kasir sbg bagian
+  /// dari pembayaran INI (centang "Pakai kembalian" di layar Bayar mode
+  /// Tambah Belanjaan). Dipisah dari [changeTaken] ("sudah diserahkan",
+  /// pengingat murni, TIDAK memengaruhi angka struk) — dulu satu kolom
+  /// dipakai utk dua makna, akibatnya mencentang "diserahkan" bisa membuat
+  /// struk jadi net & centang "pakai" yang lupa dicentang membuat tombol
+  /// "Gabungkan kembalian" menawarkan uang yang sebenarnya sudah terpakai.
+  ///
+  /// Ditulis SEKALI bersama baris pembayaran (satu transaksi DB, tidak
+  /// pernah di-update) → ikut sync sbg bagian baris, tanpa OR-merge; kalau
+  /// pembayaran ini dibatalkan (`voided`) pemakaiannya otomatis batal &
+  /// kembalian lama "hidup" lagi. null = data LAMA (sebelum kolom ini
+  /// ada / HP versi lama): tampilan jatuh kembali ke aturan centang lama
+  /// (lihat `change_display.dart`). Baris baru dari app ini selalu 0/nominal.
+  IntColumn get changeReused =>
+      integer().nullable().clientDefault(() => 0)();
 
   /// Item 81 — bug sync: baris ini diperlakukan append-only murni oleh
   /// `dumpSince`/`mergeRows` (filter `WHERE paid_at >= ?`, tanpa kolom
