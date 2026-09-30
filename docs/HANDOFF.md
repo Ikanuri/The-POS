@@ -6,7 +6,34 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update sesi 27 September 2026, sesi kedelapan puluh dua — tiga batch
+_Update sesi 30 September 2026, sesi kedelapan puluh tiga — **Item 89
+(kolom `change_reused`, opsi B disetujui user)**. Masalah: satu kolom
+`transaction_payments.change_taken` dipakai utk dua makna ("sudah
+diserahkan" di struk vs "dipakai membayar Tambah Belanjaan" di layar
+Bayar) → mencentang "diserahkan" membuat struk net (`displayedChangePayment`
+melewati baris dicentang), lupa mencentang "pakai" membuat tombol Gabungkan
+menawarkan uang yang sudah terpakai, centang "pakai" langsung menulis DB
+(bocor kalau layar Bayar dibatalkan), dan opsi "Pakai kembalian" hanya
+muncul kalau pembayaran TERAKHIR punya kembalian. Desain: kolom baru
+`change_reused` (INT nullable, `clientDefault(0)`; schemaVersion **46**,
+tanpa isi ulang data) di baris pembayaran PEMAKAI — ditulis sekali
+bersama pembayaran (`_confirmAddItems` → `min(sisa kembalian, Diterima)`),
+ikut sync sbg bagian baris (tanpa OR-merge), otomatis batal kalau baris
+itu di-void. `change_taken` kini pengingat MURNI (tidak memengaruhi
+angka). `change_display.dart`: `_remainingChangeByRound` (konsumen
+`changeReused` non-null mengurangi sisa ronde sebelumnya, yang terbaru
+dulu; konsumen `null` = data LAMA/HP versi lama → aturan centang lama),
+`displayedChangeGiven`, `unclaimedChangeTotal` (Σ changeGiven tak-dicentang
+− Σ changeReused), `reusableChangeTotal` (dipakai layar Bayar; semua
+ronde). Riwayat Pembayaran menambah keterangan "Termasuk kembalian
+dipakai". Test: `change_reused_test.dart` (+ update
+`payment_screen_unclaimed_change_test.dart`, 24 test migrasi naik ke
+versi 46), revert-verify sudah dilakukan (gagal dgn 60.000 vs 10.000 dst).
+Catatan: nota LAMA yang kembaliannya dicentang tetap tampil net (perilaku
+lama, tidak bisa dibedakan dipakai vs diserahkan). Versi kerja
+**2.71.2+163**. Branch belum di-merge ke main (menunggu user).
+
+_Sebelumnya: update sesi 27 September 2026, sesi kedelapan puluh dua — tiga batch
 dari laporan user, dikerjakan berurutan (disetujui user) & di-commit
 terpisah di `claude/kategori-produk-qty-harga-mqjh21`:
 
@@ -75,7 +102,7 @@ Laporan user yang DIABAIKAN atas permintaan user: pre-order yang sudah
 dipenuhi di host muncul lagi setelah sync (kemungkinan host lupa
 memenuhi; jalur `applyLaciMejaProposals` sudah menjaga
 fulfilled_at/cancelled_at). Versi kerja **2.71.1+162** (2.71.0 MINOR fitur baru, +PATCH susulan
-`2b4c87e`). schemaVersion TETAP **45**. Branch tugas ini
+`2b4c87e`). schemaVersion 45 saat itu (kini 46, lihat Item 89). Branch tugas ini
 (nama warisan katalog HTML) sudah DUA kali direstart dari `origin/main` —
 lihat catatan branch di sesi 81 di CHANGELOG; pola itu normal di sini.
 
@@ -150,7 +177,7 @@ Pra-Bayar (laporan user via 2 screenshot, commit `c4d1c87`) + AUDIT
 menyeluruh Pra-Bayar atas permintaan user (commit `0329583`, 4 bug
 keuangan) + fix kembalian basi tercetak/dibagikan lagi (commit
 `e27bf8a`). Versi kerja **2.69.5+155** (PATCH — murni bugfix).
-schemaVersion TETAP **45**. **2 hal MENUNGGU jawaban user — lihat PLAN.md
+schemaVersion 45 saat itu (kini 46, lihat Item 89). **2 hal MENUNGGU jawaban user — lihat PLAN.md
 Item 84** (data build 7–9 Sep; konflik desain footer vs Item 65)._
 
 **Fix kembalian basi tercetak/dibagikan lagi (`e27bf8a`)** — laporan user

@@ -7,6 +7,11 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-30 (sesi kedelapan puluh tiga — Item 89: pisah kembalian "diserahkan" vs "dipakai")
+
+- `3be54e9` — fix(kembalian): pisahkan "diserahkan" (change_taken) dari
+  "dipakai" (change_reused) — centang tak lagi mengubah struk (schema 46)
+
 ## 2026-09-27 (sesi kedelapan puluh dua — Pra-Bayar melunasi hutang/pre-order, Laci Meja ikut pelanggan terkini nota, struk "last state")
 
 - `2b4c87e` — fix(struk): kembalian yg cuma terjadi sekali di ronde lama

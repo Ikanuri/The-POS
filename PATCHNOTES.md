@@ -8,6 +8,30 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 30 September 2026 (sesi kedelapan puluh tiga)
+
+### 🐛 Perbaikan
+- **Mencentang "kembalian sudah diserahkan" tidak lagi mengubah angka di
+  struk.** Sebelumnya, nota yang dibayar lebih lalu ditambah belanjaan
+  (dibayar pas) bisa berubah dari "Bayar Rp164.000 / Kembali Rp6.650"
+  menjadi "Bayar Rp157.350" tanpa baris Kembali begitu kembalian
+  dicentang — padahal riwayat pembayaran di bawahnya tetap menjumlah
+  lebih. Sekarang centang itu murni pengingat; struk tetap sama, baik
+  sebelum maupun sesudah dicentang, dan baris Kembalian beserta kotak
+  centangnya tidak lagi lenyap.
+- **"Pakai kembalian" di layar Bayar (Tambah Belanjaan) kini dicatat
+  dengan benar.** Kembalian lama yang dipakai membayar belanja tambahan
+  tercatat bersama pembayarannya (tampil di Riwayat Pembayaran sebagai
+  "Termasuk kembalian dipakai ..."), bisa dipakai sebagian, dan
+  ditawarkan dari SEMUA pembayaran sebelumnya (bukan cuma yang terakhir).
+  Kalau layar Bayar dibatalkan, tidak ada yang berubah; kalau pembayaran
+  itu dibatalkan, kembalian lamanya otomatis "hidup" lagi. Tombol
+  "Gabungkan kembalian belum diambil" pun tidak lagi menawarkan uang yang
+  sebenarnya sudah terpakai.
+- Nota lama (sebelum pembaruan ini) tetap tampil seperti biasa.
+
+---
+
 ## 27 September 2026 (sesi kedelapan puluh dua)
 
 ### ✨ Fitur Baru
