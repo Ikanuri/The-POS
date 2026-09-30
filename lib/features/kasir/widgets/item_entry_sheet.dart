@@ -8,6 +8,7 @@ import '../../../core/providers/device_provider.dart';
 import '../../../core/services/price_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/input_formatters.dart';
+import '../../../core/utils/stock_display.dart';
 import '../cart_price_category_provider.dart';
 import '../cart_provider.dart';
 
@@ -97,6 +98,7 @@ class _VariantOption {
   final Product product;
   final String unitId;
   final String unitName;
+
   /// Harga yang SEDANG BERLAKU (bisa kategori) — lihat dok sejenis di
   /// `_UnitOption.basePrice`. Utk harga dasar sejati lihat [trueBasePrice].
   final int price;
@@ -234,8 +236,7 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
       // atau produk bukan anggota) tidak kena biaya query ekstra sama
       // sekali.
       final trueBasePrice = resolved.source == PriceSource.category
-          ? (await priceService.resolvePrice(productUnitId: u.id, qty: 1))
-              .price
+          ? (await priceService.resolvePrice(productUnitId: u.id, qty: 1)).price
           : resolved.price;
       final stock = await db.currentStock(u.id);
       final tiers = await db.getPriceTiers(u.id);
@@ -299,9 +300,8 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
             .where((b) => b.isPrimary)
             .map((b) => b.barcode)
             .firstOrNull,
-        priceFromCategoryId: vResolved.source == PriceSource.category
-            ? activeCategoryId
-            : null,
+        priceFromCategoryId:
+            vResolved.source == PriceSource.category ? activeCategoryId : null,
       ));
     }
 
@@ -411,6 +411,72 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
       _variants.fold(0.0, (s, v) => s + (_variantQty[v.product.id] ?? 0));
 
   bool get _canSubmit => _qty > 0 || _totalVariantQty > 0;
+
+  /// Usulan user — stok SEMUA satuan ("1.250 biji / 125 slop / 12,5 dus",
+  /// satuan terpilih ditebalkan) + ikon peringatan: kuning = menipis
+  /// (<= minStock satuan dasar), merah = habis (<= 0 / ditandai Stok Habis).
+  Widget _buildStockLine(ColorScheme scheme) {
+    final sel = _sel;
+    final style = TextStyle(fontSize: 12, color: scheme.onSurfaceVariant);
+    if (sel == null) return const SizedBox.shrink();
+    if (sel.unit.isNonStock) {
+      return Row(children: [
+        Icon(Icons.inventory_2_outlined,
+            size: 14, color: scheme.onSurfaceVariant),
+        const SizedBox(width: 6),
+        Text('Non-stok', style: style),
+      ]);
+    }
+    final base = _options.firstWhere((o) => o.unit.isBaseUnit,
+        orElse: () => _options.first);
+    double ratioOf(_UnitOption o) =>
+        o.unit.isBaseUnit ? 1.0 : o.unit.ratioToBase;
+    // Stok satuan dasar = stok satuan terpilih x isinya.
+    final baseStock = sel.stock * ratioOf(sel);
+    final level = stockLevel(
+      baseStock: baseStock,
+      minStock: base.unit.minStock,
+      markedOutOfStock: _markedOutOfStock,
+    );
+    final sorted = _options.where((o) => ratioOf(o) > 0).toList()
+      ..sort((a, b) => ratioOf(a).compareTo(ratioOf(b)));
+    final spans = <InlineSpan>[const TextSpan(text: 'Stok ')];
+    for (var i = 0; i < sorted.length; i++) {
+      final o = sorted[i];
+      if (i > 0) spans.add(const TextSpan(text: ' / '));
+      spans.add(TextSpan(
+        text: '${formatStockQty(baseStock / ratioOf(o))} ${o.unitName}',
+        style: identical(o, sel)
+            ? TextStyle(fontWeight: FontWeight.w700, color: scheme.onSurface)
+            : null,
+      ));
+    }
+    final alertColor =
+        level == StockLevel.out ? scheme.error : Colors.amber.shade800;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (level == StockLevel.ok)
+          Icon(Icons.inventory_2_outlined,
+              size: 14, color: scheme.onSurfaceVariant)
+        else
+          Tooltip(
+            message: level == StockLevel.out ? 'Stok habis' : 'Stok menipis',
+            child: Icon(
+                level == StockLevel.out
+                    ? Icons.error_rounded
+                    : Icons.warning_amber_rounded,
+                key: ValueKey(level == StockLevel.out
+                    ? 'stock-alert-out'
+                    : 'stock-alert-low'),
+                size: 16,
+                color: alertColor),
+          ),
+        const SizedBox(width: 6),
+        Expanded(child: Text.rich(TextSpan(children: spans), style: style)),
+      ],
+    );
+  }
 
   String _fmtQty(double q) => q % 1 == 0 ? q.toInt().toString() : q.toString();
 
@@ -852,25 +918,10 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                     const SizedBox(height: 12),
                   ],
 
-                  // ── Stok satuan terpilih ──────────────────────────────
+                  // ── Stok semua satuan + indikator ────────────────────
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Row(
-                      children: [
-                        Icon(Icons.inventory_2_outlined,
-                            size: 14, color: scheme.onSurfaceVariant),
-                        const SizedBox(width: 6),
-                        Text(
-                          _sel == null
-                              ? ''
-                              : _sel!.unit.isNonStock
-                                  ? 'Non-stok'
-                                  : 'Stok ${_fmtQty(_sel!.stock)} ${_sel!.unitName}',
-                          style: TextStyle(
-                              fontSize: 12, color: scheme.onSurfaceVariant),
-                        ),
-                      ],
-                    ),
+                    child: _buildStockLine(scheme),
                   ),
                   const SizedBox(height: 14),
 

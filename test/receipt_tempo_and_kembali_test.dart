@@ -2,6 +2,7 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:the_pos/core/database/app_database.dart';
+import 'package:the_pos/core/utils/change_display.dart';
 import 'package:the_pos/features/kasir/receipt_screen.dart';
 
 import 'helpers/pump_app.dart';
@@ -16,6 +17,11 @@ import 'helpers/pump_app.dart';
 /// pembayaran sebelumnya tetap ada di riwayat & harus tetap dilaporkan.
 /// Ringkasan on-screen (`isKurangBayar` + `_ChangeTakenRow`) sudah benar
 /// pakai 2 kondisi independen sejak awal; struk gambar-lah yang menyimpang.
+///
+/// Item 88 (aturan "last state", permintaan user): nota yang masih kurang
+/// cuma menampilkan Sisa. Kembalian lama yang BELUM diambil tidak hilang —
+/// kasir menampilkannya lewat tombol "Gabungkan kembalian belum diambil",
+/// lalu struk share memuat "Kembali (gabungan)" BERSAMA Sisa.
 void main() {
   late AppDatabase db;
   const txId = 'tx1';
@@ -24,9 +30,9 @@ void main() {
   tearDown(() async => db.close());
 
   testWidgets(
-      'struk gambar (_ReceiptPaper) tampilkan Kembali DAN Sisa BERSAMAAN '
-      'saat nota masih kurang_bayar tapi pembayaran sebelumnya sempat '
-      'memberi kembalian', (tester) async {
+      'nota kurang_bayar dgn kembalian lama belum diambil: default Sisa '
+      'saja; tombol gabung -> Kembali (gabungan) DAN Sisa bersamaan',
+      (tester) async {
     await db.into(db.transactions).insert(TransactionsCompanion.insert(
           id: txId,
           localId: 'K1-1',
@@ -80,24 +86,34 @@ void main() {
     expect(tx.status, 'kurang_bayar',
         reason: 'nota kembali menagih setelah total naik lagi');
     final payments = await db.getPaymentsForTx(txId);
-    expect(latestChangeGiven(payments), 10000,
-        reason: 'kembalian pembayaran pertama tetap ada di riwayat');
+    expect(lastStateChange(tx, payments), 0,
+        reason: 'last state nota kurang: tanpa Kembali');
+    expect(unclaimedChangeTotal(payments), 10000,
+        reason: 'kembalian pembayaran pertama belum diambil');
+    expect(hasExtraUnclaimedChange(tx, payments), isTrue);
     expect(netRemainingOwed(tx, payments), 30000,
         reason: '80.000 - 60.000 dibayar + 10.000 kembalian = 30.000 sisa');
 
     await pumpWithFakeApp(tester,
         db: db, child: const ReceiptScreen(transactionId: txId));
 
+    // Default (last state): Sisa saja.
+    await tester.tap(find.byTooltip('Bagikan Struk'));
+    await tester.pumpAndSettle();
+    expect(find.text('Kembali'), findsNothing);
+    expect(find.text('Sisa'), findsWidgets);
+    await tester.tapAt(const Offset(5, 5));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.textContaining('Gabungkan kembalian belum diambil'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Bagikan Struk'));
     await tester.pumpAndSettle();
 
-    // KEDUA baris harus tampil bersamaan — ini bug-nya: sebelum fix, baris
-    // "Sisa" hilang total krn if/else-if dgn baris "Kembali".
-    expect(find.text('Kembali'), findsWidgets,
-        reason: 'kembalian dari pembayaran sebelumnya tetap dilaporkan');
+    expect(find.text('Kembali (gabungan)'), findsOneWidget,
+        reason: 'kembalian lama yg belum diambil tetap bisa dilaporkan');
     expect(find.text('Sisa'), findsWidgets,
-        reason: 'BUG: tempo/sisa yang masih nyata harus tetap tampil, '
-            'bukan hilang gara-gara ada baris Kembali');
+        reason: 'tempo/sisa yang masih nyata harus tetap tampil');
     expect(find.text('Rp ${_fmt(30000)}'), findsWidgets,
         reason: 'nominal sisa tagihan yang benar');
 

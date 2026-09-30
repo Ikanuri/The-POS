@@ -7,6 +7,28 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-09-30 (sesi kedelapan puluh tiga — Item 89: pisah kembalian "diserahkan" vs "dipakai")
+
+- `7b83fcf` — feat(produk): Isi per Satuan bisa dihitung dari satuan lain
+  (snapshot ke ratioToBase)
+- `3bd0ff0` — feat(kasir): kartu item tampilkan stok semua satuan +
+  indikator kuning/merah
+- `bead0ee` — feat(kasir): tombol chevron tap utk buka/tutup varian di
+  daftar produk
+- `3be54e9` — fix(kembalian): pisahkan "diserahkan" (change_taken) dari
+  "dipakai" (change_reused) — centang tak lagi mengubah struk (schema 46)
+
+## 2026-09-27 (sesi kedelapan puluh dua — Pra-Bayar melunasi hutang/pre-order, Laci Meja ikut pelanggan terkini nota, struk "last state")
+
+- `2b4c87e` — fix(struk): kembalian yg cuma terjadi sekali di ronde lama
+  tetap tampil (struk gross)
+- `e7ecb49` — fix(struk): kembalian "last state" konsisten
+  in-app/share/cetak + tombol gabung kembalian belum diambil
+- `cc50d3e` — fix(laci-meja): pre-order/titip/pinjaman ikut pelanggan
+  TERKINI nota setelah ganti pelanggan
+- `e8bf0fe` — fix(kasir): Pra-Bayar di keranjang kini ikut melunasi
+  hutang/pre-order saat checkout
+
 ## 2026-09-25 (sesi kedelapan puluh satu — checkout boleh sebagian lunas kalau uang cukup lunasi hutang tapi tidak cukup utk belanja baru)
 
 - `31fcf4b` — test(kasir): buktikan checkout partial-settlement (Item 85,

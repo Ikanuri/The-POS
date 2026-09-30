@@ -11,6 +11,7 @@ import '../../core/providers/device_provider.dart';
 import '../../core/providers/product_providers.dart';
 import '../../core/utils/input_formatters.dart';
 import '../../core/utils/internal_barcode.dart';
+import '../../core/utils/unit_ratio_calc.dart';
 import '../../core/widgets/inline_banner.dart';
 import '../../core/widgets/price_category_margin_sheet.dart';
 import '../../core/widgets/unit_dropdown.dart';
@@ -808,8 +809,30 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                                       .map((t) => t.name)
                                       .firstOrNull ??
                                   'Satuan ${e.key + 1}';
+                              String labelOf(int i) =>
+                                  _unitTypes
+                                      .where(
+                                          (t) => t.id == _units[i].unitTypeId)
+                                      .map((t) => t.name)
+                                      .firstOrNull ??
+                                  'Satuan ${i + 1}';
+                              final baseIdx =
+                                  _units.indexWhere((u) => u.isBaseUnit);
                               return _UnitCard(
                                 key: ValueKey(unitId),
+                                ratioReferences: [
+                                  for (var i = 0; i < _units.length; i++)
+                                    if (i != e.key)
+                                      (
+                                        name: labelOf(i),
+                                        ratioToBase: _units[i].isBaseUnit
+                                            ? 1.0
+                                            : _units[i].ratioToBase,
+                                      ),
+                                ],
+                                baseUnitLabel: baseIdx < 0
+                                    ? 'satuan dasar'
+                                    : labelOf(baseIdx),
                                 entry: e.value,
                                 index: e.key,
                                 unitTypes: _unitTypes,
@@ -1834,7 +1857,14 @@ class _UnitCard extends ConsumerStatefulWidget {
     this.onAdjustStock,
     this.autofocusFirstField = false,
     this.onGenerateBarcode,
+    this.ratioReferences = const [],
+    this.baseUnitLabel = 'satuan dasar',
   });
+
+  /// Satuan LAIN pada produk ini yang bisa jadi acuan "Isi per Satuan"
+  /// (bantuan input — hasil tetap disimpan sbg `ratioToBase`).
+  final List<RatioReference> ratioReferences;
+  final String baseUnitLabel;
 
   final _UnitEntry entry;
   final int index;
@@ -2327,6 +2357,35 @@ class _UnitCardState extends ConsumerState<_UnitCard> {
               ],
             ),
 
+            if (!widget.readOnly &&
+                !widget.entry.isBaseUnit &&
+                widget.ratioReferences.isNotEmpty)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  key: const ValueKey('ratio-from-reference'),
+                  style: TextButton.styleFrom(
+                    minimumSize: const Size(0, 36),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  icon: const Icon(Icons.calculate_outlined, size: 16),
+                  label: const Text('Hitung dari satuan lain',
+                      style: TextStyle(fontSize: 12)),
+                  onPressed: () async {
+                    final r = await _ratioReferenceDialog(
+                      context,
+                      unitLabel: widget.unitLabel,
+                      baseLabel: widget.baseUnitLabel,
+                      references: widget.ratioReferences,
+                    );
+                    if (r != null && mounted) {
+                      _ratioCtrl.text = formatRatio(r);
+                      widget.onChanged(widget.entry.copyWith(ratioToBase: r));
+                    }
+                  },
+                ),
+              ),
+
             // ── Lacak stok ───────────────────────────────────────────────────
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
@@ -2630,4 +2689,91 @@ class _VariantStockLabel extends ConsumerWidget {
       },
     );
   }
+}
+
+/// Dialog bantuan "Isi per Satuan" dari satuan lain: ketik jumlah + pilih
+/// satuan acuan -> pratinjau "= N <satuan dasar>". Mengembalikan isi dalam
+/// satuan dasar (null bila dibatalkan). Lihat `ratioFromReference`.
+Future<double?> _ratioReferenceDialog(
+  BuildContext context, {
+  required String unitLabel,
+  required String baseLabel,
+  required List<RatioReference> references,
+}) {
+  final countCtrl = TextEditingController();
+  var sel = 0;
+  return showDialog<double>(
+    context: context,
+    builder: (ctx) => StatefulBuilder(builder: (ctx, setState) {
+      final count = double.tryParse(countCtrl.text.replaceAll(',', '.'));
+      final result = count == null
+          ? null
+          : ratioFromReference(
+              count: count, referenceRatioToBase: references[sel].ratioToBase);
+      return AlertDialog(
+        title: Text('Isi $unitLabel'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                key: const ValueKey('ratio-ref-count'),
+                controller: countCtrl,
+                autofocus: true,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  labelText: '1 $unitLabel berisi (jumlah)',
+                  isDense: true,
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<int>(
+                key: const ValueKey('ratio-ref-unit'),
+                value: sel,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                    labelText: 'Satuan acuan', isDense: true),
+                items: [
+                  for (var i = 0; i < references.length; i++)
+                    DropdownMenuItem(
+                      value: i,
+                      child: Text(
+                        '${references[i].name} '
+                        '(= ${formatRatio(references[i].ratioToBase)} $baseLabel)',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                ],
+                onChanged: (v) => setState(() => sel = v ?? 0),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                result == null
+                    ? 'Isi jumlah dulu'
+                    : '1 $unitLabel = ${formatRatio(result)} $baseLabel',
+                key: const ValueKey('ratio-ref-preview'),
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            style: TextButton.styleFrom(minimumSize: const Size(0, 40)),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Batal'),
+          ),
+          TextButton(
+            key: const ValueKey('ratio-ref-apply'),
+            style: TextButton.styleFrom(minimumSize: const Size(0, 40)),
+            onPressed: result == null ? null : () => Navigator.pop(ctx, result),
+            child: const Text('Terapkan'),
+          ),
+        ],
+      );
+    }),
+  );
 }

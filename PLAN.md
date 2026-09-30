@@ -66,8 +66,9 @@ sekarang, TIDAK ada rencana eksekusi._
 ## Item 84 — Sisa audit Pra-Bayar (23 Sep 2026) — MENUNGGU KEPUTUSAN USER
 
 4 bug keuangan Pra-Bayar SUDAH diperbaiki di commit `0329583` (lihat
-CHANGELOG). Dua hal di bawah SENGAJA belum dieksekusi karena butuh
-keputusan/informasi dari user:
+CHANGELOG). 84b (konflik footer keranjang vs checkout Item 65) SELESAI
+lewat Item 86 (Pra-Bayar boleh melunasi hutang/pre-order). Sisa satu hal
+di bawah SENGAJA belum dieksekusi karena butuh informasi dari user:
 
 **84a — Data nota yang dibuat dgn build 7–9 Sep 2026 (sekitar v2.48–v2.53,
 build ~+102 s/d ~+111).** Di jendela itu `transaction_payments.amount` baris
@@ -84,25 +85,6 @@ apakah ada HP yang sempat memakai build 7–9 Sep & mencatat transaksi
 Pra-Bayar dgn kembalian dicentang diambil SEBELUM checkout? Kalau TIDAK →
 tidak perlu apa-apa. Kalau YA → perlu perbaikan data terarah (mis. daftar
 nota kandidat utk dicek manual owner), bukan tebakan otomatis.
-
-**84b — Konflik desain: footer keranjang vs aturan checkout Item 65.**
-Footer keranjang (`_PrabayarFooterSummary`, `cart_sheet.dart`) & kalkulator
-Tambah Bayar Pra-Bayar (`_addPrabayar`) menghitung Sisa/Kembalian terhadap
-total GABUNGAN (belanja + Lunasi Hutang + Pelunasi Pre-order) — keputusan
-Item 77 atas permintaan user. Tapi checkout (Item 65) menetapkan Pra-Bayar
-HANYA menutup belanja baru, TIDAK PERNAH pelunasan hutang/pre-order (model
-data: baris Pra-Bayar menempel ke nota BARU, pelunasan menempel ke nota
-LAMA). Contoh: belanja Rp30.000, Lunasi Hutang Rp50.000, Pra-Bayar
-Rp100.000 → footer "Kembalian Rp20.000" (dicentang diambil → pool
-Rp80.000), tapi layar bayar tetap menagih Rp50.000 utk hutang lalu
-mengembalikan Rp50.000 sbg kembalian. Uangnya tetap impas SELAMA kasir
-menuruti layar, tapi pelanggan diminta uang tunai yang langsung
-dikembalikan (dan kalau tidak punya, kasir mentok di gerbang). Opsi:
-(1) footer mengikuti aturan Item 65 — Kembalian dihitung dari belanja
-saja, hutang/pre-order tampil sbg Sisa terpisah (bisa muncul bersamaan);
-(2) ubah model data supaya kelebihan Pra-Bayar boleh melunasi hutang
-(perubahan besar di `saveTransactionWithDebtSettlements`/checkout, risiko
-tinggi). Rekomendasi: opsi 1.
 
 ---
 

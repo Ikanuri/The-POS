@@ -8,6 +8,76 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 30 September 2026 (sesi kedelapan puluh tiga)
+
+### ✨ Fitur Baru
+- **Buka varian cukup dengan satu ketukan.** Produk yang punya varian
+  kini punya tombol panah (▾) di sisi kanan barisnya — ketuk untuk
+  membuka/menutup daftar varian. Menahan baris produk tetap bisa dipakai
+  sebagai jalan pintas.
+- **Stok semua satuan tampil sekaligus di kartu item kasir**, mis.
+  "Stok 1.250 biji / 125 slop / 12,5 dus" (satuan yang sedang dipilih
+  ditebalkan) — tidak perlu lagi menghitung sendiri. Ada juga ikon
+  peringatan: **kuning** kalau stok sudah menipis (di bawah stok
+  minimum), **merah** kalau stok habis.
+- **"Isi per Satuan" bisa dihitung dari satuan lain.** Di pengaturan
+  produk, tombol "Hitung dari satuan lain" membantu mengisi isi satuan
+  besar dari satuan terdekatnya — mis. 1 dus = 4 bal, tanpa harus
+  mengonversi sampai ke satuan dasar (biji) secara manual. Hasilnya
+  tersimpan sebagai isi biasa.
+
+### 🐛 Perbaikan
+- **Mencentang "kembalian sudah diserahkan" tidak lagi mengubah angka di
+  struk.** Sebelumnya, nota yang dibayar lebih lalu ditambah belanjaan
+  (dibayar pas) bisa berubah dari "Bayar Rp164.000 / Kembali Rp6.650"
+  menjadi "Bayar Rp157.350" tanpa baris Kembali begitu kembalian
+  dicentang — padahal riwayat pembayaran di bawahnya tetap menjumlah
+  lebih. Sekarang centang itu murni pengingat; struk tetap sama, baik
+  sebelum maupun sesudah dicentang, dan baris Kembalian beserta kotak
+  centangnya tidak lagi lenyap.
+- **"Pakai kembalian" di layar Bayar (Tambah Belanjaan) kini dicatat
+  dengan benar.** Kembalian lama yang dipakai membayar belanja tambahan
+  tercatat bersama pembayarannya (tampil di Riwayat Pembayaran sebagai
+  "Termasuk kembalian dipakai ..."), bisa dipakai sebagian, dan
+  ditawarkan dari SEMUA pembayaran sebelumnya (bukan cuma yang terakhir).
+  Kalau layar Bayar dibatalkan, tidak ada yang berubah; kalau pembayaran
+  itu dibatalkan, kembalian lamanya otomatis "hidup" lagi. Tombol
+  "Gabungkan kembalian belum diambil" pun tidak lagi menawarkan uang yang
+  sebenarnya sudah terpakai.
+- Nota lama (sebelum pembaruan ini) tetap tampil seperti biasa.
+
+---
+
+## 27 September 2026 (sesi kedelapan puluh dua)
+
+### ✨ Fitur Baru
+- **Pra-Bayar di keranjang sekarang benar-benar bisa melunasi hutang &
+  DP pre-order.** Sebelumnya, walau keranjang sudah menunjukkan lunas
+  (Pra-Bayar menutup belanja + hutang), layar Bayar tetap menagih nominal
+  hutang secara tunai lalu mengembalikan kelebihan Pra-Bayar sebagai
+  kembalian. Sekarang Pra-Bayar dipakai melunasi hutang/pre-order lebih
+  dulu, sisanya untuk belanja — kalau sudah cukup, cukup tekan
+  "Selesaikan Transaksi". Pencatatan uangnya tetap satu kali (Tutup Kasir
+  tidak dobel).
+- **Tombol "Gabungkan kembalian belum diambil"** di struk: kalau di satu
+  nota ada beberapa kembalian yang belum diserahkan, tombol ini
+  menjumlahkannya supaya tampil di struk share & cetak. Tombol hilang
+  sendiri begitu semua kembalian dicentang (termasuk dari HP lain setelah
+  sinkron).
+
+### 🐛 Perbaikan
+- **Struk cetak & share selalu menampilkan keadaan terakhir nota.**
+  Mencentang "kembalian sudah diambil" tidak lagi menghapus baris
+  Kembali dari cetakan (dulu "Bayar" jadi sama dengan Total, tidak cocok
+  dengan riwayat pembayaran). Nota yang masih kurang cukup menampilkan
+  Sisa. Kembalian Pra-Bayar dari ronde sebelumnya juga tidak lagi
+  menumpuk ke kembalian terakhir.
+- **Pre-order, titipan & pinjaman ikut pindah saat pelanggan nota
+  diganti.** Sebelumnya, setelah pelanggan di nota diganti, di keranjang
+  pelanggan baru cuma muncul pengingat hutang — chip DP Pre-order,
+  "Pelunasi Pre-order" (termasuk "Sekaligus penuhi") dan pengingat Laci
+  Meja masih menempel di pelanggan lama.
+
 ## 25 September 2026 (sesi kedelapan puluh satu)
 
 ### ✨ Fitur Baru

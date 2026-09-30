@@ -19,9 +19,11 @@ import 'helpers/pump_app.dart';
 /// `191570c`) menampilkan nominal gross + catatan "sudah diambil sebelum
 /// checkout". Root cause: `dibayarDisplay` dipanggil dgn
 /// `_latestPayment?.changeGiven` SAJA, tidak pernah menjumlah
-/// `prabayarChangeTakenBeforeCheckout`. Fix: `_kembalianGabungan`
-/// (`_ReceiptScreenState`) / `kembalianGabungan` (`_ReceiptPaper`) /
-/// `kembalianGabungan` (`printer_service.dart`) menjumlah KEDUA komponen.
+/// `prabayarChangeTakenBeforeCheckout`. Sekarang (Item 88) lewat
+/// `lastStateChange`: kembalian ronde TERAKHIR = changeGiven + potongan
+/// pre-checkout di baris pembayaran terakhir. Potongan pre-checkout di
+/// baris LEBIH LAMA adalah kembalian ronde sebelumnya (sudah diberikan)
+/// dan TIDAK ikut ditumpuk (skenario "KOMBINASI" di bawah).
 void main() {
   late AppDatabase db;
   setUp(() => db = AppDatabase(NativeDatabase.memory()));
@@ -121,9 +123,8 @@ void main() {
     });
 
     testWidgets(
-        'KOMBINASI: kembalian pre-checkout Pra-Bayar DAN kembalian momen '
-        'checkout SEKALIGUS — KEDUA komponen ikut terhitung benar '
-        '(Dibayar = Total + jumlah keduanya), kedua baris muncul terpisah',
+        'KOMBINASI (Item 88 last state): kembalian pre-checkout ronde LAMA '
+        '(600) TIDAK ditumpuk ke kembalian ronde terakhir (1.000)',
         (tester) async {
       const txId = 'tx1';
       await insertTx(id: txId, total: 100000, paid: 100600);
@@ -149,17 +150,15 @@ void main() {
       await pumpWithFakeApp(tester,
           db: db, child: const ReceiptScreen(transactionId: txId));
 
-      // 100.000 (total) + 1.000 (checkout-moment) + 600 (pre-checkout).
-      expect(find.text('Tunai · ${formatRupiah(101600)}'), findsOneWidget,
-          reason: 'Dibayar HARUS gabungan kedua komponen kembalian');
-      // Baris "Kembalian" checkout-moment (checkbox, amount 1.000).
+      // 100.000 (total) + 1.000 (kembalian ronde terakhir).
+      expect(find.text('Tunai · ${formatRupiah(101000)}'), findsOneWidget,
+          reason: 'Dibayar = Total + kembalian ronde terakhir saja');
       expect(find.text('Kembalian'), findsWidgets);
       expect(find.text(formatRupiah(1000)), findsWidgets);
-      // Baris breakdown pre-checkout (amount 600) TERPISAH, tanpa checkbox.
+      // Potongan 600 milik ronde lama, bukan baris pembayaran terakhir.
       expect(
           find.textContaining('Kembalian (sebelum checkout, sudah diambil)'),
-          findsOneWidget);
-      expect(find.text(formatRupiah(600)), findsWidgets);
+          findsNothing);
 
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(milliseconds: 10));
@@ -199,8 +198,8 @@ void main() {
     });
 
     testWidgets(
-        'KOMBINASI di struk gambar: kedua komponen kembalian dijumlah benar '
-        '(1.600)', (tester) async {
+        'KOMBINASI di struk gambar (Item 88 last state): Kembali = ronde '
+        'terakhir saja (1.000)', (tester) async {
       const txId = 'tx1';
       await insertTx(id: txId, total: 100000, paid: 100600);
       await db.into(db.transactionPayments).insert(
@@ -226,10 +225,11 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Kembali'), findsOneWidget);
-      expect(find.text('Rp ${_fmt(1600)}'), findsWidgets,
-          reason: 'Kembali gabungan = 1.000 (checkout) + 600 (pre-checkout)');
-      expect(find.text('Rp ${_fmt(101600)}'), findsWidgets,
-          reason: '"Bayar.." = Total(100.000) + Kembali gabungan(1.600)');
+      expect(find.text('Rp ${_fmt(1000)}'), findsWidgets);
+      expect(find.text('Rp ${_fmt(1600)}'), findsNothing,
+          reason: 'kembalian ronde lama (600) tidak ditumpuk');
+      expect(find.text('Rp ${_fmt(101000)}'), findsWidgets,
+          reason: '"Bayar.." = Total(100.000) + Kembali(1.000)');
 
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(milliseconds: 10));
@@ -292,8 +292,8 @@ void main() {
     });
 
     test(
-        'KOMBINASI cetak tunggal: kedua komponen kembalian dijumlah benar '
-        '(1.600)', () async {
+        'KOMBINASI cetak tunggal (Item 88 last state): Kembali = ronde '
+        'terakhir saja (1.000)', () async {
       const txId = 'tx1';
       await insertTx(id: txId, total: 100000, paid: 100600);
       await db.into(db.transactionPayments).insert(
@@ -336,10 +336,11 @@ void main() {
       );
       final text = latin1.decode(bytes, allowInvalid: true);
 
-      expect(text.contains('Rp 1,600'), isTrue,
-          reason: 'Kembali gabungan = 1.000 + 600');
-      expect(text.contains('Rp 101,600'), isTrue,
-          reason: 'Bayar = Total(100.000) + Kembali gabungan(1.600)');
+      expect(text.contains('Rp 1,000'), isTrue);
+      expect(text.contains('Rp 1,600'), isFalse,
+          reason: 'kembalian ronde lama (600) tidak ditumpuk');
+      expect(text.contains('Rp 101,000'), isTrue,
+          reason: 'Bayar = Total(100.000) + Kembali(1.000)');
     });
   });
 }

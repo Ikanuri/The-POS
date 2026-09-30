@@ -15,6 +15,7 @@ import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/services/printer_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/change_display.dart';
 import 'receipt_screen.dart' show netPaidDisplay, netRemainingOwed;
 
 /// Struk gabungan beberapa nota (gabung nota). Tampilan murni baca: item
@@ -190,7 +191,7 @@ class _MergedReceiptScreenState extends ConsumerState<MergedReceiptScreen> {
   /// `Σ tx.paid` mentah, yang bisa menghitung dobel kembalian yang dipakai
   /// ulang sbg pembayaran baru (akar masalah Item 23).
   int get _grandPaid {
-    final kembalian = _latestPaymentWithChange?.changeGiven ?? 0;
+    final kembalian = _grandKembalian;
     if (kembalian > 0) return _grandTotal + kembalian;
     return _txs.fold(
         0, (s, t) => s + netPaidDisplay(t, _paymentsByTx[t.id] ?? const []));
@@ -202,19 +203,13 @@ class _MergedReceiptScreenState extends ConsumerState<MergedReceiptScreen> {
   int get _grandSisa => _txs.fold(
       0, (s, t) => s + netRemainingOwed(t, _paymentsByTx[t.id] ?? const []));
 
-  /// Pembayaran (bukan dibatalkan) paling baru lintas semua nota yang
-  /// menghasilkan kembalian — Item 9, dipakai baris "Uang Diterima" (gross,
-  /// uang tender asli sebelum dikurangi kembalian).
-  TransactionPayment? get _latestPaymentWithChange {
-    TransactionPayment? latest;
-    for (final list in _paymentsByTx.values) {
-      for (final p in list) {
-        if (p.voided || p.changeGiven <= 0) continue;
-        if (latest == null || p.paidAt.isAfter(latest.paidAt)) latest = p;
-      }
-    }
-    return latest;
-  }
+  /// Item 88 — "last state" nota gabungan (sumber sama dgn struk tunggal &
+  /// cetak, `core/utils/change_display.dart`): masih ada sisa -> tanpa
+  /// Kembalian; semua lunas -> kembalian ronde pembayaran TERAKHIR lintas
+  /// nota. Centang "sudah diambil" tidak mengubah angka.
+  int get _grandKembalian => _grandSisa > 0
+      ? 0
+      : latestRoundChange(_paymentsByTx.values.expand((p) => p));
 
   Future<void> _print() async {
     // Lihat dok `_ReceiptScreenState._isPrinting` — try/finally sejak awal
@@ -363,7 +358,7 @@ class _MergedReceiptScreenState extends ConsumerState<MergedReceiptScreen> {
                   grandTotal: _grandTotal,
                   grandPaid: _grandPaid,
                   grandSisa: _grandSisa,
-                  latestPaymentWithChange: _latestPaymentWithChange,
+                  grandKembalian: _grandKembalian,
                   lastPaymentAt: _lastPaymentAt,
                 ),
               ),
@@ -398,7 +393,7 @@ class _MergedReceiptPaper extends StatelessWidget {
     required this.grandTotal,
     required this.grandPaid,
     required this.grandSisa,
-    required this.latestPaymentWithChange,
+    required this.grandKembalian,
     required this.lastPaymentAt,
   });
 
@@ -421,7 +416,7 @@ class _MergedReceiptPaper extends StatelessWidget {
   final int grandTotal;
   final int grandPaid;
   final int grandSisa;
-  final TransactionPayment? latestPaymentWithChange;
+  final int grandKembalian;
   final DateTime? lastPaymentAt;
 
   static const _ink = Color(0xFF111111);
@@ -600,13 +595,12 @@ class _MergedReceiptPaper extends StatelessWidget {
           // (uang tender kotor, Item 9 lama) DIHAPUS, "SISA" jadi kondisional
           // (bukan selalu tampil apa pun kondisinya, & tak lagi tampil
           // bareng "Kembalian" sekaligus) — konsisten dgn struk tunggal.
-          if (latestPaymentWithChange != null)
+          if (grandKembalian > 0)
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text('Kembalian', style: _mono),
-                Text('Rp ${_fmtNum(latestPaymentWithChange!.changeGiven)}',
-                    style: _mono),
+                Text('Rp ${_fmtNum(grandKembalian)}', style: _mono),
               ],
             )
           else if (grandSisa > 0)

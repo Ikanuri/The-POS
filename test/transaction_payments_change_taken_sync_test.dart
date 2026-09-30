@@ -3,12 +3,13 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:the_pos/core/database/app_database.dart';
 import 'package:the_pos/core/services/lan_sync_service.dart';
-import 'package:the_pos/features/kasir/receipt_screen.dart';
+import 'package:the_pos/core/utils/change_display.dart';
 
 /// Audit sync & Pra-Bayar susulan (permintaan user, toko dgn >1 device):
 /// `transaction_payments.changeTaken` ("kembalian sudah diambil/dipakai")
-/// SEKARANG berbobot sungguhan (`e27bf8a`) — dipakai `latestChangeGiven`
-/// utk menentukan baris "Kembali" mana yang masih harus dicetak/dibagikan.
+/// berbobot sungguhan — sejak Item 88 dipakai `unclaimedChangeTotal`/
+/// `hasExtraUnclaimedChange` (tombol "Gabungkan kembalian belum diambil"
+/// di struk), jadi WAJIB sama di semua device.
 /// SEBELUM fix di file ini, centang itu TIDAK PERNAH ikut sync (murni
 /// per-device) — device yang sudah lebih dulu menerima baris pembayaran
 /// itu TIDAK PERNAH tahu kalau device lain sudah menandainya selesai,
@@ -109,8 +110,9 @@ void main() {
     final bPayAfter = (await b.getPaymentsForTx('tx1')).single;
     expect(bPayAfter.changeTaken, isTrue,
         reason: 'tanpa fix: centang di A tidak pernah sampai ke B');
-    expect(latestChangeGiven(await b.getPaymentsForTx('tx1')), 0,
-        reason: 'B ikut menyembunyikan kembalian yg sudah selesai di A');
+    expect(unclaimedChangeTotal(await b.getPaymentsForTx('tx1')), 0,
+        reason: 'B ikut tahu kembalian ini sudah diambil (tombol gabung '
+            'kembalian tidak menghitungnya lagi)');
   });
 
   test(
