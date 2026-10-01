@@ -5514,15 +5514,28 @@ class AppDatabase extends _$AppDatabase {
             deviceCode: deviceCode ?? pay.kasirId,
             locallyModified: locallyModified,
           );
+          // `paid` balik false -> HPP baris itu ditunda lagi (lihat [hppSql]).
+          await _rebuildSummaryForTx(pay.transactionId);
         }
       }
     });
+  }
+
+  /// Bangun ulang ringkasan harian tanggal NOTA [txId] (HPP baris pre-order
+  /// ikut `preorder_entries.paid`, jadi berubah tanpa omzet berubah).
+  Future<void> _rebuildSummaryForTx(String txId) async {
+    final tx = await (select(transactions)..where((t) => t.id.equals(txId)))
+        .getSingleOrNull();
+    if (tx != null) await _rebuildDailySummaryFor(_dateKey(tx.createdAt));
   }
 
   /// Note persis yang ditulis `collectPreorderDeposit` — dibagi ke konstanta
   /// supaya `voidPayment` tidak diam-diam meleset kalau salah satu diketik
   /// ulang beda.
   static const _kPreorderDepositNote = 'DP/jaminan pre-order';
+
+  /// Versi publik [_kPreorderDepositNote] (dipakai UI Riwayat Pembayaran).
+  static const preorderDepositNote = _kPreorderDepositNote;
 
   // ───────────────────────── Expenses (pengeluaran) ────────────────────────
 
@@ -5852,6 +5865,18 @@ class AppDatabase extends _$AppDatabase {
     return idx;
   }
 
+  /// Ekspresi SQL HPP yang MENUNDA baris pre-order DP-0: baris nota tertaut
+  /// `preorder_entries` dgn `paid = 0` (harga masih dikunci Rp 0 — DP/jaminan
+  /// belum dibayar, ATAU pre-order dibatalkan) tidak ikut HPP, supaya laba
+  /// tanggal nota tidak sempat NEGATIF sebelum pendapatannya masuk (matching:
+  /// HPP & pendapatan baris itu masuk SAAT YANG SAMA, yaitu begitu DP dibayar
+  /// & `paid` jadi true — `collectPreorderDeposit`). [alias] = alias tabel
+  /// `transaction_items` di query pemanggil.
+  static String hppSql(String alias) =>
+      'SUM(CASE WHEN EXISTS (SELECT 1 FROM preorder_entries po_h '
+      'WHERE po_h.transaction_item_id = $alias.id AND po_h.paid = 0) '
+      'THEN 0 ELSE $alias.cost_at_sale * $alias.qty END)';
+
   /// Hitung ulang ringkasan satu hari dari data mentah lalu simpan (upsert).
   /// Dipanggil di dalam transaksi penulisan agar atomik.
   Future<void> _rebuildDailySummaryFor(String date) async {
@@ -5886,10 +5911,24 @@ class AppDatabase extends _$AppDatabase {
     final itemRows = await (select(transactionItems)
           ..where((t) => t.transactionId.isIn(txIds)))
         .get();
+    // HPP baris pre-order yang DP-nya belum dibayar ditunda (lihat [hppSql]).
+    final itemIds = itemRows.map((i) => i.id).toList();
+    final deferredIds = itemIds.isEmpty
+        ? <String>{}
+        : (await (select(preorderEntries)
+                  ..where((e) =>
+                      e.transactionItemId.isIn(itemIds) &
+                      e.paid.equals(false)))
+                .get())
+            .map((e) => e.transactionItemId)
+            .whereType<String>()
+            .toSet();
     var hpp = 0;
     var jumlahItem = 0;
     for (final i in itemRows) {
-      hpp += (i.costAtSale * i.qty).round();
+      if (!deferredIds.contains(i.id)) {
+        hpp += (i.costAtSale * i.qty).round();
+      }
       jumlahItem += i.qty.round();
     }
 
@@ -6033,8 +6072,7 @@ class AppDatabase extends _$AppDatabase {
   }) async {
     final revenue = transactionItems.subtotal.sum();
     final qtySold = transactionItems.qty.sum();
-    const cogs = CustomExpression<double>(
-        'SUM(transaction_items.cost_at_sale * transaction_items.qty)');
+    final cogs = CustomExpression<double>(hppSql('transaction_items'));
 
     final query = select(transactionItems).join([
       innerJoin(transactions,
@@ -6280,7 +6318,7 @@ class AppDatabase extends _$AppDatabase {
     final row = await customSelect(
       'SELECT COALESCE(SUM(ti.qty * $ratioExpr),0) AS qty, '
       '  COALESCE(SUM(ti.subtotal),0) AS revenue, '
-      '  COALESCE(SUM(ti.cost_at_sale * ti.qty),0) AS cogs, '
+      '  COALESCE(${hppSql('ti')},0) AS cogs, '
       '  COUNT(DISTINCT ti.transaction_id) AS tx_count '
       'FROM transaction_items ti '
       'JOIN transactions t ON t.id = ti.transaction_id '
@@ -6434,7 +6472,7 @@ class AppDatabase extends _$AppDatabase {
     final rows = await customSelect(
       'SELECT p.id AS pid, p.name AS pname, '
       '  COALESCE(SUM(ti.qty),0) AS qty, COALESCE(SUM(ti.subtotal),0) AS revenue, '
-      '  COALESCE(SUM(ti.cost_at_sale * ti.qty),0) AS cogs '
+      '  COALESCE(${hppSql('ti')},0) AS cogs '
       'FROM transaction_items ti '
       'JOIN transactions t ON t.id = ti.transaction_id '
       'JOIN products p ON p.id = ti.product_id '
@@ -6488,8 +6526,7 @@ class AppDatabase extends _$AppDatabase {
               transactions.createdAt.isSmallerOrEqualValue(to)))
         .getSingle();
 
-    const cogsExpr = CustomExpression<double>(
-        'SUM(transaction_items.cost_at_sale * transaction_items.qty)');
+    final cogsExpr = CustomExpression<double>(hppSql('transaction_items'));
     final cogsRow = await (select(transactionItems).join([
       innerJoin(transactions,
           transactions.id.equalsExp(transactionItems.transactionId)),
@@ -9047,6 +9084,8 @@ class AppDatabase extends _$AppDatabase {
         updatedAt: Value(now),
         locallyModified: Value(locallyModified),
       ));
+      // HPP baris pre-order ini baru dihitung SEKARANG (lihat [hppSql]).
+      await _rebuildSummaryForTx(txId);
       await recordLaciMejaEvent(
         id: '$preorderEntryId-bayar-${now.microsecondsSinceEpoch}',
         entityType: 'preorder',
