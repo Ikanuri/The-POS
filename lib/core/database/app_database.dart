@@ -9690,11 +9690,22 @@ class AppDatabase extends _$AppDatabase {
             ..where((t) => t.date.equals(d)))
           .getSingleOrNull();
       if (summary == null) continue; // backfillMissingSummaries yang urus
+      final parts = d.split('-').map(int.parse).toList();
+      final startSec =
+          DateTime(parts[0], parts[1], parts[2]).millisecondsSinceEpoch ~/ 1000;
+      final endSec = DateTime(parts[0], parts[1], parts[2], 23, 59, 59)
+              .millisecondsSinceEpoch ~/
+          1000;
       final actual = (await customSelect(
         'SELECT COALESCE(${hppSql('ti')},0) AS hpp FROM transaction_items ti '
         'JOIN transactions t ON t.id = ti.transaction_id '
-        "WHERE t.status != 'void' AND $dateExpr = ?",
-        variables: [Variable.withString(d)],
+        // Rentang `created_at` (bukan `strftime(...) = ?`) supaya memakai
+        // indeks `idx_tx_created_at` — ekspresi fungsi memaksa scan penuh.
+        "WHERE t.status != 'void' AND t.created_at >= ? AND t.created_at <= ?",
+        variables: [
+          Variable.withInt(startSec),
+          Variable.withInt(endSec),
+        ],
         readsFrom: {transactionItems, transactions, preorderEntries},
       ).getSingle())
           .data['hpp'];
