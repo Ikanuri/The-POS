@@ -9,6 +9,8 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-10-01 (sesi kedelapan puluh tiga lanjutan — HPP pre-order DP-0 & keterangan riwayat pembayaran)
 
+- `24b1168` — perf(laporan): perbaikan HPP pre-order pakai rentang created_at
+  (indeks) bukan strftime — hindari scan penuh saat startup
 - `bfed0c6` — fix(laporan): perbaikan satu kali jalan — ringkasan harian lama
   dgn HPP pre-order belum dibayar dibangun ulang
 - `6b95ac6` — fix(laporan): tunda HPP baris pre-order DP-0 sampai DP dibayar +
