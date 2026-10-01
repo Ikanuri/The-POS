@@ -9,6 +9,8 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-10-01 (sesi kedelapan puluh tiga lanjutan — HPP pre-order DP-0 & keterangan riwayat pembayaran)
 
+- `bfed0c6` — fix(laporan): perbaikan satu kali jalan — ringkasan harian lama
+  dgn HPP pre-order belum dibayar dibangun ulang
 - `6b95ac6` — fix(laporan): tunda HPP baris pre-order DP-0 sampai DP dibayar +
   keterangan 'Pembayaran pre-order' di Riwayat Pembayaran
 

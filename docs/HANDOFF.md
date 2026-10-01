@@ -18,7 +18,12 @@ Konteks akuntansi: pendapatan tetap di tanggal nota, kas di tanggal bayar
 pengakuan pendapatan tidak diubah. Riwayat Pembayaran: baris DP berlabel
 "Pembayaran pre-order [produk]" (`_preorderPaymentLabel`, pre-order tertaut
 dicari yg `updatedAt`-nya terdekat — heuristik sama `voidPayment`, tanpa
-schema). Versi kerja **2.72.1+165**.
+schema). Perbaikan data satu kali jalan (`bfed0c6`): `repairDeferredPreorderHppSummaries()`
+(dipanggil di `main.dart` setelah `repairStalePrabayarPaidAccounting`) membangun
+ulang ringkasan harian tanggal lama yang HPP-nya masih memuat pre-order DP
+belum dibayar — cek Laporan `rebuildStaleSummariesInRange` hanya melihat
+jumlah tx & omzet jadi tak menangkapnya. Murah & idempotent.
+Versi kerja **2.72.1+165**.
 Temuan belum dikerjakan (diusulkan ke user, belum diputuskan): label
 "sudah dipenuhi — DP belum dibayar" di sheet "Pelunasi Pre-order" &
 lewati `fulfillPreorderEntry` kedua kalau entri sudah dipenuhi
