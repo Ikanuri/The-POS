@@ -7,6 +7,11 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-10-01 (sesi kedelapan puluh tiga lanjutan — HPP pre-order DP-0 & keterangan riwayat pembayaran)
+
+- `6b95ac6` — fix(laporan): tunda HPP baris pre-order DP-0 sampai DP dibayar +
+  keterangan 'Pembayaran pre-order' di Riwayat Pembayaran
+
 ## 2026-09-30 (sesi kedelapan puluh tiga — Item 89: pisah kembalian "diserahkan" vs "dipakai")
 
 - `7b83fcf` — feat(produk): Isi per Satuan bisa dihitung dari satuan lain

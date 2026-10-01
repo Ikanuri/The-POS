@@ -8,6 +8,19 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 1 Oktober 2026
+
+### 🐛 Perbaikan
+- **Laba tanggal nota tidak lagi sempat minus karena pre-order yang DP-nya
+  belum dibayar.** Modal barang pre-order berharga Rp0 sekarang baru ikut
+  dihitung ke laporan (Ringkasan, Produk, Pelanggan, laba di struk) begitu
+  DP/jaminannya dibayar — pendapatan dan modalnya masuk bersamaan.
+  Pre-order yang dibatalkan tanpa DP juga tidak lagi menambah modal.
+
+### ✨ Fitur Baru
+- **Riwayat Pembayaran memberi keterangan "Pembayaran pre-order [produk]"**
+  pada pembayaran DP/jaminan pre-order, tidak lagi sekadar "Tunai".
+
 ## 30 September 2026 (sesi kedelapan puluh tiga)
 
 ### ✨ Fitur Baru

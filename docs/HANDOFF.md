@@ -6,6 +6,24 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
+_Update sesi 83 (1 Okt) — HPP pre-order DP-0 ditunda (`6b95ac6`): baris nota
+tertaut `preorder_entries.paid = 0` (DP belum dibayar ATAU pre-order
+dibatalkan) tidak ikut HPP — `AppDatabase.hppSql(alias)` dipakai
+`getReportTotals`/`getTopProductsByRevenue`/`getProductStatsSummary`/
+`getCustomerTopProducts`, `_rebuildDailySummaryFor` (Dart), laba di struk
+(`_hppDeferred`). `collectPreorderDeposit` & `voidPayment` DP kini
+membangun ulang ringkasan harian tanggal nota (`_rebuildSummaryForTx`).
+Konteks akuntansi: pendapatan tetap di tanggal nota, kas di tanggal bayar
+(Arus Kas/Tutup Kasir) — keputusan user: opsi "tunda HPP" saja, dasar
+pengakuan pendapatan tidak diubah. Riwayat Pembayaran: baris DP berlabel
+"Pembayaran pre-order [produk]" (`_preorderPaymentLabel`, pre-order tertaut
+dicari yg `updatedAt`-nya terdekat — heuristik sama `voidPayment`, tanpa
+schema). Versi kerja **2.72.1+165**.
+Temuan belum dikerjakan (diusulkan ke user, belum diputuskan): label
+"sudah dipenuhi — DP belum dibayar" di sheet "Pelunasi Pre-order" &
+lewati `fulfillPreorderEntry` kedua kalau entri sudah dipenuhi
+(`fulfillOnSettle`).
+
 _Update susulan sesi 83 (30 Sep) — tiga usulan fitur user, disetujui &
 dikerjakan berurutan 3 -> 2 -> 1 (commit terpisah `bead0ee`, `3bd0ff0`,
 `7b83fcf`): (3) chevron tap 40dp utk buka/tutup varian di daftar kasir
