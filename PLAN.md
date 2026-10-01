@@ -63,6 +63,19 @@ sekarang, TIDAK ada rencana eksekusi._
 
 ---
 
+## Item 90 — OCR nota supplier & Input Pembelian/HPP otomatis (1 Okt 2026) — DISKUSI, BELUM ADA KEPUTUSAN
+
+Hanya diskusi (tanpa kode). Ringkasan lengkap + alasan ada di
+[docs/HANDOFF.md](docs/HANDOFF.md) (blok "Diskusi OCR"). Urutan yang
+disarankan: (1) layar "Input Pembelian" manual (scan barcode/cari produk +
+qty + satuan + harga beli, stok naik, HPP per aturan, perubahan dari HP
+pegawai lewat usulan owner); (2) tempel teks hasil OCR bawaan HP (Lens) +
+parser kolom harga di Penerimaan Barang; (3) OCR on-device (ML Kit) mengisi
+layar yang sama + alias per supplier; (4) opsional cloud (kunci API milik
+user). Pertanyaan menggantung ke user: jenis nota supplier (cetak/tulis
+tangan/PDF-WA), volume nota, kelas HP, aturan HPP (terakhir vs rata-rata
+bergerak), harga beli per satuan besar?
+
 ## Item 84 — Sisa audit Pra-Bayar (23 Sep 2026) — MENUNGGU KEPUTUSAN USER
 
 4 bug keuangan Pra-Bayar SUDAH diperbaiki di commit `0329583` (lihat

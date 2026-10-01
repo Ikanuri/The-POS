@@ -6,6 +6,31 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
+**Diskusi OCR (1 Okt 2026, SEMUA belum diputuskan/dikerjakan)** — user
+mengusulkan OCR untuk scan nota supplier + penentuan HPP otomatis. Kondisi
+app: Penerimaan Barang (`receive_goods_screen.dart`, `receive_text_parser.dart`
+format `qty satuan nama`, kamus `product_aliases` pencocokan PERSIS dua arah
+sync) hanya mencatat qty, TANPA harga beli; HPP = `price_tiers.costPrice`
+yang di-snapshot ke `costAtSale` saat jual (perubahan HPP tidak menyentuh
+riwayat); tidak ada buku pembelian/nilai persediaan. Kendala prinsip proyek:
+offline-first tanpa cloud (pengecualian: Cloudflare publish opsional, token
+user), JANGAN fuzzy otomatis (hanya boleh sbg SARAN lalu dipelajari jadi
+alias), APK harus tetap 32-bit+64-bit. Penilaian kasar (belum diukur): OCR
+on-device nota cetak = layak (ML Kit, offline, gratis; dampak ukuran APK/
+memori HP lama perlu diukur), tulis tangan = buruk, pemecahan kolom per
+supplier = sedang (realistis "terisi lalu dicek"), HPP otomatis tanpa review =
+tidak disarankan. Aturan HPP yang perlu dipilih: HPP terakhir (sederhana, bagi
+harga satuan besar dgn `ratioToBase`) vs rata-rata bergerak (pakai
+`currentStock`; rumit utk stok minus/non-stok) vs FIFO (perlu buku pembelian,
+tidak sepadan). Cek sebelum HPP boleh berubah otomatis: Kategori Harga/Harga
+Lain yang memakai "Modal" sbg acuan margin, dan perubahan dari HP pegawai harus
+lewat usulan owner. Alternatif murah: (1) Input Pembelian manual (fondasi,
+dibangun dulu), (2) tempel teks hasil Google Lens + parser kolom harga,
+(3) impor daftar harga supplier CSV/Excel, (4) cloud opsional belakangan.
+Pertanyaan menggantung ke user: jenis nota (cetak/tulis tangan/PDF-WA),
+volume nota/hari, kelas HP, aturan HPP, harga beli per satuan besar. Entri
+ringkas ada di PLAN.md Item 90.
+
 _Update sesi 83 (1 Okt) — HPP pre-order DP-0 ditunda (`6b95ac6`): baris nota
 tertaut `preorder_entries.paid = 0` (DP belum dibayar ATAU pre-order
 dibatalkan) tidak ikut HPP — `AppDatabase.hppSql(alias)` dipakai
