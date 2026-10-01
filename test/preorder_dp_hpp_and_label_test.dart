@@ -126,6 +126,21 @@ void main() {
     expect((await db.getReportTotals(from, to)).cogs, 38000);
   });
 
+  test(
+      'perbaikan satu kali jalan: ringkasan harian LAMA (HPP masih memuat '
+      'pre-order belum dibayar) dibetulkan; idempotent', () async {
+    // Simulasikan cache dari build sebelum fix: omzet benar, HPP 38.000.
+    await (db.update(db.dailySummaries)
+          ..where((t) => t.date.equals('2026-09-18')))
+        .write(const DailySummariesCompanion(hpp: Value(38000)));
+    expect(await summaryHpp(), 38000, reason: 'prakondisi: cache basi');
+
+    expect(await db.repairDeferredPreorderHppSummaries(), 1);
+    expect(await summaryHpp(), 8000);
+    expect(await db.repairDeferredPreorderHppSummaries(), 0,
+        reason: 'idempotent — tidak ada lagi yang perlu dibangun ulang');
+  });
+
   testWidgets(
       'Riwayat Pembayaran: baris DP berketerangan "Pembayaran pre-order LPG"',
       (tester) async {
