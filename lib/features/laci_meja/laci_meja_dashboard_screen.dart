@@ -1,3 +1,4 @@
+import 'preorder_fulfill_confirm.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -1451,6 +1452,13 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
             await db.fulfillPreorderQty(e.id, qty,
                 locallyModified: locallyModified, deviceCode: deviceCode);
           } else {
+            // Anti-misclick: sisa <= 1 tidak punya dialog jumlah.
+            if (!await confirmFulfillPreorder(context, db,
+                entryId: e.id,
+                productName: productName,
+                customerName: e.customerName)) {
+              return;
+            }
             await db.fulfillPreorderEntry(e.id,
                 locallyModified: locallyModified, deviceCode: deviceCode);
           }

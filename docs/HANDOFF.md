@@ -6,6 +6,56 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
+_Sesi 83 (2 Okt) — gate Penuhi pre-order (`1e6e77e`): `confirmFulfillPreorder` (`laci_meja/preorder_fulfill_confirm.dart`) dipanggil di dashboard Laci Meja & kartu pre-order struk HANYA saat sisa <= 1 (sisa > 1 sudah punya dialog jumlah); peringatan jika `getPreorderDepositOwed` != null. Tombol "batal penuhi" belum ada di UI (Batal pre-order dicabut dulu atas permintaan user). Versi **2.73.0+166**.
+
+**Diskusi OCR (1 Okt 2026, SEMUA belum diputuskan/dikerjakan)** — user
+mengusulkan OCR untuk scan nota supplier + penentuan HPP otomatis. Kondisi
+app: Penerimaan Barang (`receive_goods_screen.dart`, `receive_text_parser.dart`
+format `qty satuan nama`, kamus `product_aliases` pencocokan PERSIS dua arah
+sync) hanya mencatat qty, TANPA harga beli; HPP = `price_tiers.costPrice`
+yang di-snapshot ke `costAtSale` saat jual (perubahan HPP tidak menyentuh
+riwayat); tidak ada buku pembelian/nilai persediaan. Kendala prinsip proyek:
+offline-first tanpa cloud (pengecualian: Cloudflare publish opsional, token
+user), JANGAN fuzzy otomatis (hanya boleh sbg SARAN lalu dipelajari jadi
+alias), APK harus tetap 32-bit+64-bit. Penilaian kasar (belum diukur): OCR
+on-device nota cetak = layak (ML Kit, offline, gratis; dampak ukuran APK/
+memori HP lama perlu diukur), tulis tangan = buruk, pemecahan kolom per
+supplier = sedang (realistis "terisi lalu dicek"), HPP otomatis tanpa review =
+tidak disarankan. Aturan HPP yang perlu dipilih: HPP terakhir (sederhana, bagi
+harga satuan besar dgn `ratioToBase`) vs rata-rata bergerak (pakai
+`currentStock`; rumit utk stok minus/non-stok) vs FIFO (perlu buku pembelian,
+tidak sepadan). Cek sebelum HPP boleh berubah otomatis: Kategori Harga/Harga
+Lain yang memakai "Modal" sbg acuan margin, dan perubahan dari HP pegawai harus
+lewat usulan owner. Alternatif murah: (1) Input Pembelian manual (fondasi,
+dibangun dulu), (2) tempel teks hasil Google Lens + parser kolom harga,
+(3) impor daftar harga supplier CSV/Excel, (4) cloud opsional belakangan.
+Pertanyaan menggantung ke user: jenis nota (cetak/tulis tangan/PDF-WA),
+volume nota/hari, kelas HP, aturan HPP, harga beli per satuan besar. Entri
+ringkas ada di PLAN.md Item 90.
+
+_Update sesi 83 (1 Okt) — HPP pre-order DP-0 ditunda (`6b95ac6`): baris nota
+tertaut `preorder_entries.paid = 0` (DP belum dibayar ATAU pre-order
+dibatalkan) tidak ikut HPP — `AppDatabase.hppSql(alias)` dipakai
+`getReportTotals`/`getTopProductsByRevenue`/`getProductStatsSummary`/
+`getCustomerTopProducts`, `_rebuildDailySummaryFor` (Dart), laba di struk
+(`_hppDeferred`). `collectPreorderDeposit` & `voidPayment` DP kini
+membangun ulang ringkasan harian tanggal nota (`_rebuildSummaryForTx`).
+Konteks akuntansi: pendapatan tetap di tanggal nota, kas di tanggal bayar
+(Arus Kas/Tutup Kasir) — keputusan user: opsi "tunda HPP" saja, dasar
+pengakuan pendapatan tidak diubah. Riwayat Pembayaran: baris DP berlabel
+"Pembayaran pre-order [produk]" (`_preorderPaymentLabel`, pre-order tertaut
+dicari yg `updatedAt`-nya terdekat — heuristik sama `voidPayment`, tanpa
+schema). Perbaikan data satu kali jalan (`bfed0c6`): `repairDeferredPreorderHppSummaries()`
+(dipanggil di `main.dart` setelah `repairStalePrabayarPaidAccounting`) membangun
+ulang ringkasan harian tanggal lama yang HPP-nya masih memuat pre-order DP
+belum dibayar — cek Laporan `rebuildStaleSummariesInRange` hanya melihat
+jumlah tx & omzet jadi tak menangkapnya. Murah & idempotent.
+Versi kerja **2.72.1+165**.
+Temuan belum dikerjakan (diusulkan ke user, belum diputuskan): label
+"sudah dipenuhi — DP belum dibayar" di sheet "Pelunasi Pre-order" &
+lewati `fulfillPreorderEntry` kedua kalau entri sudah dipenuhi
+(`fulfillOnSettle`).
+
 _Update susulan sesi 83 (30 Sep) — tiga usulan fitur user, disetujui &
 dikerjakan berurutan 3 -> 2 -> 1 (commit terpisah `bead0ee`, `3bd0ff0`,
 `7b83fcf`): (3) chevron tap 40dp utk buka/tutup varian di daftar kasir

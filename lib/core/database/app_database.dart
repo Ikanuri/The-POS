@@ -3716,8 +3716,7 @@ class AppDatabase extends _$AppDatabase {
   }) async {
     final amountSum = transactionPayments.amount.sum();
     final changeSum = transactionPayments.changeGiven.sum();
-    final cutSum =
-        transactionPayments.prabayarChangeTakenBeforeCheckout.sum();
+    final cutSum = transactionPayments.prabayarChangeTakenBeforeCheckout.sum();
     final row = await (selectOnly(transactionPayments)
           ..addColumns([amountSum, changeSum, cutSum])
           ..where(transactionPayments.transactionId.equals(txId) &
@@ -4299,8 +4298,7 @@ class AppDatabase extends _$AppDatabase {
     // `transaction_tables.dart`) yang sudah dicentang di nota lama ke
     // keranjang baru, supaya kasir tak perlu centang ulang barang yg sudah
     // diverifikasi sebelum nota itu dibatalkan.
-    final txRow = await (select(transactions)
-          ..where((t) => t.id.equals(txId)))
+    final txRow = await (select(transactions)..where((t) => t.id.equals(txId)))
         .getSingleOrNull();
     final checkedIds = <String>{};
     if (txRow?.checkedItemIds != null) {
@@ -5099,8 +5097,8 @@ class AppDatabase extends _$AppDatabase {
       String? customerName) async {
     final rows = await (select(transactions)
           ..where((t) {
-            final base =
-                t.customerId.isNull() & t.status.isIn(['kurang_bayar', 'tempo']);
+            final base = t.customerId.isNull() &
+                t.status.isIn(['kurang_bayar', 'tempo']);
             final nameMatch = customerName == null
                 ? (t.customerName.isNull() | t.customerName.equals(''))
                 : t.customerName.equals(customerName);
@@ -5117,8 +5115,8 @@ class AppDatabase extends _$AppDatabase {
       String? customerName) async {
     final rows = await (select(transactions)
           ..where((t) {
-            final base =
-                t.customerId.isNull() & t.status.isIn(['kurang_bayar', 'tempo']);
+            final base = t.customerId.isNull() &
+                t.status.isIn(['kurang_bayar', 'tempo']);
             final nameMatch = customerName == null
                 ? (t.customerName.isNull() | t.customerName.equals(''))
                 : t.customerName.equals(customerName);
@@ -5514,15 +5512,28 @@ class AppDatabase extends _$AppDatabase {
             deviceCode: deviceCode ?? pay.kasirId,
             locallyModified: locallyModified,
           );
+          // `paid` balik false -> HPP baris itu ditunda lagi (lihat [hppSql]).
+          await _rebuildSummaryForTx(pay.transactionId);
         }
       }
     });
+  }
+
+  /// Bangun ulang ringkasan harian tanggal NOTA [txId] (HPP baris pre-order
+  /// ikut `preorder_entries.paid`, jadi berubah tanpa omzet berubah).
+  Future<void> _rebuildSummaryForTx(String txId) async {
+    final tx = await (select(transactions)..where((t) => t.id.equals(txId)))
+        .getSingleOrNull();
+    if (tx != null) await _rebuildDailySummaryFor(_dateKey(tx.createdAt));
   }
 
   /// Note persis yang ditulis `collectPreorderDeposit` — dibagi ke konstanta
   /// supaya `voidPayment` tidak diam-diam meleset kalau salah satu diketik
   /// ulang beda.
   static const _kPreorderDepositNote = 'DP/jaminan pre-order';
+
+  /// Versi publik [_kPreorderDepositNote] (dipakai UI Riwayat Pembayaran).
+  static const preorderDepositNote = _kPreorderDepositNote;
 
   // ───────────────────────── Expenses (pengeluaran) ────────────────────────
 
@@ -5852,6 +5863,18 @@ class AppDatabase extends _$AppDatabase {
     return idx;
   }
 
+  /// Ekspresi SQL HPP yang MENUNDA baris pre-order DP-0: baris nota tertaut
+  /// `preorder_entries` dgn `paid = 0` (harga masih dikunci Rp 0 — DP/jaminan
+  /// belum dibayar, ATAU pre-order dibatalkan) tidak ikut HPP, supaya laba
+  /// tanggal nota tidak sempat NEGATIF sebelum pendapatannya masuk (matching:
+  /// HPP & pendapatan baris itu masuk SAAT YANG SAMA, yaitu begitu DP dibayar
+  /// & `paid` jadi true — `collectPreorderDeposit`). [alias] = alias tabel
+  /// `transaction_items` di query pemanggil.
+  static String hppSql(String alias) =>
+      'SUM(CASE WHEN EXISTS (SELECT 1 FROM preorder_entries po_h '
+      'WHERE po_h.transaction_item_id = $alias.id AND po_h.paid = 0) '
+      'THEN 0 ELSE $alias.cost_at_sale * $alias.qty END)';
+
   /// Hitung ulang ringkasan satu hari dari data mentah lalu simpan (upsert).
   /// Dipanggil di dalam transaksi penulisan agar atomik.
   Future<void> _rebuildDailySummaryFor(String date) async {
@@ -5886,10 +5909,23 @@ class AppDatabase extends _$AppDatabase {
     final itemRows = await (select(transactionItems)
           ..where((t) => t.transactionId.isIn(txIds)))
         .get();
+    // HPP baris pre-order yang DP-nya belum dibayar ditunda (lihat [hppSql]).
+    final itemIds = itemRows.map((i) => i.id).toList();
+    final deferredIds = itemIds.isEmpty
+        ? <String>{}
+        : (await (select(preorderEntries)
+                  ..where((e) =>
+                      e.transactionItemId.isIn(itemIds) & e.paid.equals(false)))
+                .get())
+            .map((e) => e.transactionItemId)
+            .whereType<String>()
+            .toSet();
     var hpp = 0;
     var jumlahItem = 0;
     for (final i in itemRows) {
-      hpp += (i.costAtSale * i.qty).round();
+      if (!deferredIds.contains(i.id)) {
+        hpp += (i.costAtSale * i.qty).round();
+      }
       jumlahItem += i.qty.round();
     }
 
@@ -6033,8 +6069,7 @@ class AppDatabase extends _$AppDatabase {
   }) async {
     final revenue = transactionItems.subtotal.sum();
     final qtySold = transactionItems.qty.sum();
-    const cogs = CustomExpression<double>(
-        'SUM(transaction_items.cost_at_sale * transaction_items.qty)');
+    final cogs = CustomExpression<double>(hppSql('transaction_items'));
 
     final query = select(transactionItems).join([
       innerJoin(transactions,
@@ -6280,7 +6315,7 @@ class AppDatabase extends _$AppDatabase {
     final row = await customSelect(
       'SELECT COALESCE(SUM(ti.qty * $ratioExpr),0) AS qty, '
       '  COALESCE(SUM(ti.subtotal),0) AS revenue, '
-      '  COALESCE(SUM(ti.cost_at_sale * ti.qty),0) AS cogs, '
+      '  COALESCE(${hppSql('ti')},0) AS cogs, '
       '  COUNT(DISTINCT ti.transaction_id) AS tx_count '
       'FROM transaction_items ti '
       'JOIN transactions t ON t.id = ti.transaction_id '
@@ -6434,7 +6469,7 @@ class AppDatabase extends _$AppDatabase {
     final rows = await customSelect(
       'SELECT p.id AS pid, p.name AS pname, '
       '  COALESCE(SUM(ti.qty),0) AS qty, COALESCE(SUM(ti.subtotal),0) AS revenue, '
-      '  COALESCE(SUM(ti.cost_at_sale * ti.qty),0) AS cogs '
+      '  COALESCE(${hppSql('ti')},0) AS cogs '
       'FROM transaction_items ti '
       'JOIN transactions t ON t.id = ti.transaction_id '
       'JOIN products p ON p.id = ti.product_id '
@@ -6488,8 +6523,7 @@ class AppDatabase extends _$AppDatabase {
               transactions.createdAt.isSmallerOrEqualValue(to)))
         .getSingle();
 
-    const cogsExpr = CustomExpression<double>(
-        'SUM(transaction_items.cost_at_sale * transaction_items.qty)');
+    final cogsExpr = CustomExpression<double>(hppSql('transaction_items'));
     final cogsRow = await (select(transactionItems).join([
       innerJoin(transactions,
           transactions.id.equalsExp(transactionItems.transactionId)),
@@ -8326,8 +8360,7 @@ class AppDatabase extends _$AppDatabase {
       List<String> transactionIds) async {
     if (transactionIds.isEmpty) return {};
     final rows = await (select(transactions)
-          ..where((t) =>
-              t.id.isIn(transactionIds) & t.customerId.isNotNull()))
+          ..where((t) => t.id.isIn(transactionIds) & t.customerId.isNotNull()))
         .get();
     return {for (final tx in rows) tx.id: tx.customerId!};
   }
@@ -8474,8 +8507,8 @@ class AppDatabase extends _$AppDatabase {
         .map((r) => r.readTable(leftBehindItems))
         .toList();
     final borrowed = (await (select(borrowedItems).join([
-      innerJoin(transactions,
-          transactions.id.equalsExp(borrowedItems.transactionId)),
+      innerJoin(
+          transactions, transactions.id.equalsExp(borrowedItems.transactionId)),
     ])
               ..where(_laciMejaCustomerMatch(
                     frozenId: borrowedItems.customerId,
@@ -9047,6 +9080,8 @@ class AppDatabase extends _$AppDatabase {
         updatedAt: Value(now),
         locallyModified: Value(locallyModified),
       ));
+      // HPP baris pre-order ini baru dihitung SEKARANG (lihat [hppSql]).
+      await _rebuildSummaryForTx(txId);
       await recordLaciMejaEvent(
         id: '$preorderEntryId-bayar-${now.microsecondsSinceEpoch}',
         entityType: 'preorder',
@@ -9625,6 +9660,61 @@ class AppDatabase extends _$AppDatabase {
       }
     }
     return fixedCount;
+  }
+
+  /// Perbaikan data satu kali jalan — ringkasan harian (`daily_summaries`)
+  /// untuk tanggal yang punya pre-order DP belum dibayar masih memuat HPP
+  /// LAMA (baris pre-order ikut terhitung) sebelum [hppSql] ada; cek
+  /// "perbaiki otomatis" Laporan ([rebuildStaleSummariesInRange]) hanya
+  /// membandingkan jumlah transaksi & omzet, jadi tidak pernah menangkapnya.
+  /// Murah: 1 query tanggal terdampak (umumnya hitungan jari) + 1 agregat
+  /// per tanggal; HANYA tanggal yang HPP-nya beda yang dibangun ulang.
+  /// Idempotent — 0 begitu semua beres. Mengembalikan jumlah tanggal yang
+  /// dibangun ulang.
+  Future<int> repairDeferredPreorderHppSummaries() async {
+    const dateExpr =
+        "strftime('%Y-%m-%d', datetime(t.created_at,'unixepoch','localtime'))";
+    final dates = (await customSelect(
+      'SELECT DISTINCT $dateExpr AS d FROM preorder_entries po '
+      'JOIN transaction_items ti ON ti.id = po.transaction_item_id '
+      'JOIN transactions t ON t.id = ti.transaction_id '
+      "WHERE po.paid = 0 AND t.status != 'void'",
+      readsFrom: {preorderEntries, transactionItems, transactions},
+    ).get())
+        .map((r) => r.data['d'] as String?)
+        .whereType<String>()
+        .toList();
+    var rebuilt = 0;
+    for (final d in dates) {
+      final summary = await (select(dailySummaries)
+            ..where((t) => t.date.equals(d)))
+          .getSingleOrNull();
+      if (summary == null) continue; // backfillMissingSummaries yang urus
+      final parts = d.split('-').map(int.parse).toList();
+      final startSec =
+          DateTime(parts[0], parts[1], parts[2]).millisecondsSinceEpoch ~/ 1000;
+      final endSec = DateTime(parts[0], parts[1], parts[2], 23, 59, 59)
+              .millisecondsSinceEpoch ~/
+          1000;
+      final actual = (await customSelect(
+        'SELECT COALESCE(${hppSql('ti')},0) AS hpp FROM transaction_items ti '
+        'JOIN transactions t ON t.id = ti.transaction_id '
+        // Rentang `created_at` (bukan `strftime(...) = ?`) supaya memakai
+        // indeks `idx_tx_created_at` — ekspresi fungsi memaksa scan penuh.
+        "WHERE t.status != 'void' AND t.created_at >= ? AND t.created_at <= ?",
+        variables: [
+          Variable.withInt(startSec),
+          Variable.withInt(endSec),
+        ],
+        readsFrom: {transactionItems, transactions, preorderEntries},
+      ).getSingle())
+          .data['hpp'];
+      if ((actual as num).round() != summary.hpp) {
+        await _rebuildDailySummaryFor(d);
+        rebuilt++;
+      }
+    }
+    return rebuilt;
   }
 
   /// Label ringkas satu baris Laci Meja utk pesan "dilewati" — dipakai

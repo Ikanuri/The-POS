@@ -1,3 +1,4 @@
+import '../laci_meja/preorder_fulfill_confirm.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -165,6 +166,30 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   /// PLAN.md Item 54 poin 2 — pre-order milik nota ini. Sebelumnya pre-order
   /// satu-satunya kategori Laci Meja yang TIDAK punya kartu di layar nota.
   List<PreorderEntry> _preorderForTx = [];
+
+  /// "Pembayaran pre-order [produk]" utk baris pembayaran DP/jaminan
+  /// (`note` persis `AppDatabase.preorderDepositNote`), null utk pembayaran
+  /// lain. Pre-order tertaut dicari di nota ini: satu-satunya, atau yang
+  /// `updatedAt`-nya paling dekat dgn waktu bayar (pola sama `voidPayment`).
+  String? _preorderPaymentLabel(TransactionPayment pay) {
+    if (pay.note != AppDatabase.preorderDepositNote) return null;
+    if (_preorderForTx.isEmpty) return 'Pembayaran pre-order';
+    var best = _preorderForTx.first;
+    for (final e in _preorderForTx) {
+      if (e.updatedAt.difference(pay.paidAt).abs() <
+          best.updatedAt.difference(pay.paidAt).abs()) {
+        best = e;
+      }
+    }
+    final nama = _preorderLabels[best.productUnitId]?.productName ??
+        _productNames[best.productId];
+    return nama == null ? 'Pembayaran pre-order' : 'Pembayaran pre-order $nama';
+  }
+
+  /// Baris pre-order yang DP-nya belum dibayar: HPP-nya ditunda di laporan
+  /// (lihat `AppDatabase.hppSql`), jadi laba baris ini juga 0 dulu.
+  bool _hppDeferred(TransactionItem item) =>
+      _preorderForTx.any((p) => p.transactionItemId == item.id && !p.paid);
 
   /// Nama produk+satuan per `product_unit_id` utk [_preorderForTx].
   Map<String, ({String productName, String unitName})> _preorderLabels = {};
@@ -487,7 +512,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     final hasChildren = !isVariant && _childrenOf(item).isNotEmpty;
     final effQty = _itemEffQty(item);
     final isPlaceholder = !isVariant && effQty == 0 && hasChildren;
-    final laba = showProfit && effQty > 0
+    final laba = showProfit && effQty > 0 && !_hppDeferred(item)
         ? ((item.priceAtSale - item.costAtSale) * effQty).round()
         : 0;
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -3474,14 +3499,15 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                           if (!isKurangBayar &&
                               displayedChangeGiven(_payments) > 0)
                             _ChangeTakenRow(
-                              amount: formatRupiah(displayedChangeGiven(_payments)),
+                              amount:
+                                  formatRupiah(displayedChangeGiven(_payments)),
                               taken: _shownChangePayment!.changeTaken,
                               color: scheme.tertiary,
                               bold: true,
                               onChanged: isVoid
                                   ? null
-                                  : (v) =>
-                                      _toggleChangeTaken(_shownChangePayment!.id, v),
+                                  : (v) => _toggleChangeTaken(
+                                      _shownChangePayment!.id, v),
                             ),
                           // Kembalian Pra-Bayar yang diambil SEBELUM
                           // checkout pada ronde terakhir — SENGAJA baris
@@ -3734,7 +3760,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     var totalLaba = 0;
     for (final item in _items) {
       final effQty = _itemEffQty(item);
-      if (effQty <= 0) continue;
+      if (effQty <= 0 || _hppDeferred(item)) continue;
       totalLaba += ((item.priceAtSale - item.costAtSale) * effQty).round();
     }
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -4400,6 +4426,13 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       await db.fulfillPreorderQty(p.id, qty,
           locallyModified: locallyModified, deviceCode: deviceCode);
     } else {
+      // Anti-misclick: sisa <= 1 tidak punya dialog jumlah.
+      if (!await confirmFulfillPreorder(context, db,
+          entryId: p.id,
+          productName: productName,
+          customerName: p.customerName)) {
+        return;
+      }
       await db.fulfillPreorderEntry(p.id,
           locallyModified: locallyModified, deviceCode: deviceCode);
     }
@@ -4713,6 +4746,21 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                             ),
                         ],
                       ),
+                      // Keterangan sebaris utk pembayaran DP/jaminan pre-order
+                      // (alih-alih cuma "Tunai" biasa) — tanpa kolom baru.
+                      if (_preorderPaymentLabel(p) case final label?)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 30, top: 1),
+                          child: Text(
+                            label,
+                            key: const ValueKey('preorder-payment-label'),
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontStyle: FontStyle.italic,
+                              color: scheme.tertiary,
+                            ),
+                          ),
+                        ),
                       if (p.voided)
                         Text('Dibatalkan',
                             style: TextStyle(
@@ -5193,8 +5241,7 @@ class _ReceiptPaper extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text('Bayar..', style: _mono),
-                Text(
-                    'Rp ${_fmtNum(dibayar + _debtSettlementTotal)}',
+                Text('Rp ${_fmtNum(dibayar + _debtSettlementTotal)}',
                     style: _mono),
               ],
             ),
@@ -5260,7 +5307,7 @@ class _ReceiptPaper extends StatelessWidget {
             const _DashedLine(),
             Text('Pembayaran:',
                 style: _mono.copyWith(fontWeight: FontWeight.w700)),
-  // Item 67 — pasangan fix `_ReceiptScreenState._buildPaymentTimeline`
+            // Item 67 — pasangan fix `_ReceiptScreenState._buildPaymentTimeline`
             // (baca dok di sana): baris pembayaran PALING AWAL digabung dgn
             // `_debtSettlementTotal` supaya konsisten dgn "Dibayar" di
             // Ringkasan (yg SUDAH lama menjumlahkan itu) — murni tampilan,

@@ -111,6 +111,8 @@ void main() {
 
     await tester.tap(find.text('Penuhi'));
     await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Penuhi'));
+    await tester.pumpAndSettle();
 
     // Tidak ada dialog qty — langsung selesai.
     expect(find.text('Penuhi — Gas LPG 3kg'), findsNothing);
@@ -152,6 +154,8 @@ void main() {
         db: db, child: const ReceiptScreen(transactionId: txId));
 
     await tester.tap(find.text('Penuhi'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Penuhi'));
     await tester.pumpAndSettle();
 
     // Sheet DP/jaminan ditawarkan dgn judul yg sesuai.
@@ -264,6 +268,8 @@ void main() {
     );
 
     await tester.tap(find.text('Penuhi'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Penuhi'));
     await tester.pumpAndSettle();
 
     // Sheet DP/jaminan muncul -> "Uang Pas" lalu tombol Bayar (satu-satunya

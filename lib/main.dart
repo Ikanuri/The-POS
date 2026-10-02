@@ -43,8 +43,8 @@ void main() {
       FlutterError.presentError(details);
     };
     PlatformDispatcher.instance.onError = (error, stack) {
-      unawaited(
-          CrashLogService.record(error, stack, context: 'PlatformDispatcher.onError'));
+      unawaited(CrashLogService.record(error, stack,
+          context: 'PlatformDispatcher.onError'));
       return true;
     };
 
@@ -100,6 +100,10 @@ Future<void> _runStartupMaintenance(ProviderContainer container) async {
       // `_computePaymentDelta` ada (lihat dok
       // `repairStalePrabayarPaidAccounting`). Idempotent.
       await db.repairStalePrabayarPaidAccounting();
+      // Perbaikan data satu kali jalan KETIGA — HPP lama (baris pre-order
+      // DP belum dibayar ikut terhitung) di ringkasan harian tanggal lama
+      // (lihat dok `repairDeferredPreorderHppSummaries`). Idempotent.
+      await db.repairDeferredPreorderHppSummaries();
     } catch (_) {
       // Non-fatal — laporan & struk tetap berfungsi tanpa pre-aggregate.
     }
