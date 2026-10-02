@@ -63,18 +63,58 @@ sekarang, TIDAK ada rencana eksekusi._
 
 ---
 
-## Item 90 — OCR nota supplier & Input Pembelian/HPP otomatis (1 Okt 2026) — DISKUSI, BELUM ADA KEPUTUSAN
+## Item 90 — Input Pembelian (harga beli + HPP terkontrol), lalu OCR nota cetak (2 Okt 2026) — RANCANGAN, BELUM ADA KEPUTUSAN FINAL
 
-Hanya diskusi (tanpa kode). Ringkasan lengkap + alasan ada di
-[docs/HANDOFF.md](docs/HANDOFF.md) (blok "Diskusi OCR"). Urutan yang
-disarankan: (1) layar "Input Pembelian" manual (scan barcode/cari produk +
-qty + satuan + harga beli, stok naik, HPP per aturan, perubahan dari HP
-pegawai lewat usulan owner); (2) tempel teks hasil OCR bawaan HP (Lens) +
-parser kolom harga di Penerimaan Barang; (3) OCR on-device (ML Kit) mengisi
-layar yang sama + alias per supplier; (4) opsional cloud (kunci API milik
-user). Pertanyaan menggantung ke user: jenis nota supplier (cetak/tulis
-tangan/PDF-WA), volume nota, kelas HP, aturan HPP (terakhir vs rata-rata
-bergerak), harga beli per satuan besar?
+Konteks diskusi OCR lengkap ada di [docs/HANDOFF.md](docs/HANDOFF.md) (blok
+"Diskusi OCR"). Jawaban user: nota supplier cetak + tulis tangan, ~2 hari
+sekali, HP kelas atas. Keputusan arah: BANGUN INPUT PEMBELIAN MANUAL DULU,
+OCR (ML Kit on-device, HANYA nota cetak) mengisi layar yang sama belakangan;
+tulis tangan tetap diketik manual; cloud OCR hanya bila nanti terbukti perlu.
+Aturan HPP: user belum familiar -> usulan awal **HPP terakhir** + pratinjau
+(rata-rata bergerak bisa jadi opsi nanti; FIFO tidak sepadan).
+
+**Alur layar** (perluas Penerimaan Barang `receive_goods_screen.dart`, bukan
+layar baru): isi baris via scan barcode / cari nama / tempel teks -> per baris
+isi jumlah, satuan, HARGA BELI per satuan itu (boleh kosong = hanya stok) ->
+pratinjau "harga beli Rp X per dus = Rp Y per biji; HPP lama -> baru (+Z%)"
++ peringatan bila harga jual di bawah HPP baru + centang "Perbarui HPP" per
+baris -> Terapkan (satu transaksi DB: stok naik via `commitReceive`, HPP
+diperbarui).
+
+**Aturan HPP**: HPP baru satuan dasar = harga beli / `ratioToBase` satuan beli;
+HPP satuan lain = HPP dasar x isi satuannya (bulat rupiah); diterapkan ke semua
+tingkat harga (`price_tiers.costPrice`) satuan itu; TIDAK mengubah riwayat
+(`costAtSale` snapshot); produk non-stok: HPP boleh, stok tidak; varian: ke
+varian terpilih, bukan induk; peringatan bila perubahan > 30% (ambang bisa
+diubah); harga beli 0/kosong = HPP tetap.
+
+**Data**: tabel baru `purchase_entries` (schema 47): id, waktu, product_unit_id,
+qty, satuan dipakai, harga beli, HPP lama, HPP baru, pencatat, status
+(diterapkan/menunggu tinjauan). Append-only, ikut sync (HP lama melewati
+tabel tak dikenal). Pembelian bisa DIBATALKAN (stok dikembalikan; HPP kembali
+ke nilai lama kecuali sudah berubah lagi oleh pembelian berikutnya -> hanya
+stok + peringatan).
+
+**Dua temuan penting**: (a) harga jual Kategori Harga berjangkar "modal" dihitung
+ULANG live dari HPP -> mengubah HPP otomatis mengubah harga kategori; pratinjau
+WAJIB menampilkan "Harga Kategori X: Rp a -> Rp b" (usulan: butuh konfirmasi
+tambahan). (b) Izin: hanya owner/asisten berizin yang boleh memperbarui HPP
+langsung; pegawai hanya menambah stok & perubahan HPP-nya jadi USULAN owner
+(pola Laci Meja). Izin `input_pembelian` (kini tersembunyi di
+`kasir_permissions_screen.dart`) ditampilkan lagi.
+
+**Tahap**: 1) tabel + fungsi terap/batal + aturan HPP + tes DB (sedang); 2) layar
+kolom harga beli + pratinjau + peringatan (sedang); 3) izin pegawai + usulan
+owner (sedang); 4) pratinjau dampak Kategori Harga (kecil); 5) laporan
+pembelian dasar (kecil, opsional). Tahap 1-4 sudah cukup dipakai. Tes: murni
+konversi satuan, DB nyata (stok/HPP/batal), migrasi v46->v47, sync dua DB, widget
+lebar 360, revert-verify.
+
+**Keputusan yang masih menunggu user**: (1) HPP terakhir + pratinjau? (2) pegawai:
+tambah stok saja + HPP jadi usulan, atau dilarang pakai fitur? (3) Kategori Harga
+berubah otomatis dgn pratinjau, atau wajib konfirmasi ekstra? (4) HPP satuan lain
+dihitung dari dasar? (5) ambang peringatan 30% ok? User sudah menyebut "beberapa
+penyesuaian" tapi belum merinci — tanyakan lagi sebelum eksekusi.
 
 ## Item 84 — Sisa audit Pra-Bayar (23 Sep 2026) — MENUNGGU KEPUTUSAN USER
 
