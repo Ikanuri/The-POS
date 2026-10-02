@@ -100,6 +100,8 @@ void main() {
 
     await tester.tap(find.text('Penuhi'));
     await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Penuhi'));
+    await tester.pumpAndSettle();
 
     expect(find.textContaining('DP/Jaminan'), findsOneWidget,
         reason: 'sheet kumpul DP harus terbuka otomatis stlh dipenuhi');
@@ -156,7 +158,42 @@ void main() {
 
     await tester.tap(find.text('Penuhi'));
     await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Penuhi'));
+    await tester.pumpAndSettle();
 
+    expect(find.textContaining('DP/Jaminan'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+  });
+
+  testWidgets(
+      'anti-misclick: sisa 1 -> "Penuhi" minta konfirmasi (+peringatan DP '
+      'belum dibayar); Batal TIDAK memenuhi & tidak membuka sheet DP',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(400, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await seed();
+
+    await tester.pumpWidget(buildApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Pre-order'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Penuhi'));
+    await tester.pumpAndSettle();
+    expect(find.text('Penuhi pre-order?'), findsOneWidget);
+    expect(find.byKey(const ValueKey('fulfill-confirm-dp-warning')),
+        findsOneWidget);
+
+    await tester.tap(find.text('Batal'));
+    await tester.pumpAndSettle();
+
+    final entry = await (db.select(db.preorderEntries)
+          ..where((t) => t.id.equals('po1')))
+        .getSingle();
+    expect(entry.fulfilledAt, isNull,
+        reason: 'tanpa konfirmasi: langsung dipenuhi saat tersentuh');
     expect(find.textContaining('DP/Jaminan'), findsNothing);
 
     await tester.pumpWidget(const SizedBox());

@@ -1,3 +1,4 @@
+import '../laci_meja/preorder_fulfill_confirm.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -4425,6 +4426,13 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       await db.fulfillPreorderQty(p.id, qty,
           locallyModified: locallyModified, deviceCode: deviceCode);
     } else {
+      // Anti-misclick: sisa <= 1 tidak punya dialog jumlah.
+      if (!await confirmFulfillPreorder(context, db,
+          entryId: p.id,
+          productName: productName,
+          customerName: p.customerName)) {
+        return;
+      }
       await db.fulfillPreorderEntry(p.id,
           locallyModified: locallyModified, deviceCode: deviceCode);
     }
