@@ -263,6 +263,10 @@ void main() {
 
     await tester.tap(find.text('Ambil'));
     await tester.pumpAndSettle();
+    // Anti-misclick: sisa <= 1 minta konfirmasi dulu.
+    expect(find.text('Tandai sudah diambil?'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Ambil'));
+    await tester.pumpAndSettle();
 
     expect(find.text('Galon Aqua'), findsNothing,
         reason: 'setelah diambil, baris hilang dari daftar yg menggantung');
@@ -869,5 +873,22 @@ void main() {
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(milliseconds: 10));
     });
+  });
+
+  testWidgets('anti-misclick: Batal di konfirmasi "Ambil" TIDAK menandai diambil',
+      (tester) async {
+    await seedTransaction('tx1');
+    await db.addLeftBehindItem(
+        id: 'l1', transactionId: 'tx1', itemName: 'Galon Aqua', jenis: 'titip');
+    await tester.pumpWidget(buildApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ambil'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Batal'));
+    await tester.pumpAndSettle();
+    expect(find.text('Galon Aqua'), findsOneWidget,
+        reason: 'tanpa gate: langsung hilang saat tersentuh');
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
   });
 }

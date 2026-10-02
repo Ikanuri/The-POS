@@ -146,8 +146,11 @@ void main() {
       await tester.tap(find.text('Ambil'));
       await tester.pumpAndSettle();
 
-      expect(find.byType(AlertDialog), findsNothing,
-          reason: 'dialog cuma langkah ekstra sia-sia utk qty 1');
+      // Tanpa dialog JUMLAH; yang muncul hanya konfirmasi anti-misclick.
+      expect(find.text('Tandai sudah diambil?'), findsOneWidget);
+      expect(find.textContaining('Sisa belum diambil'), findsNothing);
+      await tester.tap(find.widgetWithText(FilledButton, 'Ambil'));
+      await tester.pumpAndSettle();
       expect(find.textContaining('Payung'), findsNothing);
 
       await drain(tester);

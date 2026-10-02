@@ -53,3 +53,33 @@ Future<bool> confirmFulfillPreorder(
   );
   return ok ?? false;
 }
+
+/// Konfirmasi anti-misclick utk "Ambil" barang titip/ketinggalan yang
+/// SISANYA <= 1 (atau entri lama tanpa angka acuan) — tidak ada dialog
+/// jumlah, dulu langsung ditutup. Pinjaman TIDAK perlu: "Kembali" selalu
+/// lewat dialog jumlah (ada tombol Batal) berapa pun sisanya.
+Future<bool> confirmCollectLeftBehind(
+  BuildContext context, {
+  required String itemName,
+  required String customerLabel,
+}) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Tandai sudah diambil?'),
+      content: Text('$itemName$customerLabel akan ditandai sudah diambil.'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Batal'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(minimumSize: const Size(0, 40)),
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('Ambil'),
+        ),
+      ],
+    ),
+  );
+  return ok ?? false;
+}
