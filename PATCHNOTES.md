@@ -8,6 +8,14 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 2 Oktober 2026
+
+### ✨ Fitur Baru
+- **Konfirmasi sebelum memenuhi pre-order bersisa 1.** Menekan "Penuhi"
+  (di Laci Meja maupun di kartu pre-order pada struk) kini menampilkan
+  dialog konfirmasi supaya tidak terpencet tanpa sengaja. Kalau DP/jaminan
+  pre-order itu belum dibayar, dialog menampilkan peringatannya.
+
 ## 1 Oktober 2026
 
 ### 🐛 Perbaikan

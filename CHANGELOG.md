@@ -7,6 +7,11 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-10-02 (sesi kedelapan puluh tiga lanjutan — gate Penuhi pre-order)
+
+- `1e6e77e` — feat(laci-meja): konfirmasi anti-misclick saat Penuhi pre-order
+  bersisa 1 (+peringatan DP belum dibayar)
+
 ## 2026-10-01 (sesi kedelapan puluh tiga lanjutan — HPP pre-order DP-0 & keterangan riwayat pembayaran)
 
 - `24b1168` — perf(laporan): perbaikan HPP pre-order pakai rentang created_at

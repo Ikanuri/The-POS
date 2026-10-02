@@ -6,6 +6,8 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
+_Sesi 83 (2 Okt) — gate Penuhi pre-order (`1e6e77e`): `confirmFulfillPreorder` (`laci_meja/preorder_fulfill_confirm.dart`) dipanggil di dashboard Laci Meja & kartu pre-order struk HANYA saat sisa <= 1 (sisa > 1 sudah punya dialog jumlah); peringatan jika `getPreorderDepositOwed` != null. Tombol "batal penuhi" belum ada di UI (Batal pre-order dicabut dulu atas permintaan user). Versi **2.73.0+166**.
+
 **Diskusi OCR (1 Okt 2026, SEMUA belum diputuskan/dikerjakan)** — user
 mengusulkan OCR untuk scan nota supplier + penentuan HPP otomatis. Kondisi
 app: Penerimaan Barang (`receive_goods_screen.dart`, `receive_text_parser.dart`
