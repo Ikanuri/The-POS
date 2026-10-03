@@ -116,6 +116,43 @@ berubah otomatis dgn pratinjau, atau wajib konfirmasi ekstra? (4) HPP satuan lai
 dihitung dari dasar? (5) ambang peringatan 30% ok? User sudah menyebut "beberapa
 penyesuaian" tapi belum merinci — tanyakan lagi sebelum eksekusi.
 
+## Item 91 — Harga jual dari margin (persen/Rp), dua arah (3 Okt 2026) — DISKUSI, MENUNGGU KEPUTUSAN USER
+
+Usulan user: di form produk, input margin (persen ATAU rupiah) menghitung harga
+jual; sebaliknya, mengubah harga jual membuat margin ikut menyesuaikan.
+Tafsir yang dipakai (dari kalimat user): **Arti A = kalkulator dua arah, hanya
+bantuan input** — yang tersimpan tetap harga jual (+ HPP) saja, margin SELALU
+dihitung saat layar dibuka, harga jual TIDAK ikut berubah bila HPP berubah.
+Arti B (margin disimpan sbg sumber kebenaran, harga jual live mengikuti HPP)
+TIDAK disarankan: schema naik (kolom nullable di \`price_tiers\`), bertabrakan
+dgn Input Pembelian (Item 90: tiap HPP baru akan mengubah harga jual diam-diam)
+dan menduplikasi Kategori Harga (yang sudah live dari HPP + margin lewat
+\`alt_prices\`/\`price_category_calc.dart\`).
+
+**Schema**: Arti A = TIDAK naik (tanpa kolom/tabel/migrasi). **Sinkron**: tidak
+ada dampak (margin tidak di DB; harga jual & HPP sudah ikut sync lewat jalur
+yang ada). Arti B: kolom baru ikut mengalir sbg data master host->klien
+(\`price_tiers\` sudah di \`clientMergeableTables\`), HP lama melewati kolom tak
+dikenal.
+
+**Perilaku A**: baris "Untung" di bawah Harga Jual/Harga Pokok (form produk),
+satu kolom angka + pilihan % / Rp. Ketik margin -> harga = HPP + margin
+(persen: HPP x (1 + p/100), dibulatkan rupiah). Ubah harga -> margin dihitung
+ulang (dalam bentuk yg dipilih). Ubah HPP -> margin dihitung ulang, harga tetap.
+Pilihan %/Rp cukup di layar (opsional diingat di preferensi perangkat).
+Fungsi hitung bisa memakai ulang \`price_category_calc.dart\`
+(\`computeCategoryPrice\`/\`computeMarginValue\`) agar konsisten.
+
+**Keputusan yang menunggu user**: (1) persen dari apa — markup dari modal
+(disarankan, sama dgn Kategori Harga; label "Untung % dari modal") atau margin
+dari harga jual; (2) HPP kosong/0 -> kolom untung dimatikan ("isi HPP dulu"),
+mengikuti guard Kategori Harga; (3) berlaku per satuan di tingkat harga dasar,
+tingkat grosir menampilkan margin sbg info yg boleh diedit sama; (4) margin
+negatif tetap boleh dgn peringatan merah "rugi"; (5) letak UI (usulan: tepat di
+bawah baris Harga Jual & Harga Pokok). Tes: fungsi murni (konversi dua arah,
+pembulatan, HPP 0, negatif), widget lebar 360, revert-verify. Besar: kecil,
+versi MINOR.
+
 ## Item 84 — Sisa audit Pra-Bayar (23 Sep 2026) — MENUNGGU KEPUTUSAN USER
 
 4 bug keuangan Pra-Bayar SUDAH diperbaiki di commit `0329583` (lihat
