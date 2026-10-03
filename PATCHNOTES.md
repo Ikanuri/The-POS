@@ -8,6 +8,27 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 3 Oktober 2026
+
+### ✨ Fitur Baru
+- **Margin di pengaturan produk.** Ketuk ikon **%** di samping Harga Jual
+  dan Harga Pokok untuk membuka kolom **Margin** (dihitung dari modal), dalam
+  persen atau rupiah. Isi margin, harga jual terisi sendiri; ubah harga jual
+  atau harga pokok, margin ikut menyesuaikan. Harga grosir juga
+  menampilkan marginnya dan bisa diubah dengan cara yang sama. Kalau harga
+  jual di bawah modal, margin tampil merah dengan tanda "Rugi". Kolom ini
+  baru aktif setelah Harga Pokok diisi.
+- **Tombol di atas layar Produk kini bertulisan nama fungsinya** (Cek Stok,
+  Sinkron Harga, Kelola Kategori, Kategori Harga, Katalog), sama seperti
+  tombol di layar Kasir — tidak perlu lagi menebak dari ikon. Berlaku juga
+  di layar-layar di dalamnya (Cek Stok, Penerimaan Barang, Stock Opname,
+  Kelola Kategori, Edit Produk, dll). Tombol "+" (Tambah Produk) tetap ikon.
+- **Panel "Teks Order Restock" di Cek Stok lebih lega.** Deretan kategori
+  di atas kolom teks kini bisa dilipat (pilihan terakhir diingat), dan kolom
+  teks bisa diperbesar lewat tombol di pojok kanan atasnya — daftar barang
+  di atas tidak lagi tertutup. Tombol Salin dan Kirim ke Supplier selalu
+  terlihat.
+
 ## 2 Oktober 2026
 
 ### ✨ Fitur Baru

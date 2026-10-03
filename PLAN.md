@@ -63,7 +63,7 @@ sekarang, TIDAK ada rencana eksekusi._
 
 ---
 
-## Item 90 — Input Pembelian + HPP dari faktur lewat "Tempel hasil AI" (3 Okt 2026) — RANCANGAN DISETUJUI ARAHNYA, BELUM DIEKSEKUSI
+## Item 90 — Input Pembelian + HPP dari faktur lewat "Tempel hasil AI" (3 Okt 2026) — TAHAP 1 SELESAI (`bd59aa5`), TAHAP 2-6 BELUM
 
 Keputusan owner toko (dari dokumen usulan, "ya, lanjut, sesuai yang
 disarankan"): toko PKP -> pencatatan **B** (HPP tanpa PPN, PPN masukan dicatat
@@ -73,6 +73,25 @@ SETELAH pratinjau dampak; ambang peringatan perubahan harga 30%; tahap 1-3
 dulu, tahap 4 (tempel hasil AI) menyusul. Jawaban owner atas pertanyaan
 rinci (PPN per baris vs total, barang tanpa PPN) belum ada -> tetap sediakan
 "kena PPN" per baris & PPN per baris boleh diedit.
+
+**Progres (3 Okt, `bd59aa5`) — TAHAP 1 SELESAI**: TIDAK membuat tabel baru
+`purchase_entries` — ternyata `suppliers`/`purchases`/`purchase_items` SUDAH ada
+(sync & backup tersedia, belum dipakai fitur apa pun) -> dipakai ulang + kolom
+baru schema 47 (`purchases`: invoice_no, invoice_date, supplier_name,
+discount_total, input_tax_total; `purchase_items`: discount,
+price_includes_tax, tax_treatment, tax_rate, input_tax, cost_before,
+cost_after). Fungsi murni `lib/core/utils/purchase_calc.dart`
+(`computePurchaseLine`, `allocateInvoiceDiscount`, ambang perubahan HPP);
+DB: `AppDatabase.applyPurchase`/`voidPurchase`/`getPurchaseSettings`/
+`baseUnitCost` (HPP ditulis ke SEMUA satuan & tingkat harga produk,
+`products.updated_at` dicap ulang; pembatalan memulihkan HPP hanya bila belum
+berubah lagi, selain itu dilaporkan). Pengaturan toko (`purchase_tax_treatment_
+default`='pisah', `purchase_tax_rate`=11, `purchase_cost_warn_pct`=30) masuk
+`syncableSettingKeys`. Bug lama sekalian diperbaiki: klien MEMBUANG sync
+suppliers/purchases/purchase_items (absen di `clientMergeableTables`). Status
+pembelian: 'received'/'void'. Catatan: pembelian dari HP PEGAWAI belum bisa
+naik ke owner (tabel ini master data host->klien) — urusan TAHAP 3 (usulan
+owner). BELUM ADA UI: tahap 2 berikutnya.
 
 **Pendekatan input faktur (menggantikan OCR on-device)**: AI dipakai DI LUAR
 aplikasi; aplikasi hanya punya SATU parser tetap + validator. Alur: tombol
@@ -88,12 +107,12 @@ dus, diskon, PPN) & mengabaikan hitungan AI.
 
 **CSV produk ikut ditempel ke AI** (usulan user): tujuan pencocokan lebih akurat
 tanpa prompt panjang. Isi minimal: id produk/satuan, nama, satuan, isi per
-satuan (TANPA harga jual/HPP -> privasi). Hasilnya: AI mengisi \`product_unit_id\`
+satuan (TANPA harga jual/HPP -> privasi). Hasilnya: AI mengisi `product_unit_id`
 tebakan per baris; app memperlakukannya sbg SARAN (id harus ada di DB, ditandai
 "perlu konfirmasi" bila bukan alias hasil pelajaran; setelah user konfirmasi
 dipelajari jadi alias -> pencocokan PERSIS berikutnya tanpa AI; aturan "tidak
 fuzzy otomatis" tetap). Format JSON = **array faktur** (mendukung beberapa nota
-dalam satu sesi) + \`version\` format. Parser toleran: ambil blok JSON dari
+dalam satu sesi) + `version` format. Parser toleran: ambil blok JSON dari
 balasan yg dibungkus teks/pagar kode, seragamkan format angka, nilai yang tak
 terbaca = null (BUKAN ditebak; baris minta diisi manual). Catatan: ekspor CSV
 produk 2000+ baris ~100-150 KB — uji batas lampiran Claude & Meta AI; bila
@@ -111,7 +130,7 @@ Contoh Terigu 5 kg faktur Rp41.905 inkl PPN 11% -> HPP 37.752, PPN 4.153.
 Cek dulu apakah pengaturan toko ikut sync antar-HP (belum diperiksa) — HPP
 diputuskan owner jadi pengaturan harus sampai ke HP lain.
 
-**Data**: tabel baru \`purchase_entries\` (schema 47) memuat sejak awal: no. &
+**Data**: tabel baru `purchase_entries` (schema 47) memuat sejak awal: no. &
 tanggal faktur, supplier, qty, satuan, harga faktur, diskon baris & diskon
 faktur (dibagi proporsional), flag harga inkl PPN, tarif PPN, flag kena PPN per
 baris, PPN masukan, HPP lama & baru, pencatat, status (diterapkan/menunggu
@@ -122,18 +141,18 @@ nilai lama kecuali sudah berubah lagi -> hanya stok + peringatan).
 **Aturan hitung**: harga bersih = harga faktur - diskon; bila harga inkl PPN
 DPP = harga / (1 + tarif) (hanya baris "kena PPN"); HPP per satuan beli = DPP
 (atau DPP + PPN bila dasar "termasuk PPN"); HPP satuan dasar = / isi satuan
-beli (\`ratioToBase\`); HPP satuan lain = HPP dasar x isinya (bulat rupiah);
-diterapkan ke semua tingkat harga (\`price_tiers.costPrice\`) satuan itu; tidak
-mengubah riwayat (\`costAtSale\` snapshot); non-stok: HPP boleh, stok tidak;
+beli (`ratioToBase`); HPP satuan lain = HPP dasar x isinya (bulat rupiah);
+diterapkan ke semua tingkat harga (`price_tiers.costPrice`) satuan itu; tidak
+mengubah riwayat (`costAtSale` snapshot); non-stok: HPP boleh, stok tidak;
 varian: ke varian terpilih; harga beli kosong/0 = HPP tetap. Harga jual
 Kategori Harga berjangkar "modal" dihitung ULANG live dari HPP -> pratinjau
-WAJIB menampilkan "Harga Kategori X: Rp a -> Rp b". Izin \`input_pembelian\`
-(tersembunyi di \`kasir_permissions_screen.dart\`) ditampilkan lagi. Peringatan
+WAJIB menampilkan "Harga Kategori X: Rp a -> Rp b". Izin `input_pembelian`
+(tersembunyi di `kasir_permissions_screen.dart`) ditampilkan lagi. Peringatan
 harga jual < HPP baru. Ini BUKAN software pajak: PPN masukan hanya informasi.
 
 **Tahap**: 1) tabel + fungsi terap/batal + aturan HPP/PPN/diskon + pengaturan
 toko + tes DB; 2) layar kolom harga beli/diskon/PPN + pratinjau + peringatan
-(perluas Penerimaan Barang \`receive_goods_screen.dart\`); 3) izin pegawai +
+(perluas Penerimaan Barang `receive_goods_screen.dart`); 3) izin pegawai +
 usulan owner; 4) pratinjau dampak Kategori Harga; 5) **Tempel hasil AI**:
 generator prompt + ekspor CSV minimal + parser/validator JSON + penghubung ke
 layar tahap 2; 6) laporan pembelian dasar (opsional). Tes: murni (konversi,
@@ -152,7 +171,7 @@ diambil (user sudah melampirkan sendiri di app AI).
   barang): tiga pilihan per baris — (1) PPN masuk modal (modal = harga inkl PPN),
   (2) PPN dipisah (modal tanpa PPN, PPN masukan dicatat), (3) tanpa PPN (barang
   bebas PPN, harga apa adanya). Nilai awal: default toko (owner) -> DIINGAT per
-  barang dari pembelian terakhir (dibaca dari \`purchase_entries\`, TANPA kolom
+  barang dari pembelian terakhir (dibaca dari `purchase_entries`, TANPA kolom
   baru di produk) -> bisa diubah per baris di pratinjau. Faktur tidak memuat
   penanda barang bebas PPN, jadi ditentukan pengguna; validasi: PPN total faktur
   vs jumlah PPN baris yang ditandai kena PPN, selisih besar = peringatan (tanda
@@ -168,104 +187,14 @@ diambil (user sudah melampirkan sendiri di app AI).
 - Pertanyaan owner yang tadinya menggantung terjawab: PPN di faktur = TOTAL
   saja; barang bebas PPN ada (ditentukan lewat perlakuan PPN per barang).
 
-## Item 92 — Label nama fungsi di tombol header tab Produk & sub-fiturnya (3 Okt 2026) — KEPUTUSAN USER LENGKAP, SIAP DIEKSEKUSI
+## Item 94 — Overflow 4px baris stepper Order Restock (Cek Stok) di lebar 360 (3 Okt 2026) — TEMUAN, BELUM DIEKSEKUSI
 
-Masalah: tombol header hanya ikon (nama fungsi baru muncul lewat tooltip tahan-lama),
-membingungkan.
-
-**Keputusan user**: desain label SAMA dengan label di bawah tombol header layar
-Kasir (widget privat \`_TbBtn\` di \`kasir_screen.dart\`: kotak 36x36 sudut
-membulat berisi ikon 18, di bawahnya teks 8,5pt rata tengah, lebar 44, maks 2
-baris, aksen warna soft per fungsi) — pola ini juga dipakai di layar Laci Meja
-(belum diperiksa persis widgetnya; samakan saat eksekusi). Sub-fitur memakai
-pola yang sama. **Pakai nama yang sudah dipakai di aplikasi** (tanpa
-dipersingkat). **"Tambah Produk" tetap berupa ikon "+"** (fungsinya sudah
-diketahui, tanpa label).
-
-Cakupan (hasil pemeriksaan kode):
-- \`produk_list_screen.dart\` AppBar actions: Cek Stok, Sinkron Harga, Kelola
-  Kategori, Kategori Harga, Katalog (BERLABEL) + Tambah Produk (ikon saja).
-- Sub-fitur: \`cek_stok_screen.dart\` (Penerimaan Barang, Stock Opname, Reset Stok
-  [owner]); \`price_sync_screen.dart\`, \`product_group_screen.dart\` (mode seleksi
-  punya beberapa IconButton) — audit SEMUA AppBar di \`lib/features/produk/\`
-  (termasuk \`catalog/\`) agar tidak ada yang terlewat.
-
-Catatan teknis: \`_TbBtn\` privat -> ekstrak ke widget bersama (mis.
-\`lib/core/widgets/labeled_tool_button.dart\`) dan pakai ulang di kasir (perilaku
-kasir TIDAK boleh berubah) + produk; label panjang ("Penerimaan Barang",
-"Kelola Kategori", "Kategori Harga") dua baris di lebar 44 — uji tidak terpotong
-& AppBar tidak overflow di 360px (5 tombol berlabel + "+" + judul "Produk";
-bila sempit, kecilkan jarak/bungkus actions dgn Row padat, JANGAN
-memotong label). Tanpa schema, tanpa sync. Tes: widget lebar 360 (semua label
-terlihat, tak overflow, aksi tetap berfungsi) + kasir tidak berubah,
-revert-verify. Besar: kecil-sedang (murni UI); versi MINOR.
-
-## Item 93 — Cek Stok: panel Order Restock (chip kategori lipat + kolom teks bisa diperbesar) + ingat pilihan (3 Okt 2026) — KEPUTUSAN USER LENGKAP, SIAP DIEKSEKUSI
-
-Masalah: panel bawah "Order Restock" di \`cek_stok_screen.dart\` (chip
-sertakan/kecualikan kategori — hanya tampil bila >=2 kategori — di atas kolom
-teks output) memakan tinggi layar sehingga menutup daftar item.
-
-**Keputusan user**:
-1. **Chip kategori** bisa dilipat/dibuka lewat tombol ▾/▴ (area sentuh >=40dp,
-   animasi singkat). **Kolom teks + tombol Salin/Bagikan SELALU tetap terlihat**
-   (tidak ikut dilipat).
-2. **Kolom teks bisa diperbesar (expand)** lewat SATU tombol di pojok KANAN ATAS
-   DI DALAM field. Saat expand, ukurannya (tinggi area) SAMA PERSIS dengan ukuran
-   saat chip kategori juga terbuka — jadi tinggi panel konstan, bukan membesar
-   sendiri-sendiri. (Dikonfirmasi user: yang dimaksud TINGGI area.)
-3. **Prioritas**: bila chip terbuka DAN field diperbesar, **field yang menang** —
-   chip kategori DITIMPA sementara oleh field yang diperbesar (disembunyikan,
-   bukan dihapus); begitu field diciutkan, chip kembali ke keadaan terakhirnya
-   (terbuka/terlipat).
-
-**Persistensi**: pilihan terakhir chip (terbuka/terlipat) TERSIMPAN dan tidak reset
-saat layar ditutup/dibuka lagi — pola sama \`cek_stok_excluded_output_groups\`
-(blob di tabel settings, TANPA migrasi), mis. key
-\`cek_stok_category_panel_expanded\` ('1'/'0'; awal = terbuka). Per-perangkat,
-tidak perlu sinkron. Keadaan field diperbesar TIDAK
-disimpan (dikonfirmasi user): selalu mulai dalam keadaan ciut; hanya pilihan chip
-yang persisten.
-
-Tes: widget lebar 360 (lipat/buka chip; field diperbesar menyembunyikan chip &
-tinggi panel sama dgn saat chip terbuka; chip kembali ke keadaan terakhir setelah
-field diciutkan; nilai tersimpan setelah layar dibuka ulang; Salin/Bagikan tetap
-terlihat di semua keadaan), revert-verify. Besar: kecil.
-
-## Item 91 — Harga jual dari margin (persen/Rp), dua arah (3 Okt 2026) — KEPUTUSAN USER LENGKAP, SIAP DIEKSEKUSI
-
-Usulan user: di form produk, input margin (persen ATAU rupiah) menghitung harga
-jual; sebaliknya, mengubah harga jual membuat margin ikut menyesuaikan.
-**Tafsir A = kalkulator dua arah, hanya bantuan input**: yang tersimpan tetap
-harga jual (+ HPP) saja; margin SELALU dihitung saat layar dibuka; harga jual
-TIDAK ikut berubah bila HPP berubah. (Arti B — margin disimpan, harga live
-mengikuti HPP — TIDAK diambil: schema naik, bertabrakan dgn Input Pembelian
-Item 90, menduplikasi Kategori Harga yang sudah live dari HPP.)
-
-**Schema**: TIDAK naik. **Sinkron**: tidak ada dampak (margin tidak di DB; harga jual
-& HPP sudah ikut sync lewat jalur yang ada).
-
-**Keputusan user (3 Okt)**:
-1. **Markup dari modal**: persen = (harga - HPP) / HPP; rupiah = harga - HPP;
-   harga = HPP x (1 + p/100) atau HPP + Rp, dibulatkan rupiah. Sama dgn Kategori
-   Harga (pakai ulang \`price_category_calc.dart\`: \`computeCategoryPrice\`/
-   \`computeMarginValue\` agar konsisten).
-2. **HPP kosong/0 -> kolom Margin DIMATIKAN** (disabled + keterangan "isi HPP
-   dulu"). **Sebutan fitur = "Margin"** (BUKAN "Untung"). **Tombol berupa ikon "%"
-   saja** (hemat ruang) di dekat baris Harga Jual/Harga Pokok form produk; ditekan
-   -> muncul kolom Margin dgn pilihan % / Rp. Catatan label: walau dinamai
-   "Margin", hitungannya markup dari modal — beri keterangan kecil "dari modal"
-   agar tidak tertukar dgn margin dari harga jual.
-3. Tingkat harga grosir: margin tampil sbg info & boleh diedit dgn cara sama.
-4. Margin NEGATIF (harga < HPP) boleh, ditandai merah + peringatan "rugi".
-5. Letak UI: terjawab di poin 2 (ikon % di dekat Harga Jual/Harga Pokok).
-
-**Perilaku**: ketik margin -> harga terisi; ubah harga -> margin dihitung ulang
-(dalam bentuk yg dipilih % / Rp); ubah HPP -> margin dihitung ulang, harga tetap.
-Pilihan %/Rp cukup di layar (opsional diingat di preferensi perangkat).
-Tes: fungsi murni (konversi dua arah, pembulatan, HPP 0, negatif), widget lebar
-360 (ikon % muat tanpa overflow, kolom mati saat HPP 0, dua arah, ganti %/Rp,
-negatif merah), revert-verify. Besar: kecil; versi MINOR.
+Ditemukan saat menguji Item 93: baris `[−] [qty] [+] [satuan ▾]` per produk
+tercentang di `cek_stok_screen.dart` (Row `mainAxisSize.min` berisi
+`_StepGlyph` + qty minWidth 40 + `UnitDropdown`) overflow 4,1px di lebar 360
+(HP sempit). SUDAH ada sebelum Item 93 (dibuktikan dgn stash). Usulan: perkecil
+padding/minWidth qty atau bungkus dropdown satuan dgn `Flexible`; tes widget
+lebar 360. Kecil.
 
 ## Item 84 — Sisa audit Pra-Bayar (23 Sep 2026) — MENUNGGU KEPUTUSAN USER
 

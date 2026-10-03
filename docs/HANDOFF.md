@@ -8,6 +8,22 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 
 _Sesi 83 (2 Okt) — gate Penuhi pre-order (`1e6e77e`): `confirmFulfillPreorder` (`laci_meja/preorder_fulfill_confirm.dart`) dipanggil di dashboard Laci Meja & kartu pre-order struk HANYA saat sisa <= 1 (sisa > 1 sudah punya dialog jumlah); peringatan jika `getPreorderDepositOwed` != null. Tombol "batal penuhi" belum ada di UI (Batal pre-order dicabut dulu atas permintaan user). Susulan (`499ea89`): `confirmCollectLeftBehind` utk "Ambil" titip/ketinggalan bersisa <= 1; pinjaman tidak butuh (dialog jumlah selalu muncul). Rancangan Input Pembelian lengkap ada di PLAN.md Item 90 (user menyebut "beberapa penyesuaian" yang belum dirinci). Diskusi "harga jual dari margin dua arah" (3 Okt) tersimpan di PLAN.md Item 91 (Arti A tanpa schema, menunggu keputusan markup vs margin & letak UI). Item 90 DIPERBARUI (3 Okt): input faktur lewat "Tempel hasil AI" (AI di luar app -> JSON -> parser tetap + validator; CSV produk minimal ikut ke AI sbg saran pencocokan; AI TIDAK boleh keluarkan kode) menggantikan OCR on-device; owner PKP sudah menyetujui usulan (Opsi B, pegawai via usulan owner, ambang 30%). Detail di PLAN.md Item 90. Item 90 diperbarui lagi dari faktur contoh Indomarco: perlakuan PPN fleksibel PER BARIS (masuk modal / dipisah / bebas PPN; diingat per barang dari pembelian terakhir), ambang peringatan manual, lampiran CSV ril teruji aman. PLAN.md bertambah Item 92 (label nama fungsi di tombol header tab Produk & sub-fitur) dan Item 93 (panel kategori Order Restock di Cek Stok bisa dilipat + pilihan tersimpan) — usulan user, belum dieksekusi. Item 91 (margin dua arah) keputusan LENGKAP: markup dari modal, tombol ikon "%", sebutan "Margin", kolom mati saat HPP 0, grosir & negatif boleh. Item 92/93/91 siap dieksekusi. Versi **2.73.0+166**.
 
+_Update sesi 83 (3 Okt, model berganti ke Opus) — dikerjakan berurutan atas
+permintaan user, BELUM di-merge ke main ("jangan merge dulu"): Item 93
+`b2095b4` (panel Order Restock: chip kategori lipat persisten via setting
+`cek_stok_category_panel_expanded`, kolom teks diperbesar non-persisten,
+tinggi = chip+field), Item 92 `d91f57e` (`_TbBtn` kasir diekstrak jadi
+`lib/core/widgets/labeled_tool_button.dart` `LabeledToolButton`/
+`LabeledToolbarActions`/`kLabeledToolbarHeight`; kasir pakai typedef, perilaku
+sama; header Produk + sub-fitur berlabel, "+" tetap ikon, tooltip
+dipertahankan), Item 48 ternyata SUDAH selesai lama (PLAN dihapus, `a49c54a`),
+Item 91 `4cec68b` (`lib/core/utils/margin_calc.dart` + ikon % di `_UnitCard`
+form produk; kalkulator saja, tanpa schema), Item 90 TAHAP 1 `bd59aa5`
+(lihat PLAN Item 90 "Progres": reuse tabel purchases yang sudah ada, schema
+**47**, applyPurchase/voidPurchase, fix sync klien). Temuan baru: PLAN Item 94
+(overflow 4px stepper Order Restock di 360, sudah ada sebelumnya). Versi kerja
+**2.74.0+167**.
+
 **Diskusi OCR (1 Okt 2026, SEMUA belum diputuskan/dikerjakan)** — user
 mengusulkan OCR untuk scan nota supplier + penentuan HPP otomatis. Kondisi
 app: Penerimaan Barang (`receive_goods_screen.dart`, `receive_text_parser.dart`

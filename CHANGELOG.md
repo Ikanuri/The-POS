@@ -7,6 +7,20 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-10-03 (sesi kedelapan puluh tiga lanjutan — Item 93, 92, 91, Item 90 tahap 1)
+
+- `bd59aa5` — feat(pembelian): Item 90 tahap 1 — terapkan/batalkan pembelian
+  (stok + HPP dari faktur, PPN fleksibel, diskon) + pengaturan toko; schema 47;
+  fix klien membuang sync supplier/pembelian
+- `4cec68b` — feat(produk): kalkulator Margin dua arah (ikon %, markup dari
+  modal) di form produk
+- `a49c54a` — docs: hapus PLAN Item 48 (avatar pastel sudah selesai di
+  c0a570a/971f647)
+- `d91f57e` — feat(produk): tombol header tab Produk & sub-fitur berlabel nama
+  fungsi (pola toolbar Kasir)
+- `b2095b4` — feat(cek-stok): panel Order Restock — chip kategori bisa dilipat
+  (tersimpan) & kolom teks bisa diperbesar
+
 ## 2026-10-02 (sesi kedelapan puluh tiga lanjutan — gate Penuhi pre-order)
 
 - `499ea89` — feat(laci-meja): konfirmasi anti-misclick juga utk Ambil
