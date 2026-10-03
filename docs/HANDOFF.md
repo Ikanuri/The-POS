@@ -8,6 +8,15 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 
 _Sesi 83 (2 Okt) — gate Penuhi pre-order (`1e6e77e`): `confirmFulfillPreorder` (`laci_meja/preorder_fulfill_confirm.dart`) dipanggil di dashboard Laci Meja & kartu pre-order struk HANYA saat sisa <= 1 (sisa > 1 sudah punya dialog jumlah); peringatan jika `getPreorderDepositOwed` != null. Tombol "batal penuhi" belum ada di UI (Batal pre-order dicabut dulu atas permintaan user). Susulan (`499ea89`): `confirmCollectLeftBehind` utk "Ambil" titip/ketinggalan bersisa <= 1; pinjaman tidak butuh (dialog jumlah selalu muncul). Rancangan Input Pembelian lengkap ada di PLAN.md Item 90 (user menyebut "beberapa penyesuaian" yang belum dirinci). Diskusi "harga jual dari margin dua arah" (3 Okt) tersimpan di PLAN.md Item 91 (Arti A tanpa schema, menunggu keputusan markup vs margin & letak UI). Item 90 DIPERBARUI (3 Okt): input faktur lewat "Tempel hasil AI" (AI di luar app -> JSON -> parser tetap + validator; CSV produk minimal ikut ke AI sbg saran pencocokan; AI TIDAK boleh keluarkan kode) menggantikan OCR on-device; owner PKP sudah menyetujui usulan (Opsi B, pegawai via usulan owner, ambang 30%). Detail di PLAN.md Item 90. Item 90 diperbarui lagi dari faktur contoh Indomarco: perlakuan PPN fleksibel PER BARIS (masuk modal / dipisah / bebas PPN; diingat per barang dari pembelian terakhir), ambang peringatan manual, lampiran CSV ril teruji aman. PLAN.md bertambah Item 92 (label nama fungsi di tombol header tab Produk & sub-fitur) dan Item 93 (panel kategori Order Restock di Cek Stok bisa dilipat + pilihan tersimpan) — usulan user, belum dieksekusi. Item 91 (margin dua arah) keputusan LENGKAP: markup dari modal, tombol ikon "%", sebutan "Margin", kolom mati saat HPP 0, grosir & negatif boleh. Item 92/93/91 siap dieksekusi. Versi **2.73.0+166**.
 
+GOTCHA BARU (bug nyata dari user, spinner Penerimaan Barang selamanya): DB
+produksi membuka `PRAGMA foreign_keys = ON` (di opener SQLCipher), tapi
+`NativeDatabase.memory()` di test TIDAK — insert anak sebelum induk lolos di
+test tapi DITOLAK di HP asli. `applyPurchase` kini menyimpan `purchases`
+dulu; test `purchase_input_test.dart` punya kasus dgn `setup: PRAGMA
+foreign_keys = ON`. Pakai pola itu utk fungsi DB baru dgn FK. Handler layar
+Penerimaan Barang kini `_guarded` (CrashLogService + snackbar). Versi
+**2.75.1+169**.
+
 _Update sesi 83 (3 Okt, maraton Item 90 atas permintaan user) — Item 90
 SELESAI tahap 1-6 (dihapus dari PLAN), BELUM di-merge ke main. Keputusan user
 di sesi ini: laporan = "riwayat saja"; persetujuan HPP pegawai di layar

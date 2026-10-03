@@ -8,6 +8,14 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 4 Oktober 2026
+
+### 🐛 Perbaikan
+- **Penerimaan Barang tidak lagi "muter terus" saat menyimpan pembelian.**
+  Pembelian dengan harga beli gagal tersimpan dan layar berputar tanpa
+  henti. Sekarang tersimpan normal, dan kalau ada masalah lain, layar
+  menampilkan pesan galatnya (tercatat di Log Error) alih-alih berputar.
+
 ## 3 Oktober 2026
 
 ### ✨ Fitur Baru

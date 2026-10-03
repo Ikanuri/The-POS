@@ -403,6 +403,43 @@ void main() {
     });
   });
 
+  test('DB ASLI memakai PRAGMA foreign_keys=ON: applyPurchase tidak boleh '
+      'ditolak (bug nyata: spinner Penerimaan Barang berputar selamanya)',
+      () async {
+    final fk = AppDatabase(NativeDatabase.memory(
+        setup: (raw) => raw.execute('PRAGMA foreign_keys = ON;')));
+    addTearDown(fk.close);
+    await fk.saveProduct(
+      product: ProductsCompanion.insert(id: 'P1', name: 'Terigu'),
+      units: [
+        ProductUnitsCompanion.insert(
+            id: 'pak',
+            productId: 'P1',
+            isBaseUnit: const Value(true),
+            isNonStock: const Value(false)),
+      ],
+      tiersByUnitTempId: {
+        'pak': [
+          PriceTiersCompanion.insert(
+              id: 't1', productUnitId: 'pak', price: 45000)
+        ],
+      },
+      barcodesByUnitTempId: const {},
+    );
+    final id = await fk.applyPurchase(
+        invoiceNo: 'F-1',
+        lines: const [
+          PurchaseLineInput(productUnitId: 'pak', qty: 2, unitPrice: 30000),
+        ]);
+    final head = await (fk.select(fk.purchases)
+          ..where((t) => t.id.equals(id)))
+        .getSingle();
+    expect(head.total, 60000);
+    expect(head.status, 'received');
+    expect(await fk.currentStock('pak'), 2);
+    expect(await fk.voidPurchase(id), isEmpty);
+  });
+
   test('migrasi v46 -> v47: kolom pembelian ditambah, data lama utuh',
       () async {
     final path = '${Directory.systemTemp.path}/pos_mig47_'

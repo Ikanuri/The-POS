@@ -10,6 +10,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../core/widgets/labeled_tool_button.dart';
 import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
+import '../../core/services/crash_log_service.dart';
 import '../../core/services/purchase_ai_format.dart';
 import '../../core/services/receive_text_parser.dart';
 import '../../core/utils/purchase_calc.dart';
@@ -260,7 +261,25 @@ class _ReceiveGoodsScreenState extends ConsumerState<ReceiveGoodsScreen> {
     _invoices = next;
   }
 
-  Future<void> _process() async {
+  /// Jalankan [body] dgn spinner; GALAT APA PUN dicatat & ditampilkan (bukan
+  /// membiarkan spinner berputar selamanya) lalu spinner dimatikan.
+  Future<void> _guarded(String what, Future<void> Function() body) async {
+    try {
+      await body();
+    } catch (e, st) {
+      await CrashLogService.record(e, st, context: 'receive_goods_$what');
+      if (!mounted) return;
+      setState(() => _busy = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Gagal ($what): $e'),
+        duration: const Duration(seconds: 8),
+      ));
+    }
+  }
+
+  Future<void> _process() => _guarded('proses daftar', _processImpl);
+
+  Future<void> _processImpl() async {
     final text = _textCtrl.text;
     if (text.trim().isEmpty) return;
     setState(() => _busy = true);
@@ -291,7 +310,9 @@ class _ReceiveGoodsScreenState extends ConsumerState<ReceiveGoodsScreen> {
   }
 
   /// Item 90 tahap 5 — proses balasan AI yang ditempel.
-  Future<void> _processAi() async {
+  Future<void> _processAi() => _guarded('proses hasil AI', _processAiImpl);
+
+  Future<void> _processAiImpl() async {
     final text = _aiCtrl.text;
     if (text.trim().isEmpty) return;
     setState(() => _busy = true);
@@ -468,7 +489,9 @@ class _ReceiveGoodsScreenState extends ConsumerState<ReceiveGoodsScreen> {
     return c != null && info != null && info.basePrice > 0 && info.basePrice < c;
   }
 
-  Future<void> _commit() async {
+  Future<void> _commit() => _guarded('simpan pembelian', _commitImpl);
+
+  Future<void> _commitImpl() async {
     final invoices = _invoices;
     if (invoices == null) return;
     final ready = [

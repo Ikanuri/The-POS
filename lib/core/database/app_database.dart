@@ -2174,6 +2174,23 @@ class AppDatabase extends _$AppDatabase {
     final id = const Uuid().v4();
     await transaction(() async {
       var proposed = false;
+      // Catatan faktur WAJIB masuk SEBELUM barisnya: `purchase_items.purchase_id`
+      // REFERENCES `purchases(id)` dan DB asli memakai `PRAGMA foreign_keys =
+      // ON` (test memori TIDAK) — urutan terbalik bikin insert baris ditolak,
+      // exception tak tertangkap, spinner layar tidak pernah berhenti.
+      // Total/PPN diisi ulang di akhir.
+      await into(purchases).insert(PurchasesCompanion.insert(
+        id: id,
+        localId: 'PB-${kasirId ?? 'X'}-${at.microsecondsSinceEpoch}',
+        kasirId: Value(kasirId),
+        status: 'received',
+        note: Value(note),
+        createdAt: Value(at),
+        updatedAt: Value(at),
+        invoiceNo: Value(invoiceNo),
+        invoiceDate: Value(invoiceDate),
+        supplierName: Value(supplierName),
+      ));
       final nets = [
         for (final l in lines) (l.qty * l.unitPrice).round() - l.discount
       ];
@@ -2237,18 +2254,10 @@ class AppDatabase extends _$AppDatabase {
         discountTotal += l.discount + alloc[i];
         taxTotal += r.inputTax;
       }
-      await into(purchases).insert(PurchasesCompanion.insert(
-        id: id,
-        localId: 'PB-${kasirId ?? 'X'}-${at.microsecondsSinceEpoch}',
-        kasirId: Value(kasirId),
-        status: proposed ? 'pending' : 'received',
+      await (update(purchases)..where((t) => t.id.equals(id))).write(
+          PurchasesCompanion(
+        status: Value(proposed ? 'pending' : 'received'),
         total: Value(total),
-        note: Value(note),
-        createdAt: Value(at),
-        updatedAt: Value(at),
-        invoiceNo: Value(invoiceNo),
-        invoiceDate: Value(invoiceDate),
-        supplierName: Value(supplierName),
         discountTotal: Value(discountTotal),
         inputTaxTotal: Value(taxTotal),
       ));
