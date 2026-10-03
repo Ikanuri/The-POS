@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/widgets/labeled_tool_button.dart';
 import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/widgets/inline_banner.dart';
@@ -252,6 +253,7 @@ class _ProductGroupScreenState extends ConsumerState<ProductGroupScreen>
     return Scaffold(
       appBar: _selectionMode
           ? AppBar(
+              toolbarHeight: kLabeledToolbarHeight,
               leading: IconButton(
                 icon: const Icon(Icons.close),
                 tooltip: 'Batal pilih',
@@ -259,29 +261,38 @@ class _ProductGroupScreenState extends ConsumerState<ProductGroupScreen>
               ),
               title: Text('${_selectedIds.length} dipilih'),
               actions: [
-                IconButton(
-                  icon: const Icon(Icons.delete_outline),
-                  tooltip: 'Hapus Terpilih',
-                  onPressed: _selectedIds.isEmpty
-                      ? null
-                      : () => _confirmBulkDelete(
-                          groupsAsync.valueOrNull ?? const []),
-                ),
+                LabeledToolbarActions(children: [
+                  LabeledToolButton(
+                    icon: Icons.delete_outline,
+                    label: 'Hapus Terpilih',
+                    tooltip: 'Hapus Terpilih',
+                    labelWidth: 50,
+                    onTap: _selectedIds.isEmpty
+                        ? null
+                        : () => _confirmBulkDelete(
+                            groupsAsync.valueOrNull ?? const []),
+                  ),
+                ]),
               ],
             )
           : AppBar(
+              toolbarHeight: kLabeledToolbarHeight,
               title: const Text('Kelola Kategori'),
               actions: [
-                IconButton(
-                  icon: const Icon(Icons.playlist_add),
-                  tooltip: 'Tambah Massal',
-                  onPressed: _showBulkAddDialog,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.add),
-                  tooltip: 'Tambah Kategori',
-                  onPressed: _showAddDialog,
-                ),
+                LabeledToolbarActions(children: [
+                  LabeledToolButton(
+                    icon: Icons.playlist_add,
+                    label: 'Tambah Massal',
+                    tooltip: 'Tambah Massal',
+                    labelWidth: 50,
+                    onTap: _showBulkAddDialog,
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.add),
+                    tooltip: 'Tambah Kategori',
+                    onPressed: _showAddDialog,
+                  ),
+                ]),
               ],
             ),
       body: Column(

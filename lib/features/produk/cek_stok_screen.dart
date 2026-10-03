@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../core/widgets/labeled_tool_button.dart';
 import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/theme/app_theme.dart';
@@ -110,8 +111,8 @@ class _CategoryPanelExpandedNotifier extends StateNotifier<bool> {
 }
 
 final _cekStokCategoryPanelExpandedProvider =
-    StateNotifierProvider<_CategoryPanelExpandedNotifier, bool>((ref) =>
-        _CategoryPanelExpandedNotifier(ref.watch(databaseProvider)));
+    StateNotifierProvider<_CategoryPanelExpandedNotifier, bool>(
+        (ref) => _CategoryPanelExpandedNotifier(ref.watch(databaseProvider)));
 
 class _CekStokScreenState extends ConsumerState<CekStokScreen> {
   // Item 4 (revisi 25 Juli, setelah user membandingkan dgn HTML acuannya) —
@@ -333,39 +334,48 @@ class _CekStokScreenState extends ConsumerState<CekStokScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        toolbarHeight: kLabeledToolbarHeight,
         title: const Text('Cek Stok'),
         actions: [
-          // Penerimaan Barang sengaja bertetangga dgn Stock Opname (dua-duanya
-          // menyesuaikan stok) tapi TETAP terpisah: penerimaan MENAMBAH,
-          // opname MENIMPA jadi hasil hitung fisik.
-          IconButton(
-            icon: const Icon(Icons.inventory_2_outlined),
-            tooltip: 'Penerimaan Barang',
-            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => const ReceiveGoodsScreen(),
-            )),
-          ),
-          IconButton(
-            icon: const Icon(Icons.checklist_rounded),
-            tooltip: 'Stock Opname',
-            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => const StockOpnameScreen(),
-            )),
-          ),
-          // Susulan (permintaan user): "Reset Stok" — menimpa stok
-          // seluruh/sekelompok produk jadi 0 sekaligus, TANPA hitung
-          // fisik (beda dari Stock Opname). Owner-only (bukan
-          // `canSeeReports`/asisten) — blast radius-nya store-wide,
-          // jauh lebih destruktif drpd opname biasa yang mengoreksi ke
-          // hasil hitung wajar.
-          if (device.isOwner)
-            IconButton(
-              icon: const Icon(Icons.restore),
-              tooltip: 'Reset Stok',
-              onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-                builder: (_) => const ResetStockScreen(),
+          LabeledToolbarActions(children: [
+            // Penerimaan Barang sengaja bertetangga dgn Stock Opname (dua-duanya
+            // menyesuaikan stok) tapi TETAP terpisah: penerimaan MENAMBAH,
+            // opname MENIMPA jadi hasil hitung fisik.
+            LabeledToolButton(
+              icon: Icons.inventory_2_outlined,
+              label: 'Penerimaan Barang',
+              tooltip: 'Penerimaan Barang',
+              labelWidth: 50,
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => const ReceiveGoodsScreen(),
               )),
             ),
+            LabeledToolButton(
+              icon: Icons.checklist_rounded,
+              label: 'Stock Opname',
+              tooltip: 'Stock Opname',
+              labelWidth: 50,
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => const StockOpnameScreen(),
+              )),
+            ),
+            // Susulan (permintaan user): "Reset Stok" — menimpa stok
+            // seluruh/sekelompok produk jadi 0 sekaligus, TANPA hitung
+            // fisik (beda dari Stock Opname). Owner-only (bukan
+            // `canSeeReports`/asisten) — blast radius-nya store-wide,
+            // jauh lebih destruktif drpd opname biasa yang mengoreksi ke
+            // hasil hitung wajar.
+            if (device.isOwner)
+              LabeledToolButton(
+                icon: Icons.restore,
+                label: 'Reset Stok',
+                tooltip: 'Reset Stok',
+                labelWidth: 50,
+                onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => const ResetStockScreen(),
+                )),
+              ),
+          ]),
         ],
       ),
       body: Column(

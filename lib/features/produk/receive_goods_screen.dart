@@ -2,6 +2,7 @@ import 'package:drift/drift.dart' show Variable;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/widgets/labeled_tool_button.dart';
 import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/services/receive_text_parser.dart';
@@ -162,15 +163,20 @@ class _ReceiveGoodsScreenState extends ConsumerState<ReceiveGoodsScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        toolbarHeight: kLabeledToolbarHeight,
         title: const Text('Penerimaan Barang'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.menu_book_outlined),
-            tooltip: 'Kamus Produk',
-            onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+          LabeledToolbarActions(children: [
+            LabeledToolButton(
+              icon: Icons.menu_book_outlined,
+              label: 'Kamus Produk',
+              tooltip: 'Kamus Produk',
+              labelWidth: 50,
+              onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
               builder: (_) => const ReceiveAliasScreen(),
-            )),
-          ),
+              )),
+            ),
+          ]),
         ],
       ),
       body: _busy

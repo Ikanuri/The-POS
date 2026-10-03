@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../core/widgets/labeled_tool_button.dart';
 import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/providers/product_providers.dart';
@@ -613,22 +614,29 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
       },
       child: Scaffold(
         appBar: AppBar(
+          toolbarHeight: kLabeledToolbarHeight,
           title: Text(_isEdit
               ? (_readOnly ? 'Detail Produk' : 'Edit Produk')
               : 'Tambah Produk'),
           actions: [
-            if (_isEdit)
-              IconButton(
-                icon: const Icon(Icons.qr_code_2_outlined),
-                tooltip: 'Barcode & Cetak Label',
-                onPressed: () => context.push('/produk/$_productId/barcode'),
-              ),
-            if (_isEdit && !_readOnly)
-              IconButton(
-                icon: const Icon(Icons.delete_outline),
-                tooltip: 'Nonaktifkan',
-                onPressed: _confirmDeactivate,
-              ),
+            LabeledToolbarActions(children: [
+              if (_isEdit)
+                LabeledToolButton(
+                  icon: Icons.qr_code_2_outlined,
+                  label: 'Barcode & Cetak Label',
+                  tooltip: 'Barcode & Cetak Label',
+                  labelWidth: 50,
+                  onTap: () => context.push('/produk/$_productId/barcode'),
+                ),
+              if (_isEdit && !_readOnly)
+                LabeledToolButton(
+                  icon: Icons.delete_outline,
+                  label: 'Nonaktifkan',
+                  tooltip: 'Nonaktifkan',
+                  labelWidth: 50,
+                  onTap: _confirmDeactivate,
+                ),
+            ]),
           ],
         ),
         body: _isLoading

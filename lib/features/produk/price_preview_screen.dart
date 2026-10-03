@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../core/widgets/labeled_tool_button.dart';
 import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/services/price_match_service.dart';
@@ -376,13 +377,18 @@ class _PricePreviewScreenState extends ConsumerState<PricePreviewScreen>
       length: 3,
       child: Scaffold(
         appBar: AppBar(
+          toolbarHeight: kLabeledToolbarHeight,
           title: const Text('Preview Harga'),
           actions: [
-            IconButton(
-              icon: const Icon(Icons.bug_report_outlined),
-              tooltip: 'Lihat Log Matching',
-              onPressed: () => _showLogDialog(context),
-            ),
+            LabeledToolbarActions(children: [
+              LabeledToolButton(
+                icon: Icons.bug_report_outlined,
+                label: 'Lihat Log Matching',
+                tooltip: 'Lihat Log Matching',
+                labelWidth: 50,
+                onTap: () => _showLogDialog(context),
+              ),
+            ]),
           ],
           bottom: TabBar(
             tabs: [

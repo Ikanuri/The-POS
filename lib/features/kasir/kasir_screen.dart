@@ -10,6 +10,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../core/widgets/labeled_tool_button.dart';
 import '../../core/database/app_database.dart';
 import '../../core/models/cart_item.dart';
 import '../../core/providers/device_provider.dart';
@@ -2815,79 +2816,9 @@ class _KasirTopbarState extends State<_KasirTopbar> {
   }
 }
 
-class _TbBtn extends StatelessWidget {
-  const _TbBtn({
-    required this.icon,
-    required this.onTap,
-    this.badgeCount = 0,
-    this.label,
-    this.fg,
-    this.bg,
-  });
-
-  final IconData icon;
-  final VoidCallback onTap;
-  final int badgeCount;
-
-  /// Keterangan opsional di bawah ikon (mis. 'Antrian'). Boleh berisi '\n'
-  /// untuk memaksa dua baris. Lebar dibatasi agar tidak menabrak tombol lain.
-  final String? label;
-
-  /// Item 33 — aksen soft per-fungsi (mis. `AppTheme.scanFg`/`scanBg`).
-  /// Null = netral (dipakai grid/list toggle, murni preferensi tampilan).
-  final Color Function(bool isDark)? fg;
-  final Color Function(bool isDark)? bg;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final iconColor = fg?.call(isDark) ?? cs.onSurfaceVariant;
-    final bgColor = bg?.call(isDark) ?? cs.surface;
-    final child = Icon(icon, size: 18, color: iconColor);
-    final box = Container(
-      width: 36,
-      height: 36,
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: cs.outlineVariant, width: 0.75),
-      ),
-      child: badgeCount > 0
-          ? Badge(label: Text('$badgeCount'), child: child)
-          : child,
-    );
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          box,
-          if (label != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: SizedBox(
-                width: 44,
-                child: Text(
-                  label!,
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 8.5,
-                    height: 1.05,
-                    fontWeight: FontWeight.w500,
-                    color: cs.onSurfaceVariant,
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
+/// Item 92 — widget toolbar dipindah ke `core/widgets/labeled_tool_button.dart`
+/// (dipakai bersama header tab Produk); alias ini menjaga kode kasir apa adanya.
+typedef _TbBtn = LabeledToolButton;
 
 /// Kurangi 1 satuan dasar produk [productId] dari keranjang. Item dihapus bila
 /// effective qty turun ke 0. Dipakai oleh tombol minus di kartu & list produk.

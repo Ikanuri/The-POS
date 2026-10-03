@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/widgets/labeled_tool_button.dart';
 import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/theme/app_theme.dart';
@@ -87,40 +88,52 @@ class _ProdukListScreenState extends ConsumerState<ProdukListScreen>
 
     return Scaffold(
       appBar: AppBar(
+        // Item 92 — tombol header berlabel (pola toolbar Kasir).
+        toolbarHeight: kLabeledToolbarHeight,
+        titleSpacing: 12,
         title: const Text('Produk'),
         actions: [
           // Item 30(b) — entry point SELALU terlihat (bukan chip kondisional
           // spt "Stok Menipis" yang hilang total kalau lowStockCount==0 ATAU
           // toko belum punya kategori bernama — lihat PLAN.md Item 30).
-          IconButton(
-            icon: const Icon(Icons.inventory_2_outlined),
-            tooltip: 'Cek Stok',
-            onPressed: () => context.push('/produk/cek-stok'),
-          ),
-          IconButton(
-            icon: const Icon(Icons.sync_alt_outlined),
-            tooltip: 'Sinkron Harga',
-            onPressed: () => context.push('/produk/sinkron-harga'),
-          ),
-          IconButton(
-            icon: const Icon(Icons.label_outline),
-            tooltip: 'Kelola Kategori',
-            onPressed: () => context.push('/produk/kategori'),
-          ),
-          // Revisi 3 (permintaan user): pindah dari Pengaturan ke sini —
-          // lebih dekat konteksnya ke daftar produk. Route TETAP
-          // `/pengaturan/kategori-harga` (URL internal, tidak dilihat
-          // pengguna), cuma entry point-nya yang pindah.
-          IconButton(
-            icon: const Icon(Icons.sell_outlined),
-            tooltip: 'Kategori Harga',
-            onPressed: () => context.push('/pengaturan/kategori-harga'),
-          ),
-          IconButton(
-            icon: const Icon(Icons.collections_bookmark_outlined),
-            tooltip: 'Katalog',
-            onPressed: () => context.push('/produk/katalog'),
-          ),
+          // Item 92 — berlabel (pola toolbar Kasir); "Tambah Produk" tetap
+          // ikon "+" (keputusan user: fungsinya sudah dikenal).
+          LabeledToolbarActions(children: [
+            LabeledToolButton(
+              icon: Icons.inventory_2_outlined,
+              label: 'Cek Stok',
+              tooltip: 'Cek Stok',
+              onTap: () => context.push('/produk/cek-stok'),
+            ),
+            LabeledToolButton(
+              icon: Icons.sync_alt_outlined,
+              label: 'Sinkron Harga',
+              tooltip: 'Sinkron Harga',
+              onTap: () => context.push('/produk/sinkron-harga'),
+            ),
+            LabeledToolButton(
+              icon: Icons.label_outline,
+              label: 'Kelola Kategori',
+              tooltip: 'Kelola Kategori',
+              onTap: () => context.push('/produk/kategori'),
+            ),
+            // Revisi 3 (permintaan user): pindah dari Pengaturan ke sini —
+            // lebih dekat konteksnya ke daftar produk. Route TETAP
+            // `/pengaturan/kategori-harga` (URL internal, tidak dilihat
+            // pengguna), cuma entry point-nya yang pindah.
+            LabeledToolButton(
+              icon: Icons.sell_outlined,
+              label: 'Kategori Harga',
+              tooltip: 'Kategori Harga',
+              onTap: () => context.push('/pengaturan/kategori-harga'),
+            ),
+            LabeledToolButton(
+              icon: Icons.collections_bookmark_outlined,
+              label: 'Katalog',
+              tooltip: 'Katalog',
+              onTap: () => context.push('/produk/katalog'),
+            ),
+          ]),
           if (canEdit)
             IconButton(
               icon: const Icon(Icons.add),
