@@ -141,6 +141,33 @@ PPN, diskon, parser toleran), DB nyata, migrasi v46->v47, sync dua DB, widget
 lebar 360, revert-verify. Jalur "bagikan foto langsung ke app AI" TIDAK
 diambil (user sudah melampirkan sendiri di app AI).
 
+**Pembaruan 3 Okt (dari faktur contoh Indomarco, foto dari owner + masukan user)**:
+- Fakta faktur: PPN HANYA di total (DPP Rp4.489.891 + PPN Rp493.888 = Rp4.983.779,
+  tepat 11%; teks "harga sudah termasuk PPN"); potongan PER BARIS (% dan Rp);
+  kuantitas dua bagian ("5 0" = 5 besar + 0 kecil; kolom satuan "4 /ZAK" = isi
+  4 per ZAK); total kotor Rp5.007.779 - potongan Rp24.000 = Rp4.983.779. Contoh
+  Terigu Payung: Rp167.621/ZAK / 4 pak = Rp41.905 -> /1,11 = Rp37.752. Foto
+  miring + pantulan -> validasi baris vs total WAJIB (angka mudah salah baca).
+- **Perlakuan PPN FLEKSIBEL PER BARIS** (owner memasukkan PPN ke modal utk sebagian
+  barang): tiga pilihan per baris — (1) PPN masuk modal (modal = harga inkl PPN),
+  (2) PPN dipisah (modal tanpa PPN, PPN masukan dicatat), (3) tanpa PPN (barang
+  bebas PPN, harga apa adanya). Nilai awal: default toko (owner) -> DIINGAT per
+  barang dari pembelian terakhir (dibaca dari \`purchase_entries\`, TANPA kolom
+  baru di produk) -> bisa diubah per baris di pratinjau. Faktur tidak memuat
+  penanda barang bebas PPN, jadi ditentukan pengguna; validasi: PPN total faktur
+  vs jumlah PPN baris yang ditandai kena PPN, selisih besar = peringatan (tanda
+  ada barang bebas PPN / salah tanda). Opsi pencatatan toko di atas jadi
+  DEFAULT, bukan satu-satunya.
+- **Ambang peringatan perubahan harga = pengaturan toko manual** (default 30%),
+  diubah owner; (opsional nanti per kelompok barang).
+- Lampiran CSV produk ril SUDAH diuji user: aman (tidak perlu cadangan kirim
+  per kategori). Format JSON ditambah: kuantitas besar+kecil, isi per satuan,
+  potongan per baris (% & Rp), total kotor, total potongan, DPP total, PPN total,
+  nomor faktur, tanggal, jatuh tempo (VA & info lain diabaikan; jatuh tempo
+  bisa dipakai buku hutang supplier kelak — di luar cakupan sekarang).
+- Pertanyaan owner yang tadinya menggantung terjawab: PPN di faktur = TOTAL
+  saja; barang bebas PPN ada (ditentukan lewat perlakuan PPN per barang).
+
 ## Item 91 — Harga jual dari margin (persen/Rp), dua arah (3 Okt 2026) — DISKUSI, MENUNGGU KEPUTUSAN USER
 
 Usulan user: di form produk, input margin (persen ATAU rupiah) menghitung harga
