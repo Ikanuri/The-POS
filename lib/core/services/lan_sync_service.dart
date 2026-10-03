@@ -447,6 +447,13 @@ class LanSyncService {
     // Setting toko — key-nya sendiri masih disaring `syncableSettingKeys`
     // di `AppDatabase.mergeRows` (identitas device TIDAK ikut).
     'app_settings',
+    // Supplier & Pembelian (PLAN Item 90) — `dumpSince` host SUDAH lama
+    // mengirimnya (masterData), tapi tanpa baris ini klien diam-diam
+    // MEMBUANGNYA (allowlist menolak nama tabel tak dikenal) — kelas bug
+    // sama dgn `price_categories`. Ketahuan lewat test sync pembelian.
+    'suppliers',
+    'purchases',
+    'purchase_items',
   };
 
   /// Kategori yang bisa dipilih owner saat menyetujui sync. Tabel transaksi

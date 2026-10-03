@@ -241,7 +241,7 @@ void main() {
     expect(row.data['change_reused'], isNull,
         reason: 'baris lama TIDAK diisi ulang — null = data lama');
     final ver = await d.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 46);
+    expect(ver.data.values.first, 47);
     await d.close();
     if (file.existsSync()) file.deleteSync();
   });

@@ -78,7 +78,7 @@ void main() {
         reason: 'kolom fisik HARUS benar2 ditambahkan oleh migrasi v45');
 
     final ver = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(ver.data.values.first, 46);
+    expect(ver.data.values.first, 47);
 
     await db.close();
     if (file.existsSync()) file.deleteSync();

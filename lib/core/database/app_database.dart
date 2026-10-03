@@ -28,6 +28,7 @@ import 'tables/product_tables.dart';
 import 'tables/settings_tables.dart';
 import 'tables/summary_tables.dart';
 import 'tables/supplier_tables.dart';
+import '../utils/purchase_calc.dart';
 import 'tables/sync_tables.dart';
 import 'tables/transaction_tables.dart';
 
@@ -72,6 +73,42 @@ const _kDefaultUnitTypes = <int, String>{
   24: 'Paket',
   25: 'Karton',
 };
+
+/// PLAN Item 90 — key `app_settings` kebijakan pembelian toko (ikut sync,
+/// lihat [AppDatabase.syncableSettingKeys]).
+const kPurchaseTaxTreatmentKey = 'purchase_tax_treatment_default';
+const kPurchaseTaxRateKey = 'purchase_tax_rate';
+const kPurchaseCostWarnPctKey = 'purchase_cost_warn_pct';
+
+/// Satu baris masukan Input Pembelian (PLAN Item 90).
+class PurchaseLineInput {
+  const PurchaseLineInput({
+    required this.productUnitId,
+    required this.qty,
+    required this.unitPrice,
+    this.discount = 0,
+    this.priceIncludesTax = true,
+    this.treatment = PurchaseTaxTreatment.pisah,
+    this.taxRate = 11,
+    this.applyCost = true,
+  });
+
+  /// Satuan BELI (mis. ZAK/dus) — stok & HPP dikonversi ke satuan dasar.
+  final String productUnitId;
+  final double qty;
+
+  /// Harga faktur per satuan beli (0 = tanpa harga: hanya stok).
+  final int unitPrice;
+
+  /// Potongan rupiah baris (di luar potongan tingkat faktur).
+  final int discount;
+  final bool priceIncludesTax;
+  final PurchaseTaxTreatment treatment;
+  final double taxRate;
+
+  /// "Perbarui HPP" — false = baris hanya menambah stok.
+  final bool applyCost;
+}
 
 const kKasirPermissionKeys = <String>[
   'input_stok',
@@ -304,7 +341,7 @@ class AppDatabase extends _$AppDatabase {
       AppDatabase(_openConnection(encryptionKey));
 
   @override
-  int get schemaVersion => 46;
+  int get schemaVersion => 47;
 
   /// Key `app_settings` yang BOLEH ikut sync host->klien.
   ///
@@ -347,6 +384,11 @@ class AppDatabase extends _$AppDatabase {
     // lokal): ini kebijakan toko, harus seragam di semua device spt
     // `allow_negative_stock`.
     'preorder_quota_thresholds',
+    // PLAN Item 90 — kebijakan pembelian toko (ditetapkan owner): perlakuan
+    // PPN default, tarif PPN, ambang peringatan perubahan HPP.
+    kPurchaseTaxTreatmentKey,
+    kPurchaseTaxRateKey,
+    kPurchaseCostWarnPctKey,
   };
 
   /// Indeks performa — dipakai filter laporan, riwayat, JOIN produk, dan audit
@@ -938,6 +980,42 @@ class AppDatabase extends _$AppDatabase {
             // ke aturan centang lama. Lihat dok kolom.
             await _addColumnIfMissing('transaction_payments', 'change_reused',
                 transactionPayments, transactionPayments.changeReused, m);
+          }
+          if (from < 47) {
+            // PLAN Item 90 — kolom faktur/PPN/HPP di tabel pembelian yang
+            // SUDAH ada (suppliers/purchases/purchase_items, sync & backup
+            // sudah tersedia, belum dipakai fitur apa pun). Aditif: semuanya
+            // nullable atau default konstan, tanpa isi ulang data.
+            final tables = (await customSelect(
+                        "SELECT name FROM sqlite_master WHERE type='table'")
+                    .get())
+                .map((r) => r.data['name'] as String)
+                .toSet();
+            if (tables.contains('purchases')) {
+              for (final (name, col) in [
+                ('invoice_no', purchases.invoiceNo),
+                ('invoice_date', purchases.invoiceDate),
+                ('supplier_name', purchases.supplierName),
+                ('discount_total', purchases.discountTotal),
+                ('input_tax_total', purchases.inputTaxTotal),
+              ]) {
+                await _addColumnIfMissing('purchases', name, purchases, col, m);
+              }
+            }
+            if (tables.contains('purchase_items')) {
+              for (final (name, col) in [
+                ('discount', purchaseItems.discount),
+                ('price_includes_tax', purchaseItems.priceIncludesTax),
+                ('tax_treatment', purchaseItems.taxTreatment),
+                ('tax_rate', purchaseItems.taxRate),
+                ('input_tax', purchaseItems.inputTax),
+                ('cost_before', purchaseItems.costBefore),
+                ('cost_after', purchaseItems.costAfter),
+              ]) {
+                await _addColumnIfMissing(
+                    'purchase_items', name, purchaseItems, col, m);
+              }
+            }
           }
         },
         beforeOpen: (details) async {
@@ -2014,6 +2092,205 @@ class AppDatabase extends _$AppDatabase {
         );
       }
     });
+  }
+
+  // ───────────── PLAN Item 90 — Input Pembelian (tahap 1) ─────────────
+
+  /// Pengaturan pembelian toko: perlakuan PPN default (awal 'pisah' — toko
+  /// PKP, keputusan owner), tarif PPN (11), ambang peringatan perubahan HPP
+  /// (30%). Diubah owner, ikut sync antar-HP.
+  Future<
+      ({
+        PurchaseTaxTreatment treatment,
+        double taxRate,
+        double warnPct
+      })> getPurchaseSettings() async {
+    final t = PurchaseTaxTreatment.fromCode(
+            await getSetting(kPurchaseTaxTreatmentKey)) ??
+        PurchaseTaxTreatment.pisah;
+    final r = double.tryParse(await getSetting(kPurchaseTaxRateKey) ?? '') ?? 11;
+    final w =
+        double.tryParse(await getSetting(kPurchaseCostWarnPctKey) ?? '') ?? 30;
+    return (treatment: t, taxRate: r, warnPct: w);
+  }
+
+  /// HPP satuan DASAR saat ini (tier minQty=1; fallback tier pertama; 0 bila
+  /// belum ada tier).
+  Future<int> baseUnitCost(String baseUnitId) async {
+    final tiers = await (select(priceTiers)
+          ..where((t) => t.productUnitId.equals(baseUnitId)))
+        .get();
+    if (tiers.isEmpty) return 0;
+    final base = tiers.where((t) => t.minQty == 1).firstOrNull ?? tiers.first;
+    return base.costPrice;
+  }
+
+  /// Tulis HPP ke SEMUA satuan produk pemilik [baseUnitId] (satuan lain =
+  /// HPP dasar x isinya, bulat rupiah) & semua tingkat harganya. Riwayat
+  /// penjualan TIDAK tersentuh (`costAtSale` snapshot). `price_tiers` ikut
+  /// full-dump tiap sync, dan `products.updated_at` dicap ulang (gotcha
+  /// CLAUDE.md) supaya perubahan pasti sampai ke HP lain.
+  Future<void> _setProductCostFromBase(String baseUnitId, int costBase) async {
+    final base = await (select(productUnits)
+          ..where((t) => t.id.equals(baseUnitId)))
+        .getSingleOrNull();
+    if (base == null) return;
+    final units = await (select(productUnits)
+          ..where((t) => t.productId.equals(base.productId)))
+        .get();
+    for (final u in units) {
+      final ratio = u.id == baseUnitId || u.isBaseUnit ? 1.0 : u.ratioToBase;
+      final cost = (costBase * ratio).round();
+      await (update(priceTiers)..where((t) => t.productUnitId.equals(u.id)))
+          .write(PriceTiersCompanion(costPrice: Value(cost)));
+    }
+    await (update(products)..where((t) => t.id.equals(base.productId)))
+        .write(ProductsCompanion(updatedAt: Value(DateTime.now())));
+  }
+
+  /// Terapkan satu faktur pembelian: stok bertambah (satuan dasar, kecuali
+  /// non-stok), HPP diperbarui per baris yang `applyCost` & berharga, dan
+  /// catatan faktur + baris tersimpan di `purchases`/`purchase_items`
+  /// (dgn HPP lama/baru utk riwayat & pembatalan). Satu transaksi DB.
+  /// [invoiceDiscount] = potongan tingkat faktur, dibagi proporsional.
+  /// Mengembalikan id pembelian.
+  Future<String> applyPurchase({
+    required List<PurchaseLineInput> lines,
+    String? invoiceNo,
+    DateTime? invoiceDate,
+    String? supplierName,
+    int invoiceDiscount = 0,
+    String? kasirId,
+    String? note,
+    DateTime? now,
+  }) async {
+    final at = now ?? DateTime.now();
+    final id = const Uuid().v4();
+    await transaction(() async {
+      final nets = [
+        for (final l in lines) (l.qty * l.unitPrice).round() - l.discount
+      ];
+      final alloc = allocateInvoiceDiscount(nets, invoiceDiscount);
+      var total = 0;
+      var discountTotal = 0;
+      var taxTotal = 0;
+      for (var i = 0; i < lines.length; i++) {
+        final l = lines[i];
+        final info = await _baseUnitOf(l.productUnitId);
+        final r = computePurchaseLine(
+          qty: l.qty,
+          unitPrice: l.unitPrice,
+          discount: l.discount + alloc[i],
+          priceIncludesTax: l.priceIncludesTax,
+          treatment: l.treatment,
+          taxRate: l.taxRate,
+          ratioToBase: info.ratio,
+        );
+        final baseUnit = await (select(productUnits)
+              ..where((t) => t.id.equals(info.id)))
+            .getSingleOrNull();
+        if (l.qty > 0 && !(baseUnit?.isNonStock ?? false)) {
+          await _appendStock(
+            productUnitId: info.id,
+            qtyChange: l.qty * info.ratio,
+            type: 'purchase',
+            referenceId: id,
+            kasirId: kasirId,
+            note: invoiceNo == null ? 'Pembelian' : 'Pembelian $invoiceNo',
+            now: at,
+          );
+        }
+        final before = await baseUnitCost(info.id);
+        int? after;
+        if (l.applyCost && l.unitPrice > 0 && r.costPerBaseUnit != null) {
+          after = r.costPerBaseUnit;
+          await _setProductCostFromBase(info.id, after!);
+        }
+        await into(purchaseItems).insert(PurchaseItemsCompanion.insert(
+          id: const Uuid().v4(),
+          purchaseId: id,
+          productUnitId: l.productUnitId,
+          qty: l.qty,
+          pricePerUnit: l.unitPrice,
+          subtotal: r.net,
+          createdAt: Value(at),
+          discount: Value(l.discount + alloc[i]),
+          priceIncludesTax: Value(l.priceIncludesTax),
+          taxTreatment: Value(l.treatment.code),
+          taxRate: Value(l.taxRate),
+          inputTax: Value(r.inputTax),
+          costBefore: Value(before),
+          costAfter: Value(after),
+        ));
+        total += r.net;
+        discountTotal += l.discount + alloc[i];
+        taxTotal += r.inputTax;
+      }
+      await into(purchases).insert(PurchasesCompanion.insert(
+        id: id,
+        localId: 'PB-${kasirId ?? 'X'}-${at.microsecondsSinceEpoch}',
+        kasirId: Value(kasirId),
+        status: 'received',
+        total: Value(total),
+        note: Value(note),
+        createdAt: Value(at),
+        updatedAt: Value(at),
+        invoiceNo: Value(invoiceNo),
+        invoiceDate: Value(invoiceDate),
+        supplierName: Value(supplierName),
+        discountTotal: Value(discountTotal),
+        inputTaxTotal: Value(taxTotal),
+      ));
+    });
+    return id;
+  }
+
+  /// Batalkan pembelian: stok dikembalikan; HPP dipulihkan ke nilai lama
+  /// HANYA bila HPP produk itu belum berubah lagi sejak pembelian ini
+  /// (masih = HPP baru yang ditulis pembelian ini). Mengembalikan id satuan
+  /// beli yang HPP-nya TIDAK dipulihkan (sudah berubah lagi) — UI
+  /// memperingatkan. Pembelian yang sudah batal -> no-op (list kosong).
+  Future<List<String>> voidPurchase(String purchaseId,
+      {String? kasirId}) async {
+    final notRestored = <String>[];
+    await transaction(() async {
+      final head = await (select(purchases)
+            ..where((t) => t.id.equals(purchaseId)))
+          .getSingleOrNull();
+      if (head == null || head.status == 'void') return;
+      final items = await (select(purchaseItems)
+            ..where((t) => t.purchaseId.equals(purchaseId)))
+          .get();
+      final now = DateTime.now();
+      for (final it in items.reversed) {
+        final info = await _baseUnitOf(it.productUnitId);
+        final baseUnit = await (select(productUnits)
+              ..where((t) => t.id.equals(info.id)))
+            .getSingleOrNull();
+        if (it.qty > 0 && !(baseUnit?.isNonStock ?? false)) {
+          await _appendStock(
+            productUnitId: info.id,
+            qtyChange: -(it.qty * info.ratio),
+            type: 'purchase',
+            referenceId: purchaseId,
+            kasirId: kasirId,
+            note: 'Batal pembelian${head.invoiceNo == null ? '' : ' ${head.invoiceNo}'}',
+            now: now,
+          );
+        }
+        if (it.costAfter != null) {
+          final cur = await baseUnitCost(info.id);
+          if (cur == it.costAfter) {
+            await _setProductCostFromBase(info.id, it.costBefore ?? 0);
+          } else {
+            notRestored.add(it.productUnitId);
+          }
+        }
+      }
+      await (update(purchases)..where((t) => t.id.equals(purchaseId))).write(
+          PurchasesCompanion(status: const Value('void'), updatedAt: Value(now)));
+    });
+    return notRestored;
   }
 
   /// Konvensi note sesi penerimaan — dipakai saat commit DAN saat memfilter
