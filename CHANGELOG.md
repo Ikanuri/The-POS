@@ -9,6 +9,8 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-10-03 (sesi kedelapan puluh tiga lanjutan — Item 90 tahap 2-6 maraton)
 
+- `c038933` — feat(pembelian): pemilih satuan di baris + peringatan isi faktur vs
+  aplikasi (saran AI tetap tampil); bukti jenjang dus->biji
 - `873b464` — fix(pembelian): applyPurchase menyimpan catatan faktur SEBELUM barisnya
   (DB asli pakai foreign_keys=ON, test memori tidak) -> Penerimaan Barang
   spinner selamanya; handler layar kini menangkap galat (log + snackbar)

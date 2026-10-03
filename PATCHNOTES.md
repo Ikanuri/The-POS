@@ -10,6 +10,15 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ## 4 Oktober 2026
 
+### ✨ Fitur Baru
+- **Pilih satuan langsung di baris Penerimaan Barang.** Di tiap barang yang
+  sudah cocok, muncul deretan pilihan satuan milik produk itu (mis. Pak,
+  ZAK) — ganti dengan satu ketukan. Satuan yang disarankan AI diberi tanda
+  "saran AI", dan aplikasi memperingatkan kalau isi per satuan di faktur
+  berbeda dengan isi di aplikasi, atau kalau yang terpilih satuan terkecil
+  padahal harga di faktur per satuan besar. Beli per dus otomatis dihitung
+  ke satuan terkecil (biji) walau berjenjang.
+
 ### 🐛 Perbaikan
 - **Penerimaan Barang tidak lagi "muter terus" saat menyimpan pembelian.**
   Pembelian dengan harga beli gagal tersimpan dan layar berputar tanpa
