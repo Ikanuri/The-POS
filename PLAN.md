@@ -63,58 +63,83 @@ sekarang, TIDAK ada rencana eksekusi._
 
 ---
 
-## Item 90 — Input Pembelian (harga beli + HPP terkontrol), lalu OCR nota cetak (2 Okt 2026) — RANCANGAN, BELUM ADA KEPUTUSAN FINAL
+## Item 90 — Input Pembelian + HPP dari faktur lewat "Tempel hasil AI" (3 Okt 2026) — RANCANGAN DISETUJUI ARAHNYA, BELUM DIEKSEKUSI
 
-Konteks diskusi OCR lengkap ada di [docs/HANDOFF.md](docs/HANDOFF.md) (blok
-"Diskusi OCR"). Jawaban user: nota supplier cetak + tulis tangan, ~2 hari
-sekali, HP kelas atas. Keputusan arah: BANGUN INPUT PEMBELIAN MANUAL DULU,
-OCR (ML Kit on-device, HANYA nota cetak) mengisi layar yang sama belakangan;
-tulis tangan tetap diketik manual; cloud OCR hanya bila nanti terbukti perlu.
-Aturan HPP: user belum familiar -> usulan awal **HPP terakhir** + pratinjau
-(rata-rata bergerak bisa jadi opsi nanti; FIFO tidak sepadan).
+Keputusan owner toko (dari dokumen usulan, "ya, lanjut, sesuai yang
+disarankan"): toko PKP -> pencatatan **B** (HPP tanpa PPN, PPN masukan dicatat
+terpisah); pegawai boleh mencatat barang masuk tapi perubahan HPP jadi USULAN
+yang harus disetujui owner; Kategori Harga berjangkar modal boleh ikut berubah
+SETELAH pratinjau dampak; ambang peringatan perubahan harga 30%; tahap 1-3
+dulu, tahap 4 (tempel hasil AI) menyusul. Jawaban owner atas pertanyaan
+rinci (PPN per baris vs total, barang tanpa PPN) belum ada -> tetap sediakan
+"kena PPN" per baris & PPN per baris boleh diedit.
 
-**Alur layar** (perluas Penerimaan Barang `receive_goods_screen.dart`, bukan
-layar baru): isi baris via scan barcode / cari nama / tempel teks -> per baris
-isi jumlah, satuan, HARGA BELI per satuan itu (boleh kosong = hanya stok) ->
-pratinjau "harga beli Rp X per dus = Rp Y per biji; HPP lama -> baru (+Z%)"
-+ peringatan bila harga jual di bawah HPP baru + centang "Perbarui HPP" per
-baris -> Terapkan (satu transaksi DB: stok naik via `commitReceive`, HPP
-diperbarui).
+**Pendekatan input faktur (menggantikan OCR on-device)**: AI dipakai DI LUAR
+aplikasi; aplikasi hanya punya SATU parser tetap + validator. Alur: tombol
+"Salin prompt" (aturan format + pengaturan toko: dasar HPP, tarif PPN) -> user
+tempel prompt + foto faktur (+ file CSV produk) ke AI (Claude / Meta AI,
+prompt universal) -> AI membalas JSON -> user tempel ke app (pola sama "Tempel
+Pesanan") -> app memeriksa, mencocokkan, menghitung HPP, tampilkan pratinjau ->
+user cek & simpan. **AI TIDAK boleh mengeluarkan kode** (Flutter rilis tak bisa
+mengeksekusi kode baru & berbahaya); output = data terstruktur. **AI hanya
+membaca** (nama, qty, satuan, harga satuan, diskon, no. faktur, tanggal,
+supplier, flag harga sudah termasuk PPN); **app yang menghitung** (HPP, isi per
+dus, diskon, PPN) & mengabaikan hitungan AI.
 
-**Aturan HPP**: HPP baru satuan dasar = harga beli / `ratioToBase` satuan beli;
-HPP satuan lain = HPP dasar x isi satuannya (bulat rupiah); diterapkan ke semua
-tingkat harga (`price_tiers.costPrice`) satuan itu; TIDAK mengubah riwayat
-(`costAtSale` snapshot); produk non-stok: HPP boleh, stok tidak; varian: ke
-varian terpilih, bukan induk; peringatan bila perubahan > 30% (ambang bisa
-diubah); harga beli 0/kosong = HPP tetap.
+**CSV produk ikut ditempel ke AI** (usulan user): tujuan pencocokan lebih akurat
+tanpa prompt panjang. Isi minimal: id produk/satuan, nama, satuan, isi per
+satuan (TANPA harga jual/HPP -> privasi). Hasilnya: AI mengisi \`product_unit_id\`
+tebakan per baris; app memperlakukannya sbg SARAN (id harus ada di DB, ditandai
+"perlu konfirmasi" bila bukan alias hasil pelajaran; setelah user konfirmasi
+dipelajari jadi alias -> pencocokan PERSIS berikutnya tanpa AI; aturan "tidak
+fuzzy otomatis" tetap). Format JSON = **array faktur** (mendukung beberapa nota
+dalam satu sesi) + \`version\` format. Parser toleran: ambil blok JSON dari
+balasan yg dibungkus teks/pagar kode, seragamkan format angka, nilai yang tak
+terbaca = null (BUKAN ditebak; baris minta diisi manual). Catatan: ekspor CSV
+produk 2000+ baris ~100-150 KB — uji batas lampiran Claude & Meta AI; bila
+terlalu besar, kirim hanya kolom minimal / per kategori.
 
-**Data**: tabel baru `purchase_entries` (schema 47): id, waktu, product_unit_id,
-qty, satuan dipakai, harga beli, HPP lama, HPP baru, pencatat, status
-(diterapkan/menunggu tinjauan). Append-only, ikut sync (HP lama melewati
-tabel tak dikenal). Pembelian bisa DIBATALKAN (stok dikembalikan; HPP kembali
-ke nilai lama kecuali sudah berubah lagi oleh pembelian berikutnya -> hanya
-stok + peringatan).
+**Validasi**: qty x harga satuan vs total baris; jumlah baris vs total faktur;
+PPN per baris vs total PPN faktur (tampilkan selisih pembulatan); id produk
+valid; tanggal/no. faktur ganda -> peringatan (cegah input dobel). Simpan
+TIDAK pernah otomatis.
 
-**Dua temuan penting**: (a) harga jual Kategori Harga berjangkar "modal" dihitung
-ULANG live dari HPP -> mengubah HPP otomatis mengubah harga kategori; pratinjau
-WAJIB menampilkan "Harga Kategori X: Rp a -> Rp b" (usulan: butuh konfirmasi
-tambahan). (b) Izin: hanya owner/asisten berizin yang boleh memperbarui HPP
-langsung; pegawai hanya menambah stok & perubahan HPP-nya jadi USULAN owner
-(pola Laci Meja). Izin `input_pembelian` (kini tersembunyi di
-`kasir_permissions_screen.dart`) ditampilkan lagi.
+**Pilihan pencatatan (per toko, hanya owner)**: dua pengaturan: (1) dasar HPP =
+tanpa PPN / termasuk PPN; (2) catat PPN masukan (hanya bila dasar tanpa PPN).
+Kombinasi = Opsi 1/2/3 di usulan. Toko ini: tanpa PPN + catat PPN masukan.
+Contoh Terigu 5 kg faktur Rp41.905 inkl PPN 11% -> HPP 37.752, PPN 4.153.
+Cek dulu apakah pengaturan toko ikut sync antar-HP (belum diperiksa) — HPP
+diputuskan owner jadi pengaturan harus sampai ke HP lain.
 
-**Tahap**: 1) tabel + fungsi terap/batal + aturan HPP + tes DB (sedang); 2) layar
-kolom harga beli + pratinjau + peringatan (sedang); 3) izin pegawai + usulan
-owner (sedang); 4) pratinjau dampak Kategori Harga (kecil); 5) laporan
-pembelian dasar (kecil, opsional). Tahap 1-4 sudah cukup dipakai. Tes: murni
-konversi satuan, DB nyata (stok/HPP/batal), migrasi v46->v47, sync dua DB, widget
-lebar 360, revert-verify.
+**Data**: tabel baru \`purchase_entries\` (schema 47) memuat sejak awal: no. &
+tanggal faktur, supplier, qty, satuan, harga faktur, diskon baris & diskon
+faktur (dibagi proporsional), flag harga inkl PPN, tarif PPN, flag kena PPN per
+baris, PPN masukan, HPP lama & baru, pencatat, status (diterapkan/menunggu
+tinjauan). Append-only & ikut sync (HP lama melewati tabel tak dikenal);
+satu migrasi saja. Pembelian bisa DIBATALKAN (stok kembali; HPP kembali ke
+nilai lama kecuali sudah berubah lagi -> hanya stok + peringatan).
 
-**Keputusan yang masih menunggu user**: (1) HPP terakhir + pratinjau? (2) pegawai:
-tambah stok saja + HPP jadi usulan, atau dilarang pakai fitur? (3) Kategori Harga
-berubah otomatis dgn pratinjau, atau wajib konfirmasi ekstra? (4) HPP satuan lain
-dihitung dari dasar? (5) ambang peringatan 30% ok? User sudah menyebut "beberapa
-penyesuaian" tapi belum merinci — tanyakan lagi sebelum eksekusi.
+**Aturan hitung**: harga bersih = harga faktur - diskon; bila harga inkl PPN
+DPP = harga / (1 + tarif) (hanya baris "kena PPN"); HPP per satuan beli = DPP
+(atau DPP + PPN bila dasar "termasuk PPN"); HPP satuan dasar = / isi satuan
+beli (\`ratioToBase\`); HPP satuan lain = HPP dasar x isinya (bulat rupiah);
+diterapkan ke semua tingkat harga (\`price_tiers.costPrice\`) satuan itu; tidak
+mengubah riwayat (\`costAtSale\` snapshot); non-stok: HPP boleh, stok tidak;
+varian: ke varian terpilih; harga beli kosong/0 = HPP tetap. Harga jual
+Kategori Harga berjangkar "modal" dihitung ULANG live dari HPP -> pratinjau
+WAJIB menampilkan "Harga Kategori X: Rp a -> Rp b". Izin \`input_pembelian\`
+(tersembunyi di \`kasir_permissions_screen.dart\`) ditampilkan lagi. Peringatan
+harga jual < HPP baru. Ini BUKAN software pajak: PPN masukan hanya informasi.
+
+**Tahap**: 1) tabel + fungsi terap/batal + aturan HPP/PPN/diskon + pengaturan
+toko + tes DB; 2) layar kolom harga beli/diskon/PPN + pratinjau + peringatan
+(perluas Penerimaan Barang \`receive_goods_screen.dart\`); 3) izin pegawai +
+usulan owner; 4) pratinjau dampak Kategori Harga; 5) **Tempel hasil AI**:
+generator prompt + ekspor CSV minimal + parser/validator JSON + penghubung ke
+layar tahap 2; 6) laporan pembelian dasar (opsional). Tes: murni (konversi,
+PPN, diskon, parser toleran), DB nyata, migrasi v46->v47, sync dua DB, widget
+lebar 360, revert-verify. Jalur "bagikan foto langsung ke app AI" TIDAK
+diambil (user sudah melampirkan sendiri di app AI).
 
 ## Item 91 — Harga jual dari margin (persen/Rp), dua arah (3 Okt 2026) — DISKUSI, MENUNGGU KEPUTUSAN USER
 
