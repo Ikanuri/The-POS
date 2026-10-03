@@ -232,42 +232,40 @@ tinggi panel sama dgn saat chip terbuka; chip kembali ke keadaan terakhir setela
 field diciutkan; nilai tersimpan setelah layar dibuka ulang; Salin/Bagikan tetap
 terlihat di semua keadaan), revert-verify. Besar: kecil.
 
-## Item 91 — Harga jual dari margin (persen/Rp), dua arah (3 Okt 2026) — DISKUSI, MENUNGGU KEPUTUSAN USER
+## Item 91 — Harga jual dari margin (persen/Rp), dua arah (3 Okt 2026) — KEPUTUSAN USER LENGKAP, SIAP DIEKSEKUSI
 
 Usulan user: di form produk, input margin (persen ATAU rupiah) menghitung harga
 jual; sebaliknya, mengubah harga jual membuat margin ikut menyesuaikan.
-Tafsir yang dipakai (dari kalimat user): **Arti A = kalkulator dua arah, hanya
-bantuan input** — yang tersimpan tetap harga jual (+ HPP) saja, margin SELALU
-dihitung saat layar dibuka, harga jual TIDAK ikut berubah bila HPP berubah.
-Arti B (margin disimpan sbg sumber kebenaran, harga jual live mengikuti HPP)
-TIDAK disarankan: schema naik (kolom nullable di \`price_tiers\`), bertabrakan
-dgn Input Pembelian (Item 90: tiap HPP baru akan mengubah harga jual diam-diam)
-dan menduplikasi Kategori Harga (yang sudah live dari HPP + margin lewat
-\`alt_prices\`/\`price_category_calc.dart\`).
+**Tafsir A = kalkulator dua arah, hanya bantuan input**: yang tersimpan tetap
+harga jual (+ HPP) saja; margin SELALU dihitung saat layar dibuka; harga jual
+TIDAK ikut berubah bila HPP berubah. (Arti B — margin disimpan, harga live
+mengikuti HPP — TIDAK diambil: schema naik, bertabrakan dgn Input Pembelian
+Item 90, menduplikasi Kategori Harga yang sudah live dari HPP.)
 
-**Schema**: Arti A = TIDAK naik (tanpa kolom/tabel/migrasi). **Sinkron**: tidak
-ada dampak (margin tidak di DB; harga jual & HPP sudah ikut sync lewat jalur
-yang ada). Arti B: kolom baru ikut mengalir sbg data master host->klien
-(\`price_tiers\` sudah di \`clientMergeableTables\`), HP lama melewati kolom tak
-dikenal.
+**Schema**: TIDAK naik. **Sinkron**: tidak ada dampak (margin tidak di DB; harga jual
+& HPP sudah ikut sync lewat jalur yang ada).
 
-**Perilaku A**: baris "Untung" di bawah Harga Jual/Harga Pokok (form produk),
-satu kolom angka + pilihan % / Rp. Ketik margin -> harga = HPP + margin
-(persen: HPP x (1 + p/100), dibulatkan rupiah). Ubah harga -> margin dihitung
-ulang (dalam bentuk yg dipilih). Ubah HPP -> margin dihitung ulang, harga tetap.
+**Keputusan user (3 Okt)**:
+1. **Markup dari modal**: persen = (harga - HPP) / HPP; rupiah = harga - HPP;
+   harga = HPP x (1 + p/100) atau HPP + Rp, dibulatkan rupiah. Sama dgn Kategori
+   Harga (pakai ulang \`price_category_calc.dart\`: \`computeCategoryPrice\`/
+   \`computeMarginValue\` agar konsisten).
+2. **HPP kosong/0 -> kolom Margin DIMATIKAN** (disabled + keterangan "isi HPP
+   dulu"). **Sebutan fitur = "Margin"** (BUKAN "Untung"). **Tombol berupa ikon "%"
+   saja** (hemat ruang) di dekat baris Harga Jual/Harga Pokok form produk; ditekan
+   -> muncul kolom Margin dgn pilihan % / Rp. Catatan label: walau dinamai
+   "Margin", hitungannya markup dari modal — beri keterangan kecil "dari modal"
+   agar tidak tertukar dgn margin dari harga jual.
+3. Tingkat harga grosir: margin tampil sbg info & boleh diedit dgn cara sama.
+4. Margin NEGATIF (harga < HPP) boleh, ditandai merah + peringatan "rugi".
+5. Letak UI: terjawab di poin 2 (ikon % di dekat Harga Jual/Harga Pokok).
+
+**Perilaku**: ketik margin -> harga terisi; ubah harga -> margin dihitung ulang
+(dalam bentuk yg dipilih % / Rp); ubah HPP -> margin dihitung ulang, harga tetap.
 Pilihan %/Rp cukup di layar (opsional diingat di preferensi perangkat).
-Fungsi hitung bisa memakai ulang \`price_category_calc.dart\`
-(\`computeCategoryPrice\`/\`computeMarginValue\`) agar konsisten.
-
-**Keputusan yang menunggu user**: (1) persen dari apa — markup dari modal
-(disarankan, sama dgn Kategori Harga; label "Untung % dari modal") atau margin
-dari harga jual; (2) HPP kosong/0 -> kolom untung dimatikan ("isi HPP dulu"),
-mengikuti guard Kategori Harga; (3) berlaku per satuan di tingkat harga dasar,
-tingkat grosir menampilkan margin sbg info yg boleh diedit sama; (4) margin
-negatif tetap boleh dgn peringatan merah "rugi"; (5) letak UI (usulan: tepat di
-bawah baris Harga Jual & Harga Pokok). Tes: fungsi murni (konversi dua arah,
-pembulatan, HPP 0, negatif), widget lebar 360, revert-verify. Besar: kecil,
-versi MINOR.
+Tes: fungsi murni (konversi dua arah, pembulatan, HPP 0, negatif), widget lebar
+360 (ikon % muat tanpa overflow, kolom mati saat HPP 0, dua arah, ganti %/Rp,
+negatif merah), revert-verify. Besar: kecil; versi MINOR.
 
 ## Item 84 — Sisa audit Pra-Bayar (23 Sep 2026) — MENUNGGU KEPUTUSAN USER
 
