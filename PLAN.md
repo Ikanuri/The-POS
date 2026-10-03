@@ -168,6 +168,41 @@ diambil (user sudah melampirkan sendiri di app AI).
 - Pertanyaan owner yang tadinya menggantung terjawab: PPN di faktur = TOTAL
   saja; barang bebas PPN ada (ditentukan lewat perlakuan PPN per barang).
 
+## Item 92 — Label nama fungsi di tombol header tab Produk & sub-fiturnya (3 Okt 2026) — USULAN USER, BELUM DIEKSEKUSI
+
+Masalah: tombol header hanya ikon (nama fungsi baru muncul lewat tooltip tahan-lama),
+membingungkan. Cakupan (hasil pemeriksaan kode, sesi 83):
+- \`produk_list_screen.dart\` AppBar actions: Cek Stok, Sinkron Harga, Kelola
+  Kategori, Kategori Harga, Katalog, Tambah Produk (6 ikon).
+- Sub-fitur yang juga punya tombol header ikon: \`cek_stok_screen.dart\`
+  (Penerimaan Barang, Stock Opname, Reset Stok [owner]); \`price_sync_screen.dart\`
+  & \`product_group_screen.dart\` (mode seleksi punya beberapa IconButton) — audit
+  semua AppBar di folder \`lib/features/produk/\` (termasuk \`catalog/\`) agar
+  tidak ada yang terlewat.
+Opsi desain (pilih saat eksekusi): (a) ikon + teks pendek di bawah/di samping
+(AppBar tidak muat 6 tombol bertulisan di 360px -> perlu menu "⋯" ATAU baris
+tombol kedua di bawah AppBar), (b) baris chip/tombol berlabel di bawah judul
+(scroll horizontal), (c) ikon dgn label muncul hanya untuk yang paling jarang
+dikenali. Saran: baris tombol berlabel (b) di bawah AppBar agar semua nama terbaca
+tanpa menutup judul. Tanpa schema, tanpa sync. Tes: widget lebar 360 (tidak
+overflow, semua label terlihat), revert-verify. Besar: kecil-sedang (murni UI);
+versi MINOR.
+
+## Item 93 — Cek Stok: panel kategori Order Restock bisa expand/collapse + ingat pilihan (3 Okt 2026) — USULAN USER, BELUM DIEKSEKUSI
+
+Masalah: panel bawah "Order Restock" di \`cek_stok_screen.dart\` (kelas panel yang
+memuat chip sertakan/kecualikan kategori — hanya tampil bila >=2 kategori —
+di atas kolom teks output) memakan tinggi layar sehingga menutup daftar item.
+Rancangan: header panel dgn tombol ▾/▴ (area sentuh >=40dp) untuk melipat bagian
+chip kategori (kolom teks & tombol Salin/Bagikan tetap terlihat, atau ikut
+dilipat — putuskan saat eksekusi); animasi singkat. **Pilihan expand/collapse
+TERakhir DISIMPAN** (tidak reset saat layar ditutup/dibuka ulang): pola sama
+\`cek_stok_excluded_output_groups\` (blob di tabel settings, TANPA migrasi) —
+mis. key \`cek_stok_category_panel_expanded\` ('1'/'0'); nilai awal pertama kali =
+terbuka. Per-perangkat (tidak perlu sinkron antar-HP; murni preferensi tampilan).
+Tes: widget (lipat/buka, daftar item lebih tinggi saat dilipat, nilai tersimpan
+setelah layar dibuka ulang), revert-verify. Besar: kecil.
+
 ## Item 91 — Harga jual dari margin (persen/Rp), dua arah (3 Okt 2026) — DISKUSI, MENUNGGU KEPUTUSAN USER
 
 Usulan user: di form produk, input margin (persen ATAU rupiah) menghitung harga
