@@ -8,6 +8,31 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 
 _Sesi 83 (2 Okt) — gate Penuhi pre-order (`1e6e77e`): `confirmFulfillPreorder` (`laci_meja/preorder_fulfill_confirm.dart`) dipanggil di dashboard Laci Meja & kartu pre-order struk HANYA saat sisa <= 1 (sisa > 1 sudah punya dialog jumlah); peringatan jika `getPreorderDepositOwed` != null. Tombol "batal penuhi" belum ada di UI (Batal pre-order dicabut dulu atas permintaan user). Susulan (`499ea89`): `confirmCollectLeftBehind` utk "Ambil" titip/ketinggalan bersisa <= 1; pinjaman tidak butuh (dialog jumlah selalu muncul). Rancangan Input Pembelian lengkap ada di PLAN.md Item 90 (user menyebut "beberapa penyesuaian" yang belum dirinci). Diskusi "harga jual dari margin dua arah" (3 Okt) tersimpan di PLAN.md Item 91 (Arti A tanpa schema, menunggu keputusan markup vs margin & letak UI). Item 90 DIPERBARUI (3 Okt): input faktur lewat "Tempel hasil AI" (AI di luar app -> JSON -> parser tetap + validator; CSV produk minimal ikut ke AI sbg saran pencocokan; AI TIDAK boleh keluarkan kode) menggantikan OCR on-device; owner PKP sudah menyetujui usulan (Opsi B, pegawai via usulan owner, ambang 30%). Detail di PLAN.md Item 90. Item 90 diperbarui lagi dari faktur contoh Indomarco: perlakuan PPN fleksibel PER BARIS (masuk modal / dipisah / bebas PPN; diingat per barang dari pembelian terakhir), ambang peringatan manual, lampiran CSV ril teruji aman. PLAN.md bertambah Item 92 (label nama fungsi di tombol header tab Produk & sub-fitur) dan Item 93 (panel kategori Order Restock di Cek Stok bisa dilipat + pilihan tersimpan) — usulan user, belum dieksekusi. Item 91 (margin dua arah) keputusan LENGKAP: markup dari modal, tombol ikon "%", sebutan "Margin", kolom mati saat HPP 0, grosir & negatif boleh. Item 92/93/91 siap dieksekusi. Versi **2.73.0+166**.
 
+_Update sesi 83 (3 Okt, maraton Item 90 atas permintaan user) — Item 90
+SELESAI tahap 1-6 (dihapus dari PLAN), BELUM di-merge ke main. Keputusan user
+di sesi ini: laporan = "riwayat saja"; persetujuan HPP pegawai di layar
+Penerimaan Barang. Keputusan teknis: SEMUA HP non-owner (termasuk asisten)
+mengusulkan HPP (price_tiers dikirim penuh host->klien, jadi perubahan di
+klien akan tertimpa). Arsitektur: `purchases`/`purchase_items` kini tabel
+DUA ARAH (`LanSyncService.sharedTables` + `dumpSince` shared; kategori sync
+"Pembelian"), status 'received'|'pending'|'cost_rejected'|'void';
+`applyPurchase(costAsProposal:)`, `approvePurchase`, `rejectPurchaseCost`,
+`voidPurchase` (HPP dipulihkan hanya utk 'received' & bila belum berubah),
+`getPurchaseUnitInfo` (perlakuan PPN terakhir per produk dari riwayat),
+`getCategoryPriceImpact`, `getPurchaseAiCsvRows`, `purchaseInvoiceExists`.
+Parser AI: `lib/core/services/purchase_ai_format.dart` (prompt universal,
+CSV minimal tanpa harga, `parsePurchaseAiResponse` toleran + validasi baris
+vs total & PPN). UI: `receive_goods_screen.dart` (Tempel teks | Hasil AI,
+Tambah barang cari nama/barcode, faktur ExpansionTile, baris dgn harga/
+potongan/chip PPN/"Perbarui HPP", pratinjau, dialog peringatan, kartu
+"Menunggu persetujuan HPP" owner, Pengaturan Pembelian owner) +
+`purchase_history_screen.dart` (riwayat, detail sheet, setujui/tolak,
+batalkan). Izin `input_pembelian` dibuka di Izin Pegawai (dipakai pegawai &
+asisten). Tes: `purchase_input_test.dart`, `purchase_ai_format_test.dart`,
+`purchase_input_screen_test.dart` (lebar 360), semua revert-verified.
+Belum diuji di HP nyata & belum diuji dgn balasan Meta AI/Claude sungguhan.
+Versi **2.75.0+168**, schema 47.
+
 _Update sesi 83 (3 Okt, model berganti ke Opus) — dikerjakan berurutan atas
 permintaan user, BELUM di-merge ke main ("jangan merge dulu"): Item 93
 `b2095b4` (panel Order Restock: chip kategori lipat persisten via setting

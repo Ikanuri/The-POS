@@ -11,6 +11,33 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 3 Oktober 2026
 
 ### ✨ Fitur Baru
+- **Penerimaan Barang kini sekaligus mencatat harga beli & memperbarui HPP
+  (modal) otomatis.** Isi harga per satuan beli (mis. per ZAK/dus) dan
+  potongan per barang; aplikasi menghitung modal per satuan terkecil sudah
+  termasuk isi per dus, potongan, dan PPN — lalu menampilkan **modal lama →
+  modal baru** sebelum disimpan.
+  - **PPN fleksibel per barang:** "PPN dipisah" (modal tanpa PPN, PPN
+    masukan dicatat — cocok untuk toko PKP), "PPN ke modal", atau "Bebas
+    PPN". Pilihan terakhir tiap barang diingat untuk pembelian berikutnya.
+  - **Info faktur:** nomor, supplier, tanggal, harga sudah termasuk PPN atau
+    belum, potongan faktur. Faktur yang sama tidak bisa tercatat dua kali
+    tanpa peringatan.
+  - **Peringatan** kalau harga jual jadi di bawah modal baru, atau modal
+    berubah lebih dari batas yang Anda atur (awal 30%). Harga Kategori Harga
+    yang ikut berubah juga ditampilkan dulu.
+  - **Tempel hasil AI:** salin prompt & bagikan file CSV produk ke AI
+    (Claude/Meta AI) bersama foto faktur, lalu tempel balasannya — barang,
+    jumlah, harga, dan potongan terisi sendiri, termasuk beberapa faktur
+    sekaligus. Angka dicek ulang oleh aplikasi (selisih dengan total faktur
+    ditandai), dan produk yang ditebak AI harus Anda konfirmasi dulu.
+  - **Pegawai** yang diberi izin "Input Pembelian" bisa mencatat harga beli;
+    perubahan modalnya **menunggu persetujuan owner** (muncul di Penerimaan
+    Barang HP owner). Stoknya tetap langsung masuk.
+  - **Riwayat Pembelian** (tombol baru di Penerimaan Barang): lihat detail
+    tiap faktur dan **batalkan** bila salah catat — stok dikembalikan, modal
+    dikembalikan ke nilai sebelumnya.
+  - **Pengaturan Pembelian** (owner): perlakuan PPN default, tarif PPN, dan
+    batas peringatan perubahan modal.
 - **Margin di pengaturan produk.** Ketuk ikon **%** di samping Harga Jual
   dan Harga Pokok untuk membuka kolom **Margin** (dihitung dari modal), dalam
   persen atau rupiah. Isi margin, harga jual terisi sendiri; ubah harga jual

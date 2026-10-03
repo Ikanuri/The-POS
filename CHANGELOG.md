@@ -7,6 +7,18 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-10-03 (sesi kedelapan puluh tiga lanjutan — Item 90 tahap 2-6 maraton)
+
+- `38e4455` — feat(pembelian): Item 90 tahap 2-6 (UI) — Penerimaan Barang
+  jadi Input Pembelian: harga beli/potongan/PPN per baris, pratinjau HPP &
+  Kategori Harga, peringatan, tempel hasil AI, persetujuan owner, riwayat &
+  batalkan; izin input_pembelian dibuka
+- `6af4391` — feat(pembelian): Item 90 tahap 5 (logika) — prompt AI universal,
+  CSV produk minimal, parser & validator JSON faktur
+- `55206b9` — feat(pembelian): Item 90 tahap 3-4 (DB) — usulan HPP dari HP
+  non-owner + setujui/tolak, sync pembelian dua arah, dampak Kategori Harga,
+  info satuan & riwayat
+
 ## 2026-10-03 (sesi kedelapan puluh tiga lanjutan — Item 93, 92, 91, Item 90 tahap 1)
 
 - `bd59aa5` — feat(pembelian): Item 90 tahap 1 — terapkan/batalkan pembelian
