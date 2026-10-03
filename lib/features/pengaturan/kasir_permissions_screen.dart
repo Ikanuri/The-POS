@@ -10,8 +10,9 @@ import '../../core/providers/device_provider.dart';
 /// tidak berefek apa pun. Key-nya tetap di DB & tetap tersinkron, sehingga
 /// begitu fiturnya dibangun tinggal dihapus dari daftar ini.
 /// `input_pengeluaran` sudah punya UI (Item 9) → tidak lagi disembunyikan.
-/// `input_pembelian` masih belum ada fiturnya.
-const _kHiddenPermissionKeys = {'input_pembelian'};
+/// `input_pembelian` sudah punya UI (PLAN Item 90 — harga beli di
+/// Penerimaan Barang) → tidak lagi disembunyikan.
+const _kHiddenPermissionKeys = <String>{};
 
 final _kasirPermissionsProvider = StreamProvider<List<KasirPermission>>((ref) {
   final db = ref.watch(databaseProvider);
@@ -104,7 +105,9 @@ class _PermissionTile extends ConsumerWidget {
         'input_stok' => 'Pegawai bisa menambah stok produk',
         'tambah_pelanggan' => 'Pegawai bisa mendaftarkan pelanggan baru',
         'input_pengeluaran' => 'Pegawai bisa mencatat pengeluaran',
-        'input_pembelian' => 'Pegawai bisa mencatat pembelian dari supplier',
+        'input_pembelian' =>
+          'Pegawai bisa mengisi harga beli di Penerimaan Barang (perubahan '
+              'HPP menunggu persetujuan owner)',
         'override_harga' => 'Pegawai bisa mengubah harga di kasir',
         'batal_transaksi' => 'Pegawai bisa membatalkan / void transaksi',
         'terima_pembayaran' =>
