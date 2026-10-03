@@ -2500,6 +2500,46 @@ class AppDatabase extends _$AppDatabase {
     ];
   }
 
+  /// Tahap 5 — baris CSV produk minimal utk dilampirkan ke AI (semua satuan
+  /// produk aktif; TANPA harga jual/HPP). Satu query JOIN.
+  Future<
+      List<
+          ({
+            String productUnitId,
+            String productName,
+            String unitName,
+            double ratioToBase,
+            String baseUnitName,
+          })>> getPurchaseAiCsvRows() async {
+    final rows = await customSelect(
+      'SELECT pu.id AS uid, p.name AS pname, ut.name AS uname, '
+      '  pu.is_base_unit AS isbase, pu.ratio_to_base AS ratio, '
+      '  (SELECT ut2.name FROM product_units b '
+      '     LEFT JOIN unit_types ut2 ON ut2.id = b.unit_type_id '
+      '     WHERE b.product_id = pu.product_id AND b.is_base_unit = 1 '
+      '     LIMIT 1) AS bname '
+      'FROM product_units pu '
+      'JOIN products p ON p.id = pu.product_id '
+      'LEFT JOIN unit_types ut ON ut.id = pu.unit_type_id '
+      'WHERE p.is_active = 1 '
+      'ORDER BY p.name, pu.ratio_to_base',
+      readsFrom: {productUnits, products, unitTypes},
+    ).get();
+    return [
+      for (final r in rows)
+        (
+          productUnitId: r.data['uid'] as String,
+          productName: r.data['pname'] as String? ?? '',
+          unitName: r.data['uname'] as String? ?? '',
+          ratioToBase: (r.data['isbase'] as int? ?? 0) == 1
+              ? 1.0
+              : ((r.data['ratio'] as num?)?.toDouble() ?? 1.0),
+          baseUnitName: r.data['bname'] as String? ??
+              (r.data['uname'] as String? ?? ''),
+        ),
+    ];
+  }
+
   /// true bila nomor faktur [invoiceNo] sudah pernah dicatat (dan tidak
   /// dibatalkan) — cegah input faktur yang sama dua kali.
   Future<bool> purchaseInvoiceExists(String invoiceNo) async {
