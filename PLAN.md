@@ -168,25 +168,37 @@ diambil (user sudah melampirkan sendiri di app AI).
 - Pertanyaan owner yang tadinya menggantung terjawab: PPN di faktur = TOTAL
   saja; barang bebas PPN ada (ditentukan lewat perlakuan PPN per barang).
 
-## Item 92 — Label nama fungsi di tombol header tab Produk & sub-fiturnya (3 Okt 2026) — USULAN USER, BELUM DIEKSEKUSI
+## Item 92 — Label nama fungsi di tombol header tab Produk & sub-fiturnya (3 Okt 2026) — KEPUTUSAN USER LENGKAP, SIAP DIEKSEKUSI
 
 Masalah: tombol header hanya ikon (nama fungsi baru muncul lewat tooltip tahan-lama),
-membingungkan. Cakupan (hasil pemeriksaan kode, sesi 83):
+membingungkan.
+
+**Keputusan user**: desain label SAMA dengan label di bawah tombol header layar
+Kasir (widget privat \`_TbBtn\` di \`kasir_screen.dart\`: kotak 36x36 sudut
+membulat berisi ikon 18, di bawahnya teks 8,5pt rata tengah, lebar 44, maks 2
+baris, aksen warna soft per fungsi) — pola ini juga dipakai di layar Laci Meja
+(belum diperiksa persis widgetnya; samakan saat eksekusi). Sub-fitur memakai
+pola yang sama. **Pakai nama yang sudah dipakai di aplikasi** (tanpa
+dipersingkat). **"Tambah Produk" tetap berupa ikon "+"** (fungsinya sudah
+diketahui, tanpa label).
+
+Cakupan (hasil pemeriksaan kode):
 - \`produk_list_screen.dart\` AppBar actions: Cek Stok, Sinkron Harga, Kelola
-  Kategori, Kategori Harga, Katalog, Tambah Produk (6 ikon).
-- Sub-fitur yang juga punya tombol header ikon: \`cek_stok_screen.dart\`
-  (Penerimaan Barang, Stock Opname, Reset Stok [owner]); \`price_sync_screen.dart\`
-  & \`product_group_screen.dart\` (mode seleksi punya beberapa IconButton) — audit
-  semua AppBar di folder \`lib/features/produk/\` (termasuk \`catalog/\`) agar
-  tidak ada yang terlewat.
-Opsi desain (pilih saat eksekusi): (a) ikon + teks pendek di bawah/di samping
-(AppBar tidak muat 6 tombol bertulisan di 360px -> perlu menu "⋯" ATAU baris
-tombol kedua di bawah AppBar), (b) baris chip/tombol berlabel di bawah judul
-(scroll horizontal), (c) ikon dgn label muncul hanya untuk yang paling jarang
-dikenali. Saran: baris tombol berlabel (b) di bawah AppBar agar semua nama terbaca
-tanpa menutup judul. Tanpa schema, tanpa sync. Tes: widget lebar 360 (tidak
-overflow, semua label terlihat), revert-verify. Besar: kecil-sedang (murni UI);
-versi MINOR.
+  Kategori, Kategori Harga, Katalog (BERLABEL) + Tambah Produk (ikon saja).
+- Sub-fitur: \`cek_stok_screen.dart\` (Penerimaan Barang, Stock Opname, Reset Stok
+  [owner]); \`price_sync_screen.dart\`, \`product_group_screen.dart\` (mode seleksi
+  punya beberapa IconButton) — audit SEMUA AppBar di \`lib/features/produk/\`
+  (termasuk \`catalog/\`) agar tidak ada yang terlewat.
+
+Catatan teknis: \`_TbBtn\` privat -> ekstrak ke widget bersama (mis.
+\`lib/core/widgets/labeled_tool_button.dart\`) dan pakai ulang di kasir (perilaku
+kasir TIDAK boleh berubah) + produk; label panjang ("Penerimaan Barang",
+"Kelola Kategori", "Kategori Harga") dua baris di lebar 44 — uji tidak terpotong
+& AppBar tidak overflow di 360px (5 tombol berlabel + "+" + judul "Produk";
+bila sempit, kecilkan jarak/bungkus actions dgn Row padat, JANGAN
+memotong label). Tanpa schema, tanpa sync. Tes: widget lebar 360 (semua label
+terlihat, tak overflow, aksi tetap berfungsi) + kasir tidak berubah,
+revert-verify. Besar: kecil-sedang (murni UI); versi MINOR.
 
 ## Item 93 — Cek Stok: panel Order Restock (chip kategori lipat + kolom teks bisa diperbesar) + ingat pilihan (3 Okt 2026) — KEPUTUSAN USER LENGKAP, SIAP DIEKSEKUSI
 
