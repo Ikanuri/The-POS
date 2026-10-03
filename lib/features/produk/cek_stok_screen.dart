@@ -87,6 +87,32 @@ final _cekStokExcludedGroupsProvider =
     StateNotifierProvider<_ExcludedGroupsNotifier, Set<int>>(
         (ref) => _ExcludedGroupsNotifier(ref.watch(databaseProvider)));
 
+/// Item 93 — chip kategori panel Order Restock terbuka/terlipat. Pilihan
+/// terakhir DISIMPAN (tabel settings, tanpa migrasi; per-perangkat, tidak
+/// perlu sinkron) supaya tidak reset tiap layar dibuka. Awal = terbuka.
+const _kCategoryPanelExpandedKey = 'cek_stok_category_panel_expanded';
+
+class _CategoryPanelExpandedNotifier extends StateNotifier<bool> {
+  _CategoryPanelExpandedNotifier(this._db) : super(true) {
+    _load();
+  }
+  final AppDatabase _db;
+
+  Future<void> _load() async {
+    final raw = await _db.getSetting(_kCategoryPanelExpandedKey);
+    if (raw == '0' && mounted) state = false;
+  }
+
+  Future<void> toggle() async {
+    state = !state;
+    await _db.setSetting(_kCategoryPanelExpandedKey, state ? '1' : '0');
+  }
+}
+
+final _cekStokCategoryPanelExpandedProvider =
+    StateNotifierProvider<_CategoryPanelExpandedNotifier, bool>((ref) =>
+        _CategoryPanelExpandedNotifier(ref.watch(databaseProvider)));
+
 class _CekStokScreenState extends ConsumerState<CekStokScreen> {
   // Item 4 (revisi 25 Juli, setelah user membandingkan dgn HTML acuannya) —
   // baris "Order Restock" adalah JUMLAH YANG MAU DIORDER, diisi owner, BUKAN
@@ -478,6 +504,11 @@ class _CekStokScreenState extends ConsumerState<CekStokScreen> {
                 onToggleGroup: (id) => ref
                     .read(_cekStokExcludedGroupsProvider.notifier)
                     .toggle(id),
+                categoriesExpanded:
+                    ref.watch(_cekStokCategoryPanelExpandedProvider),
+                onToggleCategories: () => ref
+                    .read(_cekStokCategoryPanelExpandedProvider.notifier)
+                    .toggle(),
                 controller: _orderCtrl,
                 focusNode: _orderFocus,
                 onChanged: (_) => _onOrderTextChanged(),
@@ -921,12 +952,14 @@ class _StepGlyph extends StatelessWidget {
   }
 }
 
-class _OrderTextPanel extends StatelessWidget {
+class _OrderTextPanel extends StatefulWidget {
   const _OrderTextPanel({
     required this.itemCount,
     required this.namedGroups,
     required this.excludedGroupIds,
     required this.onToggleGroup,
+    required this.categoriesExpanded,
+    required this.onToggleCategories,
     required this.controller,
     required this.focusNode,
     required this.onChanged,
@@ -941,6 +974,11 @@ class _OrderTextPanel extends StatelessWidget {
   final List<ProductGroup> namedGroups;
   final Set<int> excludedGroupIds;
   final ValueChanged<int> onToggleGroup;
+
+  /// Item 93 — chip kategori terbuka/terlipat (persisten, lihat
+  /// `_cekStokCategoryPanelExpandedProvider`).
+  final bool categoriesExpanded;
+  final VoidCallback onToggleCategories;
   final TextEditingController controller;
   final FocusNode focusNode;
   final ValueChanged<String> onChanged;
@@ -948,8 +986,72 @@ class _OrderTextPanel extends StatelessWidget {
   final VoidCallback onShare;
 
   @override
+  State<_OrderTextPanel> createState() => _OrderTextPanelState();
+}
+
+class _OrderTextPanelState extends State<_OrderTextPanel> {
+  /// Item 93 — kolom teks diperbesar. SENGAJA tidak disimpan (keputusan
+  /// user): selalu mulai ciut. Saat diperbesar, chip kategori ditimpa
+  /// sementara & tinggi kolom = tinggi chip (terbuka) + kolom normal, jadi
+  /// tinggi panel sama dgn saat chip terbuka.
+  bool _fieldExpanded = false;
+
+  final _chipsKey = GlobalKey();
+  final _fieldKey = GlobalKey();
+  double? _chipsHeight;
+  double? _fieldHeight;
+
+  /// Tambahan tinggi kalau tidak ada chip (<2 kategori) — tidak ada acuan
+  /// tinggi chip, jadi pakai angka tetap supaya "perbesar" tetap berguna.
+  static const _kNoChipsExtra = 120.0;
+
+  void _measure() {
+    if (!mounted || _fieldExpanded) return;
+    final c = _chipsKey.currentContext?.size?.height;
+    final f = _fieldKey.currentContext?.size?.height;
+    if (c != _chipsHeight || f != _fieldHeight) {
+      setState(() {
+        _chipsHeight = c;
+        _fieldHeight = f;
+      });
+    }
+  }
+
+  Widget _expandButton() => Positioned(
+        top: 0,
+        right: 0,
+        child: IconButton(
+          key: const ValueKey('order-field-expand'),
+          tooltip: _fieldExpanded ? 'Perkecil' : 'Perbesar',
+          visualDensity: VisualDensity.compact,
+          iconSize: 18,
+          icon: Icon(_fieldExpanded
+              ? Icons.close_fullscreen_rounded
+              : Icons.open_in_full_rounded),
+          onPressed: () => setState(() => _fieldExpanded = !_fieldExpanded),
+        ),
+      );
+
+  InputDecoration get _decoration => const InputDecoration(
+        isDense: true,
+        border: OutlineInputBorder(),
+        // Ruang kanan utk tombol perbesar di pojok kanan atas.
+        contentPadding: EdgeInsets.fromLTRB(12, 10, 40, 10),
+        hintText: 'Item tercentang muncul di sini — bisa diedit '
+            'langsung, dua arah',
+        hintStyle: TextStyle(fontSize: 11),
+      );
+
+  @override
   Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
     final scheme = Theme.of(context).colorScheme;
+    final hasChips = widget.namedGroups.length >= 2;
+    // Chip tetap DI-LAYOUT (Offstage) walau terlipat, supaya tingginya bisa
+    // diukur sbg acuan kolom yang diperbesar.
+    final showChips = hasChips && widget.categoriesExpanded && !_fieldExpanded;
+    final expandedHeight = (_fieldHeight ?? 90) +
+        (hasChips ? (_chipsHeight ?? 0) : _kNoChipsExtra);
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
       decoration: BoxDecoration(
@@ -965,41 +1067,86 @@ class _OrderTextPanel extends StatelessWidget {
             // labelnya jadi terlalu lebar & opsi ketiga terdorong ke luar
             // layar. Di sini justru angka yang paling berguna — berapa
             // produk yang akan ikut terkirim ke supplier.
-            Text('Teks Order Restock — $itemCount produk',
-                style: Theme.of(context).textTheme.titleSmall),
-            if (namedGroups.length >= 2) ...[
-              const SizedBox(height: 6),
-              _OutputCategoryToggleRow(
-                namedGroups: namedGroups,
-                excludedGroupIds: excludedGroupIds,
-                onToggle: onToggleGroup,
+            Row(
+              children: [
+                Expanded(
+                  child: Text('Teks Order Restock — ${widget.itemCount} produk',
+                      style: Theme.of(context).textTheme.titleSmall),
+                ),
+                if (hasChips)
+                  IconButton(
+                    key: const ValueKey('outcat-panel-toggle'),
+                    tooltip: widget.categoriesExpanded
+                        ? 'Lipat kategori'
+                        : 'Tampilkan kategori',
+                    visualDensity: VisualDensity.compact,
+                    icon: Icon(widget.categoriesExpanded
+                        ? Icons.expand_more_rounded
+                        : Icons.expand_less_rounded),
+                    onPressed: widget.onToggleCategories,
+                  ),
+              ],
+            ),
+            if (hasChips)
+              Offstage(
+                offstage: !showChips,
+                child: Padding(
+                  key: _chipsKey,
+                  padding: const EdgeInsets.only(top: 6),
+                  child: _OutputCategoryToggleRow(
+                    namedGroups: widget.namedGroups,
+                    excludedGroupIds: widget.excludedGroupIds,
+                    onToggle: widget.onToggleGroup,
+                  ),
+                ),
               ),
-            ],
             const SizedBox(height: 6),
             // Bisa diedit langsung & dua arah (spt acuan): menyunting baris
             // di sini ikut mengubah centang, jumlah, dan satuan di daftar
             // atas — termasuk menghapus baris = produknya ter-uncheck.
-            TextField(
-              controller: controller,
-              focusNode: focusNode,
-              onChanged: onChanged,
-              maxLines: 5,
-              minLines: 3,
-              style: const TextStyle(fontSize: 12),
-              decoration: const InputDecoration(
-                isDense: true,
-                border: OutlineInputBorder(),
-                hintText: 'Item tercentang muncul di sini — bisa diedit '
-                    'langsung, dua arah',
-                hintStyle: TextStyle(fontSize: 11),
+            if (_fieldExpanded)
+              SizedBox(
+                key: const ValueKey('order-field-expanded'),
+                height: expandedHeight,
+                child: Stack(
+                  children: [
+                    TextField(
+                      controller: widget.controller,
+                      focusNode: widget.focusNode,
+                      onChanged: widget.onChanged,
+                      expands: true,
+                      maxLines: null,
+                      minLines: null,
+                      textAlignVertical: TextAlignVertical.top,
+                      style: const TextStyle(fontSize: 12),
+                      decoration: _decoration,
+                    ),
+                    _expandButton(),
+                  ],
+                ),
+              )
+            else
+              Stack(
+                key: _fieldKey,
+                children: [
+                  TextField(
+                    controller: widget.controller,
+                    focusNode: widget.focusNode,
+                    onChanged: widget.onChanged,
+                    maxLines: 5,
+                    minLines: 3,
+                    style: const TextStyle(fontSize: 12),
+                    decoration: _decoration,
+                  ),
+                  _expandButton(),
+                ],
               ),
-            ),
             const SizedBox(height: 8),
             Row(
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: onCopy,
+                    onPressed: widget.onCopy,
                     icon: const Icon(Icons.copy, size: 16),
                     label: const Text('Salin'),
                   ),
@@ -1007,7 +1154,7 @@ class _OrderTextPanel extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: FilledButton.icon(
-                    onPressed: onShare,
+                    onPressed: widget.onShare,
                     icon: const Icon(Icons.send_outlined, size: 16),
                     label: const Text('Kirim ke Supplier'),
                   ),
