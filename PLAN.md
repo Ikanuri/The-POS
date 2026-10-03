@@ -188,7 +188,7 @@ tanpa menutup judul. Tanpa schema, tanpa sync. Tes: widget lebar 360 (tidak
 overflow, semua label terlihat), revert-verify. Besar: kecil-sedang (murni UI);
 versi MINOR.
 
-## Item 93 — Cek Stok: panel Order Restock (chip kategori lipat + kolom teks bisa diperbesar) + ingat pilihan (3 Okt 2026) — KEPUTUSAN USER SUDAH ADA, BELUM DIEKSEKUSI
+## Item 93 — Cek Stok: panel Order Restock (chip kategori lipat + kolom teks bisa diperbesar) + ingat pilihan (3 Okt 2026) — KEPUTUSAN USER LENGKAP, SIAP DIEKSEKUSI
 
 Masalah: panel bawah "Order Restock" di \`cek_stok_screen.dart\` (chip
 sertakan/kecualikan kategori — hanya tampil bila >=2 kategori — di atas kolom
@@ -201,8 +201,7 @@ teks output) memakan tinggi layar sehingga menutup daftar item.
 2. **Kolom teks bisa diperbesar (expand)** lewat SATU tombol di pojok KANAN ATAS
    DI DALAM field. Saat expand, ukurannya (tinggi area) SAMA PERSIS dengan ukuran
    saat chip kategori juga terbuka — jadi tinggi panel konstan, bukan membesar
-   sendiri-sendiri. (User menulis "lebar"; ditafsirkan sebagai ukuran/tinggi area
-   — konfirmasi saat eksekusi.)
+   sendiri-sendiri. (Dikonfirmasi user: yang dimaksud TINGGI area.)
 3. **Prioritas**: bila chip terbuka DAN field diperbesar, **field yang menang** —
    chip kategori DITIMPA sementara oleh field yang diperbesar (disembunyikan,
    bukan dihapus); begitu field diciutkan, chip kembali ke keadaan terakhirnya
@@ -212,9 +211,9 @@ teks output) memakan tinggi layar sehingga menutup daftar item.
 saat layar ditutup/dibuka lagi — pola sama \`cek_stok_excluded_output_groups\`
 (blob di tabel settings, TANPA migrasi), mis. key
 \`cek_stok_category_panel_expanded\` ('1'/'0'; awal = terbuka). Per-perangkat,
-tidak perlu sinkron. Pertanyaan kecil yang masih terbuka: apakah keadaan field
-diperbesar juga disimpan (usulan: TIDAK — sifatnya sementara/overlay, selalu
-mulai ciut) atau ikut tersimpan.
+tidak perlu sinkron. Keadaan field diperbesar TIDAK
+disimpan (dikonfirmasi user): selalu mulai dalam keadaan ciut; hanya pilihan chip
+yang persisten.
 
 Tes: widget lebar 360 (lipat/buka chip; field diperbesar menyembunyikan chip &
 tinggi panel sama dgn saat chip terbuka; chip kembali ke keadaan terakhir setelah
