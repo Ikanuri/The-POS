@@ -188,20 +188,38 @@ tanpa menutup judul. Tanpa schema, tanpa sync. Tes: widget lebar 360 (tidak
 overflow, semua label terlihat), revert-verify. Besar: kecil-sedang (murni UI);
 versi MINOR.
 
-## Item 93 — Cek Stok: panel kategori Order Restock bisa expand/collapse + ingat pilihan (3 Okt 2026) — USULAN USER, BELUM DIEKSEKUSI
+## Item 93 — Cek Stok: panel Order Restock (chip kategori lipat + kolom teks bisa diperbesar) + ingat pilihan (3 Okt 2026) — KEPUTUSAN USER SUDAH ADA, BELUM DIEKSEKUSI
 
-Masalah: panel bawah "Order Restock" di \`cek_stok_screen.dart\` (kelas panel yang
-memuat chip sertakan/kecualikan kategori — hanya tampil bila >=2 kategori —
-di atas kolom teks output) memakan tinggi layar sehingga menutup daftar item.
-Rancangan: header panel dgn tombol ▾/▴ (area sentuh >=40dp) untuk melipat bagian
-chip kategori (kolom teks & tombol Salin/Bagikan tetap terlihat, atau ikut
-dilipat — putuskan saat eksekusi); animasi singkat. **Pilihan expand/collapse
-TERakhir DISIMPAN** (tidak reset saat layar ditutup/dibuka ulang): pola sama
-\`cek_stok_excluded_output_groups\` (blob di tabel settings, TANPA migrasi) —
-mis. key \`cek_stok_category_panel_expanded\` ('1'/'0'); nilai awal pertama kali =
-terbuka. Per-perangkat (tidak perlu sinkron antar-HP; murni preferensi tampilan).
-Tes: widget (lipat/buka, daftar item lebih tinggi saat dilipat, nilai tersimpan
-setelah layar dibuka ulang), revert-verify. Besar: kecil.
+Masalah: panel bawah "Order Restock" di \`cek_stok_screen.dart\` (chip
+sertakan/kecualikan kategori — hanya tampil bila >=2 kategori — di atas kolom
+teks output) memakan tinggi layar sehingga menutup daftar item.
+
+**Keputusan user**:
+1. **Chip kategori** bisa dilipat/dibuka lewat tombol ▾/▴ (area sentuh >=40dp,
+   animasi singkat). **Kolom teks + tombol Salin/Bagikan SELALU tetap terlihat**
+   (tidak ikut dilipat).
+2. **Kolom teks bisa diperbesar (expand)** lewat SATU tombol di pojok KANAN ATAS
+   DI DALAM field. Saat expand, ukurannya (tinggi area) SAMA PERSIS dengan ukuran
+   saat chip kategori juga terbuka — jadi tinggi panel konstan, bukan membesar
+   sendiri-sendiri. (User menulis "lebar"; ditafsirkan sebagai ukuran/tinggi area
+   — konfirmasi saat eksekusi.)
+3. **Prioritas**: bila chip terbuka DAN field diperbesar, **field yang menang** —
+   chip kategori DITIMPA sementara oleh field yang diperbesar (disembunyikan,
+   bukan dihapus); begitu field diciutkan, chip kembali ke keadaan terakhirnya
+   (terbuka/terlipat).
+
+**Persistensi**: pilihan terakhir chip (terbuka/terlipat) TERSIMPAN dan tidak reset
+saat layar ditutup/dibuka lagi — pola sama \`cek_stok_excluded_output_groups\`
+(blob di tabel settings, TANPA migrasi), mis. key
+\`cek_stok_category_panel_expanded\` ('1'/'0'; awal = terbuka). Per-perangkat,
+tidak perlu sinkron. Pertanyaan kecil yang masih terbuka: apakah keadaan field
+diperbesar juga disimpan (usulan: TIDAK — sifatnya sementara/overlay, selalu
+mulai ciut) atau ikut tersimpan.
+
+Tes: widget lebar 360 (lipat/buka chip; field diperbesar menyembunyikan chip &
+tinggi panel sama dgn saat chip terbuka; chip kembali ke keadaan terakhir setelah
+field diciutkan; nilai tersimpan setelah layar dibuka ulang; Salin/Bagikan tetap
+terlihat di semua keadaan), revert-verify. Besar: kecil.
 
 ## Item 91 — Harga jual dari margin (persen/Rp), dua arah (3 Okt 2026) — DISKUSI, MENUNGGU KEPUTUSAN USER
 
