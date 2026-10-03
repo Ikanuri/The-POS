@@ -9,7 +9,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-10-03 (sesi kedelapan puluh tiga lanjutan — Item 90 tahap 2-6 maraton)
 
-- `HASH` — fix(pembelian): applyPurchase menyimpan catatan faktur SEBELUM barisnya
+- `873b464` — fix(pembelian): applyPurchase menyimpan catatan faktur SEBELUM barisnya
   (DB asli pakai foreign_keys=ON, test memori tidak) -> Penerimaan Barang
   spinner selamanya; handler layar kini menangkap galat (log + snackbar)
 - `38e4455` — feat(pembelian): Item 90 tahap 2-6 (UI) — Penerimaan Barang
