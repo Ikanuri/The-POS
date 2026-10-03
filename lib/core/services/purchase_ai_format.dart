@@ -24,6 +24,7 @@ class AiInvoiceLine {
     required this.qty,
     required this.unitPrice,
     required this.discount,
+    this.isi,
     this.lineNet,
     this.productUnitId,
     this.confident = true,
@@ -44,6 +45,11 @@ class AiInvoiceLine {
 
   /// Potongan rupiah baris (dari kolom Rp, atau dihitung dari %).
   final int discount;
+
+  /// Isi per satuan besar yang TERCETAK di faktur (mis. 4 utk "4 /ZAK") —
+  /// dipakai membandingkan dgn isi satuan di aplikasi (aplikasi yang jadi
+  /// acuan; ini hanya peringatan, bukan sumber hitungan).
+  final double? isi;
 
   /// "Jumlah bersih" yang TERCETAK di faktur — pembanding validasi.
   final int? lineNet;
@@ -326,6 +332,7 @@ AiParseResult parsePurchaseAiResponse(
         qty: qty,
         unitPrice: price,
         discount: discount,
+        isi: isi > 0 ? isi : null,
         lineNet: netPrinted,
         productUnitId: unitId,
         confident: yakin is bool ? yakin : true,

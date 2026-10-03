@@ -58,6 +58,7 @@ Semoga membantu.''';
     expect(inv.lines[0].unitPrice, 167621, reason: 'string "167,621" = ribuan');
     expect(inv.lines[0].productUnitId, 'zak-terigu');
     expect(inv.lines[3].discount, 3000);
+    expect(inv.lines[0].isi, 4, reason: 'isi di faktur dibaca utk peringatan');
     expect(inv.problems, isEmpty,
         reason: 'total 5 baris - potongan = total tercetak; PPN tepat 11%');
     expect(inv.lines[2].productUnitId, isNull,

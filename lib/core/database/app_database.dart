@@ -2409,6 +2409,39 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
+  /// Semua satuan produk pemilik [productUnitId] (utk pemilih satuan di
+  /// Input Pembelian): id, nama, isi dalam satuan dasar (dasar = 1),
+  /// diurutkan dari satuan terkecil. Satuan terbesar (dus) -> terkecil
+  /// (biji) sudah "rata": `ratioToBase` selalu dalam satuan DASAR, berapa
+  /// pun jenjangnya.
+  Future<List<({String unitId, String unitName, double ratio, bool isBase})>>
+      getSiblingUnits(String productUnitId) async {
+    final unit = await (select(productUnits)
+          ..where((t) => t.id.equals(productUnitId)))
+        .getSingleOrNull();
+    if (unit == null) return const [];
+    final units = await (select(productUnits)
+          ..where((t) => t.productId.equals(unit.productId)))
+        .get();
+    final out =
+        <({String unitId, String unitName, double ratio, bool isBase})>[];
+    for (final u in units) {
+      final name = (await (select(unitTypes)
+                ..where((t) => t.id.equals(u.unitTypeId ?? 1)))
+              .getSingleOrNull())
+          ?.name ??
+          'satuan';
+      out.add((
+        unitId: u.id,
+        unitName: name,
+        ratio: u.isBaseUnit ? 1.0 : u.ratioToBase,
+        isBase: u.isBaseUnit,
+      ));
+    }
+    out.sort((a, b) => a.ratio.compareTo(b.ratio));
+    return out;
+  }
+
   /// Tahap 4 — dampak HPP dasar baru [newBaseCost] ke harga Kategori Harga
   /// berjangkar "modal" (dihitung ulang live dari HPP, lihat
   /// `price_category_calc.dart`) utk semua satuan produk pemilik

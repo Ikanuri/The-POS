@@ -47,6 +47,8 @@ class _Row {
     int unitPrice = 0,
     int discount = 0,
     this.aiSuggested = false,
+    this.aiUnitId,
+    this.aiIsi,
     this.problems = const [],
   })  : qtyCtrl = TextEditingController(text: _fmtNum(qty)),
         priceCtrl =
@@ -76,6 +78,16 @@ class _Row {
   /// otomatis"); setelah dikonfirmasi dipelajari jadi alias.
   bool aiSuggested;
   bool confirmed = false;
+
+  /// Saran satuan AI (id) & isi per satuan yang tercetak di faktur — tetap
+  /// DITAMPILKAN walau pengguna memilih satuan lain (aplikasi = acuan,
+  /// saran AI = pembanding).
+  final String? aiUnitId;
+  final double? aiIsi;
+
+  /// Semua satuan produk (pemilih satuan cepat di baris).
+  List<({String unitId, String unitName, double ratio, bool isBase})> siblings =
+      const [];
 
   /// Masalah validasi dari parser AI (kosong = aman).
   final List<String> problems;
@@ -176,8 +188,8 @@ class _ReceiveGoodsScreenState extends ConsumerState<ReceiveGoodsScreen> {
   /// Item 90 — boleh mengisi harga beli? Owner selalu; HP lain butuh izin
   /// `input_pembelian` (perubahan HPP-nya jadi usulan owner).
   bool _canPrice = false;
-  ({PurchaseTaxTreatment treatment, double taxRate, double warnPct})
-      _settings = (
+  ({PurchaseTaxTreatment treatment, double taxRate, double warnPct}) _settings =
+      (
     treatment: PurchaseTaxTreatment.pisah,
     taxRate: 11,
     warnPct: 30,
@@ -233,11 +245,13 @@ class _ReceiveGoodsScreenState extends ConsumerState<ReceiveGoodsScreen> {
     final id = r.unitId;
     if (id == null) {
       r.info = null;
+      r.siblings = const [];
       r.impact = const [];
       return;
     }
     final db = ref.read(databaseProvider);
     r.info = await db.getPurchaseUnitInfo(id);
+    r.siblings = await db.getSiblingUnits(id);
     r.treatment ??= r.info?.lastTreatment ?? _settings.treatment;
     await _refreshImpact(r);
   }
@@ -317,9 +331,8 @@ class _ReceiveGoodsScreenState extends ConsumerState<ReceiveGoodsScreen> {
     if (text.trim().isEmpty) return;
     setState(() => _busy = true);
     final db = ref.read(databaseProvider);
-    final known = (await db.getPurchaseAiCsvRows())
-        .map((r) => r.productUnitId)
-        .toSet();
+    final known =
+        (await db.getPurchaseAiCsvRows()).map((r) => r.productUnitId).toSet();
     final res = parsePurchaseAiResponse(text,
         knownUnitIds: known, taxRate: _settings.taxRate);
     if (!res.ok) {
@@ -357,6 +370,8 @@ class _ReceiveGoodsScreenState extends ConsumerState<ReceiveGoodsScreen> {
           unitPrice: l.unitPrice,
           discount: l.discount,
           aiSuggested: fromAlias == null && l.productUnitId != null,
+          aiUnitId: l.productUnitId,
+          aiIsi: l.isi,
           problems: [
             ...l.problems,
             if (!l.confident) 'AI kurang yakin membaca baris ini — cek ulang',
@@ -389,7 +404,8 @@ class _ReceiveGoodsScreenState extends ConsumerState<ReceiveGoodsScreen> {
     final db = ref.read(databaseProvider);
     final csv = buildPurchaseAiCsv(await db.getPurchaseAiCsvRows());
     final dir = await getTemporaryDirectory();
-    final file = File('${dir.path}/produk_ai_${DateTime.now().millisecondsSinceEpoch}.csv');
+    final file = File(
+        '${dir.path}/produk_ai_${DateTime.now().millisecondsSinceEpoch}.csv');
     await file.writeAsString(csv);
     await Share.shareXFiles([XFile(file.path, mimeType: 'text/csv')],
         text: 'Daftar produk untuk pencocokan faktur');
@@ -418,6 +434,40 @@ class _ReceiveGoodsScreenState extends ConsumerState<ReceiveGoodsScreen> {
       ..treatment = null;
     await _attachInfo(row);
     if (mounted) setState(() {});
+  }
+
+  /// Ganti satuan baris lewat chip (satuan lain milik produk yang sama).
+  /// Dihitung pengguna sebagai pilihan manual -> dipelajari ke kamus.
+  Future<void> _switchUnit(_Row r, String unitId) async {
+    if (r.unitId == unitId) return;
+    r
+      ..unitId = unitId
+      ..label = await _labelFor(unitId)
+      ..pickedManually = true
+      ..aiSuggested = false;
+    await _attachInfo(r);
+    if (mounted) setState(() {});
+  }
+
+  /// Peringatan isi per satuan: bandingkan isi di faktur (dibaca AI) dgn isi
+  /// satuan terpilih di aplikasi. Aplikasi = acuan; ini hanya pengingat —
+  /// terutama menangkap salah pilih satuan dasar padahal harga di faktur
+  /// per satuan besar (HPP bisa meleset berkali lipat).
+  String? _isiNote(_Row r) {
+    final isi = r.aiIsi;
+    final info = r.info;
+    if (isi == null || info == null) return null;
+    final isBase = info.baseUnitId == r.unitId;
+    if (isBase && isi > 1) {
+      return 'Faktur menulis isi ${_fmtNum(isi)} per ${r.sourceUnit.isEmpty ? 'satuan besar' : r.sourceUnit}, '
+          'tapi yang dipilih satuan dasar (${info.unitName}). Harga di faktur '
+          'umumnya per satuan besar — pilih satuan besarnya.';
+    }
+    if (!isBase && (info.ratio - isi).abs() > 0.0001) {
+      return 'Isi di faktur ${_fmtNum(isi)}, isi ${info.unitName} di aplikasi '
+          '${_fmtNum(info.ratio)} ${info.baseUnitName} — pastikan sudah benar.';
+    }
+    return null;
   }
 
   /// Tambah barang manual (cari nama/barcode) ke faktur pertama.
@@ -459,8 +509,8 @@ class _ReceiveGoodsScreenState extends ConsumerState<ReceiveGoodsScreen> {
       final nets = [
         for (final x in inv.rows) (x.qty * x.unitPrice).round() - x.discount
       ];
-      alloc = allocateInvoiceDiscount(nets, inv.invoiceDiscount)[
-          inv.rows.indexOf(r)];
+      alloc = allocateInvoiceDiscount(
+          nets, inv.invoiceDiscount)[inv.rows.indexOf(r)];
     }
     return computePurchaseLine(
       qty: r.qty,
@@ -486,7 +536,10 @@ class _ReceiveGoodsScreenState extends ConsumerState<ReceiveGoodsScreen> {
   bool _belowSellPrice(_Row r) {
     final c = _newCost(r);
     final info = r.info;
-    return c != null && info != null && info.basePrice > 0 && info.basePrice < c;
+    return c != null &&
+        info != null &&
+        info.basePrice > 0 &&
+        info.basePrice < c;
   }
 
   Future<void> _commit() => _guarded('simpan pembelian', _commitImpl);
@@ -536,8 +589,7 @@ class _ReceiveGoodsScreenState extends ConsumerState<ReceiveGoodsScreen> {
                   child: const Text('Cek lagi')),
               FilledButton(
                   key: const ValueKey('purchase-warn-continue'),
-                  style:
-                      FilledButton.styleFrom(minimumSize: const Size(0, 40)),
+                  style: FilledButton.styleFrom(minimumSize: const Size(0, 40)),
                   onPressed: () => Navigator.pop(ctx, true),
                   child: const Text('Tetap simpan')),
             ],
@@ -744,8 +796,8 @@ class _ReceiveGoodsScreenState extends ConsumerState<ReceiveGoodsScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text('Menunggu persetujuan HPP (${pending.length})',
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.w700)),
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w700)),
                           for (final p in pending)
                             ListTile(
                               dense: true,
@@ -785,8 +837,8 @@ class _ReceiveGoodsScreenState extends ConsumerState<ReceiveGoodsScreen> {
                     '"jumlah satuan nama", misalnya "5 pcs Indomie Goreng". '
                     'Baris pemisah tanggal otomatis diabaikan. Jumlahnya akan '
                     'DITAMBAHKAN ke stok (bukan menimpa seperti opname).',
-                    style: TextStyle(
-                        fontSize: 12, color: scheme.onSurfaceVariant),
+                    style:
+                        TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
                   ),
                   const SizedBox(height: 12),
                   TextField(
@@ -913,8 +965,7 @@ class _ReceiveGoodsScreenState extends ConsumerState<ReceiveGoodsScreen> {
         ),
         if (_aiError != null) ...[
           const SizedBox(height: 6),
-          Text(_aiError!,
-              style: TextStyle(fontSize: 12, color: scheme.error)),
+          Text(_aiError!, style: TextStyle(fontSize: 12, color: scheme.error)),
         ],
         const SizedBox(height: 8),
         SizedBox(
@@ -1015,7 +1066,8 @@ class _ReceiveGoodsScreenState extends ConsumerState<ReceiveGoodsScreen> {
     final matched = r.unitId != null;
     final needsConfirm = r.aiSuggested && !r.confirmed;
     final info = r.info;
-    final unitName = info?.unitName ?? (r.sourceUnit.isEmpty ? 'satuan' : r.sourceUnit);
+    final unitName =
+        info?.unitName ?? (r.sourceUnit.isEmpty ? 'satuan' : r.sourceUnit);
     final calc = _canPrice ? _calc(r) : null;
     final newCost = _canPrice ? _newCost(r) : null;
     Future<void> changed() async {
@@ -1083,6 +1135,38 @@ class _ReceiveGoodsScreenState extends ConsumerState<ReceiveGoodsScreen> {
                   icon: const Icon(Icons.check, size: 16),
                   label: const Text('Benar, ini produknya'),
                 ),
+              ),
+            if (matched && r.siblings.length > 1)
+              Padding(
+                padding: const EdgeInsets.only(left: 8, top: 2),
+                child: Wrap(
+                  spacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text('Satuan:',
+                        style: TextStyle(
+                            fontSize: 11, color: scheme.onSurfaceVariant)),
+                    for (final u in r.siblings)
+                      ChoiceChip(
+                        key: ValueKey('unit-chip-${r.sourceName}-${u.unitId}'),
+                        visualDensity: VisualDensity.compact,
+                        label: Text(
+                          '${u.unitName}${u.isBase ? '' : ' (isi ${_fmtNum(u.ratio)})'}'
+                          '${u.unitId == r.aiUnitId ? ' · saran AI' : ''}',
+                          style: const TextStyle(fontSize: 11),
+                        ),
+                        selected: u.unitId == r.unitId,
+                        onSelected: (_) => _switchUnit(r, u.unitId),
+                      ),
+                  ],
+                ),
+              ),
+            if (_isiNote(r) case final note?)
+              Padding(
+                key: ValueKey('isi-note-${r.sourceName}'),
+                padding: const EdgeInsets.only(left: 12, bottom: 2),
+                child: Text('⚠ $note',
+                    style: TextStyle(fontSize: 11, color: scheme.error)),
               ),
             for (final p in r.problems)
               Padding(
@@ -1193,8 +1277,7 @@ class _ReceiveGoodsScreenState extends ConsumerState<ReceiveGoodsScreen> {
                       if ((calc?.inputTax ?? 0) > 0)
                         Text('PPN masukan ${formatRupiah(calc!.inputTax)}',
                             style: TextStyle(
-                                fontSize: 11,
-                                color: scheme.onSurfaceVariant)),
+                                fontSize: 11, color: scheme.onSurfaceVariant)),
                       if (_belowSellPrice(r))
                         Text(
                           'Harga jual ${formatRupiah(info.basePrice)} di bawah '
@@ -1237,8 +1320,7 @@ String _treatmentShort(PurchaseTaxTreatment t) => switch (t) {
     };
 
 String _treatmentLong(PurchaseTaxTreatment t) => switch (t) {
-      PurchaseTaxTreatment.modal =>
-        'PPN masuk modal (HPP termasuk PPN)',
+      PurchaseTaxTreatment.modal => 'PPN masuk modal (HPP termasuk PPN)',
       PurchaseTaxTreatment.pisah =>
         'PPN dipisah (HPP tanpa PPN, PPN masukan dicatat)',
       PurchaseTaxTreatment.bebas => 'Barang bebas PPN',
@@ -1304,8 +1386,8 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding:
+          EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: SizedBox(
         height: MediaQuery.of(context).size.height * 0.75,
         child: Column(

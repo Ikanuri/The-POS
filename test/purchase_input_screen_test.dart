@@ -99,7 +99,8 @@ void main() {
     deviceRole: 'kasir',
   );
 
-  testWidgets('owner: hasil AI -> saran produk wajib dikonfirmasi -> '
+  testWidgets(
+      'owner: hasil AI -> saran produk wajib dikonfirmasi -> '
       'pratinjau HPP -> simpan (stok & HPP berubah, faktur tercatat)',
       (tester) async {
     await open(tester);
@@ -110,8 +111,7 @@ void main() {
     await tester.tap(find.text('Benar, ini produknya'));
     await tester.pumpAndSettle();
     expect(
-        find.textContaining(
-            '${formatRupiah(36000)} → ${formatRupiah(37752)}'),
+        find.textContaining('${formatRupiah(36000)} → ${formatRupiah(37752)}'),
         findsOneWidget);
     expect(tester.takeException(), isNull);
 
@@ -123,11 +123,13 @@ void main() {
     expect(head.invoiceNo, '124256-RPS');
     expect(head.status, 'received');
     expect(await db.resolveReceiveUnit(name: 'Terigu Payung 5 kg', unit: 'ZAK'),
-        'zak', reason: 'saran AI yang dikonfirmasi dipelajari ke kamus');
+        'zak',
+        reason: 'saran AI yang dikonfirmasi dipelajari ke kamus');
     await drain(tester);
   });
 
-  testWidgets('harga jual di bawah HPP baru & perubahan besar -> dialog '
+  testWidgets(
+      'harga jual di bawah HPP baru & perubahan besar -> dialog '
       'peringatan sebelum simpan', (tester) async {
     await open(tester);
     await pasteAi(tester, aiReply(price: 200000));
@@ -143,7 +145,8 @@ void main() {
     await drain(tester);
   });
 
-  testWidgets('pegawai berizin: HPP jadi usulan; owner menyetujui dari '
+  testWidgets(
+      'pegawai berizin: HPP jadi usulan; owner menyetujui dari '
       'bagian "Menunggu persetujuan"', (tester) async {
     await (db.update(db.kasirPermissions)
           ..where((t) => t.permissionKey.equals('input_pembelian')))
@@ -152,8 +155,8 @@ void main() {
     await pasteAi(tester, aiReply());
     await tester.tap(find.text('Benar, ini produknya'));
     await tester.pumpAndSettle();
-    expect(find.text('Perubahan HPP menunggu persetujuan owner'),
-        findsOneWidget);
+    expect(
+        find.text('Perubahan HPP menunggu persetujuan owner'), findsOneWidget);
     await tester.tap(find.text('Tambahkan 1 Barang ke Stok'));
     await tester.pumpAndSettle();
     expect(await db.currentStock('pak'), 20);
@@ -182,8 +185,34 @@ void main() {
     await drain(tester);
   });
 
+  testWidgets('pemilih satuan di baris + peringatan isi faktur vs aplikasi',
+      (tester) async {
+    await open(tester);
+    await pasteAi(tester, aiReply());
+    await tester.tap(find.text('Benar, ini produknya'));
+    await tester.pumpAndSettle();
+    // Dua chip satuan; satuan ZAK ditandai sbg saran AI.
+    expect(find.byKey(const ValueKey('unit-chip-Terigu Payung 5 kg-zak')),
+        findsOneWidget);
+    expect(find.textContaining('saran AI'), findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('isi-note-Terigu Payung 5 kg')), findsNothing,
+        reason: 'isi faktur 4 = isi ZAK di aplikasi 4 -> tidak ada peringatan');
+
+    // Ganti ke satuan dasar padahal harga faktur per ZAK -> peringatan.
+    await tester
+        .tap(find.byKey(const ValueKey('unit-chip-Terigu Payung 5 kg-pak')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('isi-note-Terigu Payung 5 kg')),
+        findsOneWidget);
+    expect(find.textContaining('pilih satuan besarnya'), findsOneWidget);
+    await drain(tester);
+  });
+
   testWidgets('riwayat: pembelian tampil & bisa dibatalkan', (tester) async {
-    await db.applyPurchase(invoiceNo: 'F-9', supplierName: 'Indomarco',
+    await db.applyPurchase(
+        invoiceNo: 'F-9',
+        supplierName: 'Indomarco',
         lines: const [
           PurchaseLineInput(productUnitId: 'zak', qty: 5, unitPrice: 167621),
         ]);

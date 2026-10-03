@@ -403,6 +403,66 @@ void main() {
     });
   });
 
+  test('jenjang 4 tingkat: dus -> bal -> slop -> pack -> biji, beli per DUS '
+      'terselesaikan ke satuan terkecil (biji)', () async {
+    final h = AppDatabase(NativeDatabase.memory());
+    addTearDown(h.close);
+    // Isi dihitung relatif ke BIJI (satuan dasar): pack 20, slop 200,
+    // bal 2.000, dus 8.000 (hasil fitur "Hitung dari satuan lain").
+    await h.saveProduct(
+      product: ProductsCompanion.insert(id: 'R1', name: 'Rokok'),
+      units: [
+        for (final (id, ratio, base) in [
+          ('biji', 1.0, true),
+          ('pack', 20.0, false),
+          ('slop', 200.0, false),
+          ('bal', 2000.0, false),
+          ('dus', 8000.0, false),
+        ])
+          ProductUnitsCompanion.insert(
+              id: id,
+              productId: 'R1',
+              isBaseUnit: Value(base),
+              ratioToBase: Value(ratio),
+              isNonStock: const Value(false)),
+      ],
+      tiersByUnitTempId: {
+        for (final id in ['biji', 'pack', 'slop', 'bal', 'dus'])
+          id: [
+            PriceTiersCompanion.insert(
+                id: 't-$id', productUnitId: id, price: 1000)
+          ],
+      },
+      barcodesByUnitTempId: const {},
+    );
+    // 2 dus @ Rp8.000.000 (tanpa PPN) -> Rp1.000/biji (8.000.000 / 8.000).
+    await h.applyPurchase(lines: const [
+      PurchaseLineInput(
+          productUnitId: 'dus',
+          qty: 2,
+          unitPrice: 8000000,
+          treatment: PurchaseTaxTreatment.bebas),
+    ]);
+    expect(await h.currentStock('biji'), 16000);
+    expect(await h.currentStock('dus'), 2);
+    for (final (id, ratio) in [
+      ('biji', 1),
+      ('pack', 20),
+      ('slop', 200),
+      ('bal', 2000),
+      ('dus', 8000),
+    ]) {
+      final t = await (h.select(h.priceTiers)
+            ..where((x) => x.productUnitId.equals(id)))
+          .getSingle();
+      expect(t.costPrice, 1000 * ratio, reason: 'HPP $id = 1.000 x isi');
+    }
+    final sib = await h.getSiblingUnits('slop');
+    expect(sib.map((u) => u.unitId), ['biji', 'pack', 'slop', 'bal', 'dus'],
+        reason: 'diurutkan dari satuan terkecil');
+    expect(sib.last.ratio, 8000);
+  });
+
   test('DB ASLI memakai PRAGMA foreign_keys=ON: applyPurchase tidak boleh '
       'ditolak (bug nyata: spinner Penerimaan Barang berputar selamanya)',
       () async {
