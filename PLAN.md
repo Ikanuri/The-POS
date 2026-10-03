@@ -292,33 +292,6 @@ nota kandidat utk dicek manual owner), bukan tebakan otomatis.
 
 ---
 
-## Item 48 — Kotak warna avatar produk di kasir dibuat soft/pastel (18 Juli, BELUM dieksekusi — user setuju, siap eksekusi)
-
-**Konteks**: BUKAN aksen fungsional bermakna (beda dari kerjaan Item
-"aksen warna Ringkasan/Laporan/Pengaturan" sebelumnya) — ini avatar-
-huruf (inisial nama produk) di kartu/baris produk kasir, warnanya
-dipilih dari hash huruf pertama nama produk (`_gradFor()`,
-`kasir_screen.dart` ~baris 707-715, palet `_kAvatarGradients` — 6 pasang
-gradient 2-warna cukup vivid/saturated), dipakai di `_ProductCard` (mode
-grid, ~baris 2441+2467-2490) & `_ProductListTileState` (mode list,
-~baris 2609+2636-2659) — teks huruf-nya putih di atas gradient.
-
-**Fix (disetujui, siap eksekusi)**: ganti `_kAvatarGradients` (gradient
-vivid) jadi palet solid pastel/soft — ikuti bahasa desain `AppTheme`
-yang sudah ada (pasangan bg-lembut + fg-redup, theme-aware light/dark,
-pola sama spt `scanFg/scanBg`, `antrianFg/antrianBg` dll di
-`app_theme.dart`). Huruf avatar ikut ganti dari putih ke warna gelap
-redup (fg pasangannya) — putih di atas background pastel terang akan
-sulit terbaca. Perlu palet baru dgn variasi cukup (minimal sama seperti
-jumlah gradient lama, 6 warna) supaya beda produk masih cukup
-terbedakan visual — BUKAN cuma reuse 5 pasang fg/bg yang sudah dipakai
-utk kartu Ringkasan/Laporan/Pengaturan (supaya avatar produk tidak
-tertukar makna dgn aksen fungsional itu). Test: widget test verifikasi
-warna avatar BUKAN dari `_kAvatarGradients` lama (atau verifikasi warna
-baru match palet pastel baru) di kedua mode (grid & list).
-
----
-
 ## Item 23 — Sisa lokasi lain yang masih pakai `paid` mentah (double-count kembalian reuse)
 
 **Konteks:** user laporkan "Sisa Tagihan" di struk salah hitung (understated)
