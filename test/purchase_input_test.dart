@@ -246,6 +246,163 @@ void main() {
     });
   });
 
+  group('tahap 3-4 (usulan pegawai, kategori harga, sync dua arah)', () {
+    late AppDatabase host;
+    late AppDatabase client;
+    Future<void> seed(AppDatabase db) => db.saveProduct(
+          product: ProductsCompanion.insert(id: 'P1', name: 'Terigu Payung'),
+          units: [
+            ProductUnitsCompanion.insert(
+                id: 'pak',
+                productId: 'P1',
+                isBaseUnit: const Value(true),
+                isNonStock: const Value(false)),
+            ProductUnitsCompanion.insert(
+                id: 'zak',
+                productId: 'P1',
+                ratioToBase: const Value(4.0),
+                isNonStock: const Value(false)),
+          ],
+          tiersByUnitTempId: {
+            'pak': [
+              PriceTiersCompanion.insert(
+                  id: 't1',
+                  productUnitId: 'pak',
+                  price: 45000,
+                  costPrice: const Value(36000)),
+            ],
+            'zak': [
+              PriceTiersCompanion.insert(
+                  id: 't2',
+                  productUnitId: 'zak',
+                  price: 175000,
+                  costPrice: const Value(144000)),
+            ],
+          },
+          barcodesByUnitTempId: const {},
+        );
+    setUp(() async {
+      host = AppDatabase(NativeDatabase.memory());
+      client = AppDatabase(NativeDatabase.memory());
+      await seed(host);
+      await seed(client);
+    });
+    tearDown(() async {
+      await host.close();
+      await client.close();
+    });
+
+    Future<int> cost(AppDatabase db) async => (await (db.select(db.priceTiers)
+              ..where((t) => t.productUnitId.equals('pak')))
+            .getSingle())
+        .costPrice;
+
+    // Klien -> host: hanya tabel append-only & dua-arah (sama dgn host asli).
+    Future<void> up() async {
+      final dump = await client.dumpSince(DateTime(2000),
+          includeMasterData: false);
+      for (final e in dump.entries) {
+        final ao = LanSyncService.appendOnlyTables.contains(e.key);
+        if (!ao && !LanSyncService.sharedTables.contains(e.key)) continue;
+        await host.mergeRows(e.key, e.value, ao);
+      }
+    }
+
+    Future<void> down() async {
+      final dump = await host.dumpSince(DateTime(2000));
+      for (final e in dump.entries) {
+        if (!LanSyncService.clientMergeableTables.contains(e.key)) continue;
+        await client.mergeRows(
+            e.key, e.value, LanSyncService.appendOnlyTables.contains(e.key));
+      }
+    }
+
+    test('pegawai: stok langsung, HPP jadi usulan; naik ke owner, disetujui, '
+        'HPP & status turun lagi', () async {
+      final id = await client.applyPurchase(costAsProposal: true, lines: const [
+        PurchaseLineInput(productUnitId: 'zak', qty: 5, unitPrice: 167621),
+      ]);
+      expect(await client.currentStock('pak'), 20);
+      expect(await cost(client), 36000, reason: 'HPP belum berubah (usulan)');
+      expect(
+          (await (client.select(client.purchases)
+                    ..where((t) => t.id.equals(id)))
+                  .getSingle())
+              .status,
+          'pending');
+
+      await up();
+      final onHost = await (host.select(host.purchases)
+            ..where((t) => t.id.equals(id)))
+          .getSingleOrNull();
+      expect(onHost?.status, 'pending',
+          reason: 'tanpa sync dua arah, usulan tidak pernah sampai ke owner');
+
+      expect(await host.approvePurchase(id), isTrue);
+      expect(await cost(host), 37752);
+      await Future<void>.delayed(const Duration(milliseconds: 1100));
+      await down();
+      expect(await cost(client), 37752);
+      expect(
+          (await (client.select(client.purchases)
+                    ..where((t) => t.id.equals(id)))
+                  .getSingle())
+              .status,
+          'received');
+    });
+
+    test('owner tolak usulan: HPP tetap, status cost_rejected; batalkan '
+        'usulan tidak menyentuh HPP', () async {
+      final id = await host.applyPurchase(costAsProposal: true, lines: const [
+        PurchaseLineInput(productUnitId: 'zak', qty: 1, unitPrice: 167621),
+      ]);
+      expect(await host.rejectPurchaseCost(id), isTrue);
+      expect(await cost(host), 36000);
+      final id2 = await host.applyPurchase(costAsProposal: true, lines: const [
+        PurchaseLineInput(productUnitId: 'zak', qty: 1, unitPrice: 167621),
+      ]);
+      expect(await host.voidPurchase(id2), isEmpty,
+          reason: 'usulan belum pernah mengubah HPP -> tidak ada peringatan');
+      expect(await cost(host), 36000);
+      expect(await host.approvePurchase(id), isFalse,
+          reason: 'yang sudah ditolak tidak bisa disetujui');
+    });
+
+    test('dampak Kategori Harga berjangkar modal', () async {
+      await host.into(host.priceCategories).insert(
+          PriceCategoriesCompanion.insert(id: 'k1', name: const Value('Grosir')));
+      await host.into(host.altPrices).insert(AltPricesCompanion.insert(
+          id: 'a1',
+          productUnitId: 'pak',
+          label: 'Grosir',
+          price: 39600,
+          priceCategoryId: const Value('k1'),
+          marginAnchor: const Value('modal'),
+          marginType: const Value('percent'),
+          marginValue: const Value(10)));
+      final impact = await host.getCategoryPriceImpact('pak', 37752);
+      expect(impact.single.oldPrice, 39600);
+      expect(impact.single.newPrice, 41527);
+      expect(await host.getCategoryPriceImpact('pak', 36000), isEmpty);
+    });
+
+    test('info satuan: perlakuan PPN terakhir diingat per barang', () async {
+      expect((await host.getPurchaseUnitInfo('zak'))!.lastTreatment, isNull);
+      await host.applyPurchase(lines: const [
+        PurchaseLineInput(
+            productUnitId: 'zak',
+            qty: 1,
+            unitPrice: 100000,
+            treatment: PurchaseTaxTreatment.modal),
+      ]);
+      final info = (await host.getPurchaseUnitInfo('pak'))!;
+      expect(info.lastTreatment, PurchaseTaxTreatment.modal);
+      expect(info.ratio, 1);
+      expect((await host.getPurchaseUnitInfo('zak'))!.ratio, 4);
+      expect(await host.purchaseInvoiceExists(''), isFalse);
+    });
+  });
+
   test('migrasi v46 -> v47: kolom pembelian ditambah, data lama utuh',
       () async {
     final path = '${Directory.systemTemp.path}/pos_mig47_'

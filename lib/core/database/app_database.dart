@@ -2163,10 +2163,17 @@ class AppDatabase extends _$AppDatabase {
     String? kasirId,
     String? note,
     DateTime? now,
+    // Tahap 3 — HP selain owner: HPP TIDAK diterapkan, cuma DIUSULKAN
+    // (status 'pending', `cost_after` = usulan) & disetujui owner lewat
+    // [approvePurchase]. Stok tetap langsung bertambah (barang memang datang).
+    // Alasan teknis: harga di HP klien akan tertimpa data owner (price_tiers
+    // dikirim penuh tiap sync), jadi perubahan HPP harus terjadi di owner.
+    bool costAsProposal = false,
   }) async {
     final at = now ?? DateTime.now();
     final id = const Uuid().v4();
     await transaction(() async {
+      var proposed = false;
       final nets = [
         for (final l in lines) (l.qty * l.unitPrice).round() - l.discount
       ];
@@ -2204,7 +2211,11 @@ class AppDatabase extends _$AppDatabase {
         int? after;
         if (l.applyCost && l.unitPrice > 0 && r.costPerBaseUnit != null) {
           after = r.costPerBaseUnit;
-          await _setProductCostFromBase(info.id, after!);
+          if (costAsProposal) {
+            proposed = true;
+          } else {
+            await _setProductCostFromBase(info.id, after!);
+          }
         }
         await into(purchaseItems).insert(PurchaseItemsCompanion.insert(
           id: const Uuid().v4(),
@@ -2230,7 +2241,7 @@ class AppDatabase extends _$AppDatabase {
         id: id,
         localId: 'PB-${kasirId ?? 'X'}-${at.microsecondsSinceEpoch}',
         kasirId: Value(kasirId),
-        status: 'received',
+        status: proposed ? 'pending' : 'received',
         total: Value(total),
         note: Value(note),
         createdAt: Value(at),
@@ -2278,7 +2289,9 @@ class AppDatabase extends _$AppDatabase {
             now: now,
           );
         }
-        if (it.costAfter != null) {
+        // HPP hanya pernah ditulis pada status 'received' (usulan 'pending'/
+        // 'cost_rejected' tidak pernah mengubah HPP) -> tak ada yg dipulihkan.
+        if (it.costAfter != null && head.status == 'received') {
           final cur = await baseUnitCost(info.id);
           if (cur == it.costAfter) {
             await _setProductCostFromBase(info.id, it.costBefore ?? 0);
@@ -2291,6 +2304,212 @@ class AppDatabase extends _$AppDatabase {
           PurchasesCompanion(status: const Value('void'), updatedAt: Value(now)));
     });
     return notRestored;
+  }
+
+  /// Tahap 3 — owner menyetujui usulan HPP pembelian [purchaseId] (status
+  /// 'pending'): HPP usulan (`cost_after`) diterapkan ke produk, status jadi
+  /// 'received'. false bila bukan usulan yang menunggu.
+  Future<bool> approvePurchase(String purchaseId) async {
+    return transaction(() async {
+      final head = await (select(purchases)
+            ..where((t) => t.id.equals(purchaseId)))
+          .getSingleOrNull();
+      if (head == null || head.status != 'pending') return false;
+      final items = await (select(purchaseItems)
+            ..where((t) => t.purchaseId.equals(purchaseId)))
+          .get();
+      for (final it in items) {
+        if (it.costAfter == null) continue;
+        final info = await _baseUnitOf(it.productUnitId);
+        await _setProductCostFromBase(info.id, it.costAfter!);
+      }
+      await (update(purchases)..where((t) => t.id.equals(purchaseId))).write(
+          PurchasesCompanion(
+              status: const Value('received'),
+              updatedAt: Value(DateTime.now())));
+      return true;
+    });
+  }
+
+  /// Tahap 3 — owner menolak usulan HPP: stok TETAP (barang memang datang),
+  /// HPP tidak berubah, status 'cost_rejected'.
+  Future<bool> rejectPurchaseCost(String purchaseId) async {
+    final n = await (update(purchases)
+          ..where((t) => t.id.equals(purchaseId) & t.status.equals('pending')))
+        .write(PurchasesCompanion(
+            status: const Value('cost_rejected'),
+            updatedAt: Value(DateTime.now())));
+    return n > 0;
+  }
+
+  /// Info satuan beli utk pratinjau Input Pembelian: satuan dasar & isi,
+  /// nama satuan dasar, HPP & harga jual dasar saat ini, non-stok, dan
+  /// perlakuan PPN yang TERAKHIR dipakai utk produk ini (diingat per barang,
+  /// keputusan user; null = belum pernah -> pakai default toko).
+  Future<
+      ({
+        String baseUnitId,
+        double ratio,
+        String baseUnitName,
+        String unitName,
+        String productName,
+        int currentCost,
+        int basePrice,
+        bool isNonStock,
+        PurchaseTaxTreatment? lastTreatment,
+      })?> getPurchaseUnitInfo(String productUnitId) async {
+    final unit = await (select(productUnits)
+          ..where((t) => t.id.equals(productUnitId)))
+        .getSingleOrNull();
+    if (unit == null) return null;
+    final info = await _baseUnitOf(productUnitId);
+    final base = await (select(productUnits)
+          ..where((t) => t.id.equals(info.id)))
+        .getSingleOrNull();
+    final product = await (select(products)
+          ..where((t) => t.id.equals(unit.productId)))
+        .getSingleOrNull();
+    Future<String> typeName(int? id) async =>
+        (await (select(unitTypes)..where((t) => t.id.equals(id ?? 1)))
+                .getSingleOrNull())
+            ?.name ??
+        'satuan';
+    final tiers = await (select(priceTiers)
+          ..where((t) => t.productUnitId.equals(info.id)))
+        .get();
+    final baseTier =
+        tiers.where((t) => t.minQty == 1).firstOrNull ?? tiers.firstOrNull;
+    final last = await customSelect(
+      'SELECT pi.tax_treatment AS t FROM purchase_items pi '
+      'JOIN product_units pu ON pu.id = pi.product_unit_id '
+      'WHERE pu.product_id = ? AND pi.tax_treatment IS NOT NULL '
+      'ORDER BY pi.created_at DESC LIMIT 1',
+      variables: [Variable.withString(unit.productId)],
+      readsFrom: {purchaseItems, productUnits},
+    ).getSingleOrNull();
+    return (
+      baseUnitId: info.id,
+      ratio: info.ratio,
+      baseUnitName: await typeName(base?.unitTypeId),
+      unitName: await typeName(unit.unitTypeId),
+      productName: product?.name ?? '',
+      currentCost: baseTier?.costPrice ?? 0,
+      basePrice: baseTier?.price ?? 0,
+      isNonStock: base?.isNonStock ?? false,
+      lastTreatment: PurchaseTaxTreatment.fromCode(last?.data['t'] as String?),
+    );
+  }
+
+  /// Tahap 4 — dampak HPP dasar baru [newBaseCost] ke harga Kategori Harga
+  /// berjangkar "modal" (dihitung ulang live dari HPP, lihat
+  /// `price_category_calc.dart`) utk semua satuan produk pemilik
+  /// [baseUnitId]. Hanya baris yang harganya BERUBAH.
+  Future<List<({String label, String unitName, int oldPrice, int newPrice})>>
+      getCategoryPriceImpact(String baseUnitId, int newBaseCost) async {
+    final base = await (select(productUnits)
+          ..where((t) => t.id.equals(baseUnitId)))
+        .getSingleOrNull();
+    if (base == null) return const [];
+    final units = await (select(productUnits)
+          ..where((t) => t.productId.equals(base.productId)))
+        .get();
+    final out =
+        <({String label, String unitName, int oldPrice, int newPrice})>[];
+    for (final u in units) {
+      final rows = await (select(altPrices)
+            ..where((t) =>
+                t.productUnitId.equals(u.id) &
+                t.priceCategoryId.isNotNull() &
+                t.marginAnchor.equals(kMarginAnchorModal) &
+                t.marginType.isNotNull() &
+                t.marginValue.isNotNull()))
+          .get();
+      if (rows.isEmpty) continue;
+      final tiers = await (select(priceTiers)
+            ..where((t) => t.productUnitId.equals(u.id)))
+          .get();
+      final tier =
+          tiers.where((t) => t.minQty == 1).firstOrNull ?? tiers.firstOrNull;
+      final oldCost = tier?.costPrice ?? 0;
+      final ratio = u.id == baseUnitId || u.isBaseUnit ? 1.0 : u.ratioToBase;
+      final newCost = (newBaseCost * ratio).round();
+      final unitName = (await (select(unitTypes)
+                ..where((t) => t.id.equals(u.unitTypeId ?? 1)))
+              .getSingleOrNull())
+          ?.name ??
+          'satuan';
+      for (final r in rows) {
+        int price(int cost) {
+          if (cost <= 0) return r.price;
+          return computeCategoryPrice(
+            basePrice: tier?.price ?? 0,
+            costPrice: cost,
+            marginAnchor: kMarginAnchorModal,
+            marginType: r.marginType!,
+            marginValue: r.marginValue!,
+          );
+        }
+
+        final o = price(oldCost);
+        final n = price(newCost);
+        if (o != n) {
+          out.add((label: r.label, unitName: unitName, oldPrice: o, newPrice: n));
+        }
+      }
+    }
+    return out;
+  }
+
+  /// Tahap 6 — daftar pembelian terbaru dulu (riwayat).
+  Stream<List<Purchase>> watchPurchases({int limit = 200}) =>
+      (select(purchases)
+            ..orderBy([(t) => OrderingTerm.desc(t.createdAt)])
+            ..limit(limit))
+          .watch();
+
+  /// Baris pembelian + label produk/satuan (satu JOIN, bukan N+1).
+  Future<List<({PurchaseItem item, String productName, String unitName})>>
+      getPurchaseItemsWithLabels(String purchaseId) async {
+    final rows = await customSelect(
+      'SELECT pi.id AS id, p.name AS pname, ut.name AS uname '
+      'FROM purchase_items pi '
+      'LEFT JOIN product_units pu ON pu.id = pi.product_unit_id '
+      'LEFT JOIN products p ON p.id = pu.product_id '
+      'LEFT JOIN unit_types ut ON ut.id = pu.unit_type_id '
+      'WHERE pi.purchase_id = ?',
+      variables: [Variable.withString(purchaseId)],
+      readsFrom: {purchaseItems, productUnits, products, unitTypes},
+    ).get();
+    final labels = {
+      for (final r in rows)
+        r.data['id'] as String: (
+          r.data['pname'] as String? ?? '-',
+          r.data['uname'] as String? ?? '',
+        ),
+    };
+    final items = await (select(purchaseItems)
+          ..where((t) => t.purchaseId.equals(purchaseId)))
+        .get();
+    return [
+      for (final it in items)
+        (
+          item: it,
+          productName: labels[it.id]?.$1 ?? '-',
+          unitName: labels[it.id]?.$2 ?? '',
+        ),
+    ];
+  }
+
+  /// true bila nomor faktur [invoiceNo] sudah pernah dicatat (dan tidak
+  /// dibatalkan) — cegah input faktur yang sama dua kali.
+  Future<bool> purchaseInvoiceExists(String invoiceNo) async {
+    final n = invoiceNo.trim();
+    if (n.isEmpty) return false;
+    final row = await (select(purchases)
+          ..where((t) => t.invoiceNo.equals(n) & t.status.isNotValue('void'))
+          ..limit(1))
+        .getSingleOrNull();
+    return row != null;
   }
 
   /// Konvensi note sesi penerimaan — dipakai saat commit DAN saat memfilter
@@ -7252,11 +7471,9 @@ class AppDatabase extends _$AppDatabase {
       // sebelum purchases sebelum purchase_items (FK logis supplierId/
       // purchaseId, walau bukan FK fisik lintas-device di sini).
       'suppliers',
-      'purchases',
-      // Baris per-produk pembelian — immutable begitu dibuat (tidak ada
-      // fungsi yang meng-update-nya), jadi tidak punya `updated_at` &
-      // delta-nya cukup by `created_at` saja (lihat cabang khusus di bawah).
-      'purchase_items',
+      // `purchases`/`purchase_items` PINDAH ke [shared] (PLAN Item 90 tahap
+      // 3) — pembelian yg dicatat pegawai (usulan HPP) harus naik ke owner,
+      // persetujuan/pembatalan owner harus turun ke pegawai.
     ];
     // Tabel yang mengalir DUA ARAH (klien->host maupun host->klien),
     // last-write-wins by `updated_at`. Beda dari [masterData] yang sengaja
@@ -7265,7 +7482,7 @@ class AppDatabase extends _$AppDatabase {
     // masuk sini atas permintaan user: pemetaan teks->produk yang
     // dipelajari device kasir HARUS ikut sampai ke owner, bukan cuma
     // sebaliknya. Lihat juga `LanSyncService.sharedTables`.
-    const shared = ['product_aliases'];
+    const shared = ['product_aliases', 'purchases', 'purchase_items'];
 
     final dump = <String, List<Map<String, Object?>>>{};
     // Drift stores DateTimeColumn as unix seconds; raw SQL must compare in the same unit.
@@ -7456,8 +7673,12 @@ class AppDatabase extends _$AppDatabase {
     // SELALU disertakan — termasuk saat klien mengirim ke atas
     // (`includeMasterData: false`), justru itu tujuannya.
     for (final t in shared) {
+      // `purchase_items` immutable & tanpa `updated_at` -> delta by
+      // `created_at` saja.
       final rows = await customSelect(
-        'SELECT * FROM "$t" WHERE updated_at >= ? OR created_at >= ?',
+        t == 'purchase_items'
+            ? 'SELECT * FROM "$t" WHERE created_at >= ? OR created_at >= ?'
+            : 'SELECT * FROM "$t" WHERE updated_at >= ? OR created_at >= ?',
         variables: [Variable.withInt(sinceSec), Variable.withInt(sinceSec)],
       ).get();
       dump[t] = rows.map((r) => r.data).toList();
