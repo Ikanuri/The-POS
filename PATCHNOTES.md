@@ -15,6 +15,9 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   (di Laci Meja maupun di kartu pre-order pada struk) kini menampilkan
   dialog konfirmasi supaya tidak terpencet tanpa sengaja. Kalau DP/jaminan
   pre-order itu belum dibayar, dialog menampilkan peringatannya.
+- **Konfirmasi juga untuk "Ambil" barang titip/ketinggalan bersisa 1**,
+  supaya tidak tertandai sudah diambil karena salah sentuh. (Pinjaman
+  tidak perlu: "Kembali" memang selalu lewat dialog jumlah.)
 
 ## 1 Oktober 2026
 

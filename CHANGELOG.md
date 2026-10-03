@@ -9,6 +9,8 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-10-02 (sesi kedelapan puluh tiga lanjutan — gate Penuhi pre-order)
 
+- `499ea89` — feat(laci-meja): konfirmasi anti-misclick juga utk Ambil
+  titip/ketinggalan bersisa 1
 - `1e6e77e` — feat(laci-meja): konfirmasi anti-misclick saat Penuhi pre-order
   bersisa 1 (+peringatan DP belum dibayar)
 

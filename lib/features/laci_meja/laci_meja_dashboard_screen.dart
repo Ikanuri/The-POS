@@ -756,6 +756,11 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
                 deviceCode: deviceCode);
             return;
           }
+          // Anti-misclick: sisa <= 1 tidak punya dialog jumlah.
+          if (!await confirmCollectLeftBehind(context,
+              itemName: e.itemName, customerLabel: '')) {
+            return;
+          }
           await db.markLeftBehindCollected(e.id,
               locallyModified: locallyModified,
               sisaQty: sisa,
