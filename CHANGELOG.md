@@ -9,6 +9,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-10-04 (sesi kedelapan puluh tiga — hapus jalur AI)
 
+- (hash menyusul) — feat(kasir): nama pelanggan bold + nama pegawai bold di kanannya di header Keranjang
 - `1b554b2` — feat(kasir): nama & alamat pelanggan di bawah judul Keranjang (tetap=terracotta, ad-hoc=hitam); bump 2.77.0+171
 - `6f69fe0` — refactor(pembelian): hapus jalur "Hasil AI" di Penerimaan Barang (parser, prompt, CSV produk, konfirmasi saran, catatan isi); kamus alias & Tempel teks tetap; bump 2.76.0+170
 

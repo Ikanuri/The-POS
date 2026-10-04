@@ -6,7 +6,7 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
-_Update (4 Okt, susulan) — header keranjang (`cart_sheet.dart`, `_CartCustomerLine`) menampilkan nama pelanggan (tetap=`AppTheme.accent`, ad-hoc=`onSurface`) + alamat (query `customers.address`, hanya pelanggan tetap). Test `cart_sheet_customer_line_test.dart`. Versi **2.77.0+171**.
+_Update (4 Okt, susulan) — header keranjang (`cart_sheet.dart`, `_CartCustomerLine`) menampilkan nama pelanggan (tetap=`AppTheme.accent`, ad-hoc=`onSurface`) (bold) + nama pegawai `meta.employeeName` bold di kanannya + alamat (query `customers.address`, hanya pelanggan tetap). Test `cart_sheet_customer_line_test.dart`. Versi **2.77.0+171**.
 
 _Update (4 Okt) — JALUR AI DIHAPUS atas permintaan user ("lebih efisien input manual"): `purchase_ai_format.dart` + test, segmen "Hasil AI", prompt/CSV produk, `getPurchaseAiCsvRows`, prefix `produk_ai_`, konfirmasi saran AI, `_isiNote`, field `problems`/`aiSuggested`/`aiUnitId`/`aiIsi` di `receive_goods_screen.dart`. DIPERTAHANKAN: Tempel teks (`receive_text_parser.dart`), kamus alias (`product_aliases`, `learnReceiveAlias`, layar Kamus Produk), chip satuan, seluruh inti Input Pembelian. Paragraf di bawah yang menyebut Parser AI/`getPurchaseAiCsvRows`/saran AI sudah USANG. Awal parser = commit `6af4391`. Versi **2.76.0+170**. Branch belum di-merge ke main.
 

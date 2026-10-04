@@ -15,7 +15,9 @@ import 'package:the_pos/features/kasir/widgets/cart_sheet.dart';
 /// terracotta + alamat; ad-hoc warna teks biasa (hitam) tanpa alamat.
 void main() {
   Future<void> open(WidgetTester tester, AppDatabase db,
-      {required String? customerId, required String name}) async {
+      {required String? customerId,
+      required String name,
+      String? employee}) async {
     final container = ProviderContainer(overrides: [
       databaseProvider.overrideWithValue(db),
       deviceProvider.overrideWith((ref) => DeviceNotifier()
@@ -42,6 +44,11 @@ void main() {
     container
         .read(cartMetaProvider(kMainCartId).notifier)
         .setCustomer(customerId, name);
+    if (employee != null) {
+      container
+          .read(cartMetaProvider(kMainCartId).notifier)
+          .setEmployee('E1', employee);
+    }
     await tester.binding.setSurfaceSize(const Size(360, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(UncontrolledProviderScope(
@@ -83,6 +90,7 @@ void main() {
         .widget<Text>(find.byKey(const ValueKey('cart-customer-address')));
     expect(name.data, 'Bu Sari');
     expect(name.style!.color, AppTheme.accent);
+    expect(name.style!.fontWeight, FontWeight.w700);
     expect(addr.data, 'Jl. Melati 5');
     expect(
         addr.style!.fontWeight!.value, lessThan(name.style!.fontWeight!.value));
@@ -100,7 +108,26 @@ void main() {
         tester.widget<Text>(find.byKey(const ValueKey('cart-customer-name')));
     expect(name.data, 'Pak Budi');
     expect(name.style!.color, isNot(AppTheme.accent));
+    expect(name.style!.fontWeight, FontWeight.w700, reason: 'ad-hoc juga bold');
     expect(find.byKey(const ValueKey('cart-customer-address')), findsNothing);
+    await drain(tester);
+  });
+
+  testWidgets('nama pegawai bold di kanan nama pelanggan', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(() async => db.close());
+    await open(tester, db,
+        customerId: null, name: 'Pak Budi', employee: 'Rina');
+    final emp =
+        tester.widget<Text>(find.byKey(const ValueKey('cart-employee-name')));
+    expect(emp.data, 'Rina');
+    expect(emp.style!.fontWeight, FontWeight.w700);
+    expect(
+        tester.getTopLeft(find.byKey(const ValueKey('cart-employee-name'))).dx,
+        greaterThan(tester
+            .getTopRight(find.byKey(const ValueKey('cart-customer-name')))
+            .dx));
+    expect(tester.takeException(), isNull);
     await drain(tester);
   });
 }

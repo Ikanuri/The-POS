@@ -1297,10 +1297,11 @@ class _CartSheetState extends ConsumerState<CartSheet> {
             // Pelanggan tetap (terdaftar, ada customerId) = terracotta;
             // ad-hoc (nama bebas) = warna teks biasa (hitam). Alamat lebih
             // tipis & kecil dari nama, nama sedikit lebih kecil dari judul.
-            if (meta.hasCustomer)
+            if (meta.hasCustomer || meta.hasEmployee)
               _CartCustomerLine(
-                name: meta.customerName!,
+                name: meta.hasCustomer ? meta.customerName : null,
                 customerId: meta.customerId,
+                employeeName: meta.hasEmployee ? meta.employeeName : null,
               ),
             const Divider(height: 1),
             // Fitur "Lunasi Hutang" — REDESAIN KEDUA (permintaan user,
@@ -2705,10 +2706,15 @@ final _cartCustomerAddressProvider =
 });
 
 class _CartCustomerLine extends ConsumerWidget {
-  const _CartCustomerLine({required this.name, required this.customerId});
+  const _CartCustomerLine({
+    required this.name,
+    required this.customerId,
+    required this.employeeName,
+  });
 
-  final String name;
+  final String? name;
   final String? customerId;
+  final String? employeeName;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -2726,16 +2732,44 @@ class _CartCustomerLine extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              name,
-              key: const ValueKey('cart-customer-name'),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: tetap ? AppTheme.accent : scheme.onSurface,
-              ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (name != null)
+                  Flexible(
+                    child: Text(
+                      name!,
+                      key: const ValueKey('cart-customer-name'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: tetap ? AppTheme.accent : scheme.onSurface,
+                      ),
+                    ),
+                  ),
+                if (name != null && employeeName != null)
+                  const SizedBox(width: 10),
+                if (employeeName != null) ...[
+                  Icon(Icons.badge_outlined,
+                      size: 14, color: scheme.onSurfaceVariant),
+                  const SizedBox(width: 3),
+                  Flexible(
+                    child: Text(
+                      employeeName!,
+                      key: const ValueKey('cart-employee-name'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: scheme.onSurface,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
             if (address.isNotEmpty)
               Text(
