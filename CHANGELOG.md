@@ -7,6 +7,43 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-10-04 (sesi kedelapan puluh tiga — hapus jalur AI)
+
+- `fea9868` — feat(kasir): nama pelanggan bold + nama pegawai bold di kanannya di header Keranjang
+- `1b554b2` — feat(kasir): nama & alamat pelanggan di bawah judul Keranjang (tetap=terracotta, ad-hoc=hitam); bump 2.77.0+171
+- `6f69fe0` — refactor(pembelian): hapus jalur "Hasil AI" di Penerimaan Barang (parser, prompt, CSV produk, konfirmasi saran, catatan isi); kamus alias & Tempel teks tetap; bump 2.76.0+170
+
+## 2026-10-03 (sesi kedelapan puluh tiga lanjutan — Item 90 tahap 2-6 maraton)
+
+- `c038933` — feat(pembelian): pemilih satuan di baris + peringatan isi faktur vs
+  aplikasi (saran AI tetap tampil); bukti jenjang dus->biji
+- `873b464` — fix(pembelian): applyPurchase menyimpan catatan faktur SEBELUM barisnya
+  (DB asli pakai foreign_keys=ON, test memori tidak) -> Penerimaan Barang
+  spinner selamanya; handler layar kini menangkap galat (log + snackbar)
+- `38e4455` — feat(pembelian): Item 90 tahap 2-6 (UI) — Penerimaan Barang
+  jadi Input Pembelian: harga beli/potongan/PPN per baris, pratinjau HPP &
+  Kategori Harga, peringatan, tempel hasil AI, persetujuan owner, riwayat &
+  batalkan; izin input_pembelian dibuka
+- `6af4391` — feat(pembelian): Item 90 tahap 5 (logika) — prompt AI universal,
+  CSV produk minimal, parser & validator JSON faktur
+- `55206b9` — feat(pembelian): Item 90 tahap 3-4 (DB) — usulan HPP dari HP
+  non-owner + setujui/tolak, sync pembelian dua arah, dampak Kategori Harga,
+  info satuan & riwayat
+
+## 2026-10-03 (sesi kedelapan puluh tiga lanjutan — Item 93, 92, 91, Item 90 tahap 1)
+
+- `bd59aa5` — feat(pembelian): Item 90 tahap 1 — terapkan/batalkan pembelian
+  (stok + HPP dari faktur, PPN fleksibel, diskon) + pengaturan toko; schema 47;
+  fix klien membuang sync supplier/pembelian
+- `4cec68b` — feat(produk): kalkulator Margin dua arah (ikon %, markup dari
+  modal) di form produk
+- `a49c54a` — docs: hapus PLAN Item 48 (avatar pastel sudah selesai di
+  c0a570a/971f647)
+- `d91f57e` — feat(produk): tombol header tab Produk & sub-fitur berlabel nama
+  fungsi (pola toolbar Kasir)
+- `b2095b4` — feat(cek-stok): panel Order Restock — chip kategori bisa dilipat
+  (tersimpan) & kolom teks bisa diperbesar
+
 ## 2026-10-02 (sesi kedelapan puluh tiga lanjutan — gate Penuhi pre-order)
 
 - `499ea89` — feat(laci-meja): konfirmasi anti-misclick juga utk Ambil

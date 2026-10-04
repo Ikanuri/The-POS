@@ -6798,6 +6798,10 @@ class TransactionPayment extends DataClass
   /// belanjaan) bisa punya beberapa kembalian terpisah, masing-masing
   /// dengan status ambil sendiri-sendiri.
   ///
+  /// Item 89 — sejak `change_reused` ada, kolom ini HANYA pengingat "sudah
+  /// diserahkan" & TIDAK memengaruhi angka struk (kembalian yang DIPAKAI
+  /// membayar ronde berikutnya dicatat di [changeReused]).
+  ///
   /// IKUT SYNC sejak audit Pra-Bayar (susulan `e27bf8a` — centang ini
   /// dipakai `latestChangeGiven`/`printer_service.dart` utk menentukan
   /// baris "Kembali" mana yang masih harus dicetak/dibagikan, jadi tidak
@@ -9771,6 +9775,40 @@ class $PurchasesTable extends Purchases
   late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
       'updated_at', aliasedName, true,
       type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  static const VerificationMeta _invoiceNoMeta =
+      const VerificationMeta('invoiceNo');
+  @override
+  late final GeneratedColumn<String> invoiceNo = GeneratedColumn<String>(
+      'invoice_no', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _invoiceDateMeta =
+      const VerificationMeta('invoiceDate');
+  @override
+  late final GeneratedColumn<DateTime> invoiceDate = GeneratedColumn<DateTime>(
+      'invoice_date', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  static const VerificationMeta _supplierNameMeta =
+      const VerificationMeta('supplierName');
+  @override
+  late final GeneratedColumn<String> supplierName = GeneratedColumn<String>(
+      'supplier_name', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _discountTotalMeta =
+      const VerificationMeta('discountTotal');
+  @override
+  late final GeneratedColumn<int> discountTotal = GeneratedColumn<int>(
+      'discount_total', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _inputTaxTotalMeta =
+      const VerificationMeta('inputTaxTotal');
+  @override
+  late final GeneratedColumn<int> inputTaxTotal = GeneratedColumn<int>(
+      'input_tax_total', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -9783,7 +9821,12 @@ class $PurchasesTable extends Purchases
         note,
         createdAt,
         syncedAt,
-        updatedAt
+        updatedAt,
+        invoiceNo,
+        invoiceDate,
+        supplierName,
+        discountTotal,
+        inputTaxTotal
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -9846,6 +9889,34 @@ class $PurchasesTable extends Purchases
       context.handle(_updatedAtMeta,
           updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
     }
+    if (data.containsKey('invoice_no')) {
+      context.handle(_invoiceNoMeta,
+          invoiceNo.isAcceptableOrUnknown(data['invoice_no']!, _invoiceNoMeta));
+    }
+    if (data.containsKey('invoice_date')) {
+      context.handle(
+          _invoiceDateMeta,
+          invoiceDate.isAcceptableOrUnknown(
+              data['invoice_date']!, _invoiceDateMeta));
+    }
+    if (data.containsKey('supplier_name')) {
+      context.handle(
+          _supplierNameMeta,
+          supplierName.isAcceptableOrUnknown(
+              data['supplier_name']!, _supplierNameMeta));
+    }
+    if (data.containsKey('discount_total')) {
+      context.handle(
+          _discountTotalMeta,
+          discountTotal.isAcceptableOrUnknown(
+              data['discount_total']!, _discountTotalMeta));
+    }
+    if (data.containsKey('input_tax_total')) {
+      context.handle(
+          _inputTaxTotalMeta,
+          inputTaxTotal.isAcceptableOrUnknown(
+              data['input_tax_total']!, _inputTaxTotalMeta));
+    }
     return context;
   }
 
@@ -9877,6 +9948,16 @@ class $PurchasesTable extends Purchases
           .read(DriftSqlType.dateTime, data['${effectivePrefix}synced_at']),
       updatedAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at']),
+      invoiceNo: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}invoice_no']),
+      invoiceDate: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}invoice_date']),
+      supplierName: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}supplier_name']),
+      discountTotal: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}discount_total'])!,
+      inputTaxTotal: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}input_tax_total'])!,
     );
   }
 
@@ -9898,6 +9979,19 @@ class Purchase extends DataClass implements Insertable<Purchase> {
   final DateTime createdAt;
   final DateTime? syncedAt;
   final DateTime? updatedAt;
+
+  /// Nomor faktur supplier (mis. "124256-RPS").
+  final String? invoiceNo;
+
+  /// Tanggal di faktur (bukan waktu dicatat — itu [createdAt]).
+  final DateTime? invoiceDate;
+
+  /// Nama supplier apa adanya (snapshot teks; [supplierId] opsional).
+  final String? supplierName;
+
+  /// Total potongan (baris + faktur) & total PPN masukan yang dicatat.
+  final int discountTotal;
+  final int inputTaxTotal;
   const Purchase(
       {required this.id,
       required this.localId,
@@ -9909,7 +10003,12 @@ class Purchase extends DataClass implements Insertable<Purchase> {
       this.note,
       required this.createdAt,
       this.syncedAt,
-      this.updatedAt});
+      this.updatedAt,
+      this.invoiceNo,
+      this.invoiceDate,
+      this.supplierName,
+      required this.discountTotal,
+      required this.inputTaxTotal});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -9934,6 +10033,17 @@ class Purchase extends DataClass implements Insertable<Purchase> {
     if (!nullToAbsent || updatedAt != null) {
       map['updated_at'] = Variable<DateTime>(updatedAt);
     }
+    if (!nullToAbsent || invoiceNo != null) {
+      map['invoice_no'] = Variable<String>(invoiceNo);
+    }
+    if (!nullToAbsent || invoiceDate != null) {
+      map['invoice_date'] = Variable<DateTime>(invoiceDate);
+    }
+    if (!nullToAbsent || supplierName != null) {
+      map['supplier_name'] = Variable<String>(supplierName);
+    }
+    map['discount_total'] = Variable<int>(discountTotal);
+    map['input_tax_total'] = Variable<int>(inputTaxTotal);
     return map;
   }
 
@@ -9958,6 +10068,17 @@ class Purchase extends DataClass implements Insertable<Purchase> {
       updatedAt: updatedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(updatedAt),
+      invoiceNo: invoiceNo == null && nullToAbsent
+          ? const Value.absent()
+          : Value(invoiceNo),
+      invoiceDate: invoiceDate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(invoiceDate),
+      supplierName: supplierName == null && nullToAbsent
+          ? const Value.absent()
+          : Value(supplierName),
+      discountTotal: Value(discountTotal),
+      inputTaxTotal: Value(inputTaxTotal),
     );
   }
 
@@ -9976,6 +10097,11 @@ class Purchase extends DataClass implements Insertable<Purchase> {
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       syncedAt: serializer.fromJson<DateTime?>(json['syncedAt']),
       updatedAt: serializer.fromJson<DateTime?>(json['updatedAt']),
+      invoiceNo: serializer.fromJson<String?>(json['invoiceNo']),
+      invoiceDate: serializer.fromJson<DateTime?>(json['invoiceDate']),
+      supplierName: serializer.fromJson<String?>(json['supplierName']),
+      discountTotal: serializer.fromJson<int>(json['discountTotal']),
+      inputTaxTotal: serializer.fromJson<int>(json['inputTaxTotal']),
     );
   }
   @override
@@ -9993,6 +10119,11 @@ class Purchase extends DataClass implements Insertable<Purchase> {
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'syncedAt': serializer.toJson<DateTime?>(syncedAt),
       'updatedAt': serializer.toJson<DateTime?>(updatedAt),
+      'invoiceNo': serializer.toJson<String?>(invoiceNo),
+      'invoiceDate': serializer.toJson<DateTime?>(invoiceDate),
+      'supplierName': serializer.toJson<String?>(supplierName),
+      'discountTotal': serializer.toJson<int>(discountTotal),
+      'inputTaxTotal': serializer.toJson<int>(inputTaxTotal),
     };
   }
 
@@ -10007,7 +10138,12 @@ class Purchase extends DataClass implements Insertable<Purchase> {
           Value<String?> note = const Value.absent(),
           DateTime? createdAt,
           Value<DateTime?> syncedAt = const Value.absent(),
-          Value<DateTime?> updatedAt = const Value.absent()}) =>
+          Value<DateTime?> updatedAt = const Value.absent(),
+          Value<String?> invoiceNo = const Value.absent(),
+          Value<DateTime?> invoiceDate = const Value.absent(),
+          Value<String?> supplierName = const Value.absent(),
+          int? discountTotal,
+          int? inputTaxTotal}) =>
       Purchase(
         id: id ?? this.id,
         localId: localId ?? this.localId,
@@ -10020,6 +10156,12 @@ class Purchase extends DataClass implements Insertable<Purchase> {
         createdAt: createdAt ?? this.createdAt,
         syncedAt: syncedAt.present ? syncedAt.value : this.syncedAt,
         updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
+        invoiceNo: invoiceNo.present ? invoiceNo.value : this.invoiceNo,
+        invoiceDate: invoiceDate.present ? invoiceDate.value : this.invoiceDate,
+        supplierName:
+            supplierName.present ? supplierName.value : this.supplierName,
+        discountTotal: discountTotal ?? this.discountTotal,
+        inputTaxTotal: inputTaxTotal ?? this.inputTaxTotal,
       );
   Purchase copyWithCompanion(PurchasesCompanion data) {
     return Purchase(
@@ -10035,6 +10177,18 @@ class Purchase extends DataClass implements Insertable<Purchase> {
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       syncedAt: data.syncedAt.present ? data.syncedAt.value : this.syncedAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      invoiceNo: data.invoiceNo.present ? data.invoiceNo.value : this.invoiceNo,
+      invoiceDate:
+          data.invoiceDate.present ? data.invoiceDate.value : this.invoiceDate,
+      supplierName: data.supplierName.present
+          ? data.supplierName.value
+          : this.supplierName,
+      discountTotal: data.discountTotal.present
+          ? data.discountTotal.value
+          : this.discountTotal,
+      inputTaxTotal: data.inputTaxTotal.present
+          ? data.inputTaxTotal.value
+          : this.inputTaxTotal,
     );
   }
 
@@ -10051,14 +10205,34 @@ class Purchase extends DataClass implements Insertable<Purchase> {
           ..write('note: $note, ')
           ..write('createdAt: $createdAt, ')
           ..write('syncedAt: $syncedAt, ')
-          ..write('updatedAt: $updatedAt')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('invoiceNo: $invoiceNo, ')
+          ..write('invoiceDate: $invoiceDate, ')
+          ..write('supplierName: $supplierName, ')
+          ..write('discountTotal: $discountTotal, ')
+          ..write('inputTaxTotal: $inputTaxTotal')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, localId, supplierId, kasirId, status,
-      total, paid, note, createdAt, syncedAt, updatedAt);
+  int get hashCode => Object.hash(
+      id,
+      localId,
+      supplierId,
+      kasirId,
+      status,
+      total,
+      paid,
+      note,
+      createdAt,
+      syncedAt,
+      updatedAt,
+      invoiceNo,
+      invoiceDate,
+      supplierName,
+      discountTotal,
+      inputTaxTotal);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -10073,7 +10247,12 @@ class Purchase extends DataClass implements Insertable<Purchase> {
           other.note == this.note &&
           other.createdAt == this.createdAt &&
           other.syncedAt == this.syncedAt &&
-          other.updatedAt == this.updatedAt);
+          other.updatedAt == this.updatedAt &&
+          other.invoiceNo == this.invoiceNo &&
+          other.invoiceDate == this.invoiceDate &&
+          other.supplierName == this.supplierName &&
+          other.discountTotal == this.discountTotal &&
+          other.inputTaxTotal == this.inputTaxTotal);
 }
 
 class PurchasesCompanion extends UpdateCompanion<Purchase> {
@@ -10088,6 +10267,11 @@ class PurchasesCompanion extends UpdateCompanion<Purchase> {
   final Value<DateTime> createdAt;
   final Value<DateTime?> syncedAt;
   final Value<DateTime?> updatedAt;
+  final Value<String?> invoiceNo;
+  final Value<DateTime?> invoiceDate;
+  final Value<String?> supplierName;
+  final Value<int> discountTotal;
+  final Value<int> inputTaxTotal;
   final Value<int> rowid;
   const PurchasesCompanion({
     this.id = const Value.absent(),
@@ -10101,6 +10285,11 @@ class PurchasesCompanion extends UpdateCompanion<Purchase> {
     this.createdAt = const Value.absent(),
     this.syncedAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.invoiceNo = const Value.absent(),
+    this.invoiceDate = const Value.absent(),
+    this.supplierName = const Value.absent(),
+    this.discountTotal = const Value.absent(),
+    this.inputTaxTotal = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   PurchasesCompanion.insert({
@@ -10115,6 +10304,11 @@ class PurchasesCompanion extends UpdateCompanion<Purchase> {
     this.createdAt = const Value.absent(),
     this.syncedAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.invoiceNo = const Value.absent(),
+    this.invoiceDate = const Value.absent(),
+    this.supplierName = const Value.absent(),
+    this.discountTotal = const Value.absent(),
+    this.inputTaxTotal = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : id = Value(id),
         localId = Value(localId),
@@ -10131,6 +10325,11 @@ class PurchasesCompanion extends UpdateCompanion<Purchase> {
     Expression<DateTime>? createdAt,
     Expression<DateTime>? syncedAt,
     Expression<DateTime>? updatedAt,
+    Expression<String>? invoiceNo,
+    Expression<DateTime>? invoiceDate,
+    Expression<String>? supplierName,
+    Expression<int>? discountTotal,
+    Expression<int>? inputTaxTotal,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -10145,6 +10344,11 @@ class PurchasesCompanion extends UpdateCompanion<Purchase> {
       if (createdAt != null) 'created_at': createdAt,
       if (syncedAt != null) 'synced_at': syncedAt,
       if (updatedAt != null) 'updated_at': updatedAt,
+      if (invoiceNo != null) 'invoice_no': invoiceNo,
+      if (invoiceDate != null) 'invoice_date': invoiceDate,
+      if (supplierName != null) 'supplier_name': supplierName,
+      if (discountTotal != null) 'discount_total': discountTotal,
+      if (inputTaxTotal != null) 'input_tax_total': inputTaxTotal,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -10161,6 +10365,11 @@ class PurchasesCompanion extends UpdateCompanion<Purchase> {
       Value<DateTime>? createdAt,
       Value<DateTime?>? syncedAt,
       Value<DateTime?>? updatedAt,
+      Value<String?>? invoiceNo,
+      Value<DateTime?>? invoiceDate,
+      Value<String?>? supplierName,
+      Value<int>? discountTotal,
+      Value<int>? inputTaxTotal,
       Value<int>? rowid}) {
     return PurchasesCompanion(
       id: id ?? this.id,
@@ -10174,6 +10383,11 @@ class PurchasesCompanion extends UpdateCompanion<Purchase> {
       createdAt: createdAt ?? this.createdAt,
       syncedAt: syncedAt ?? this.syncedAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      invoiceNo: invoiceNo ?? this.invoiceNo,
+      invoiceDate: invoiceDate ?? this.invoiceDate,
+      supplierName: supplierName ?? this.supplierName,
+      discountTotal: discountTotal ?? this.discountTotal,
+      inputTaxTotal: inputTaxTotal ?? this.inputTaxTotal,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -10214,6 +10428,21 @@ class PurchasesCompanion extends UpdateCompanion<Purchase> {
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
+    if (invoiceNo.present) {
+      map['invoice_no'] = Variable<String>(invoiceNo.value);
+    }
+    if (invoiceDate.present) {
+      map['invoice_date'] = Variable<DateTime>(invoiceDate.value);
+    }
+    if (supplierName.present) {
+      map['supplier_name'] = Variable<String>(supplierName.value);
+    }
+    if (discountTotal.present) {
+      map['discount_total'] = Variable<int>(discountTotal.value);
+    }
+    if (inputTaxTotal.present) {
+      map['input_tax_total'] = Variable<int>(inputTaxTotal.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -10234,6 +10463,11 @@ class PurchasesCompanion extends UpdateCompanion<Purchase> {
           ..write('createdAt: $createdAt, ')
           ..write('syncedAt: $syncedAt, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('invoiceNo: $invoiceNo, ')
+          ..write('invoiceDate: $invoiceDate, ')
+          ..write('supplierName: $supplierName, ')
+          ..write('discountTotal: $discountTotal, ')
+          ..write('inputTaxTotal: $inputTaxTotal, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -10289,9 +10523,73 @@ class $PurchaseItemsTable extends PurchaseItems
   late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
       'created_at', aliasedName, true,
       type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  static const VerificationMeta _discountMeta =
+      const VerificationMeta('discount');
   @override
-  List<GeneratedColumn> get $columns =>
-      [id, purchaseId, productUnitId, qty, pricePerUnit, subtotal, createdAt];
+  late final GeneratedColumn<int> discount = GeneratedColumn<int>(
+      'discount', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _priceIncludesTaxMeta =
+      const VerificationMeta('priceIncludesTax');
+  @override
+  late final GeneratedColumn<bool> priceIncludesTax = GeneratedColumn<bool>(
+      'price_includes_tax', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("price_includes_tax" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _taxTreatmentMeta =
+      const VerificationMeta('taxTreatment');
+  @override
+  late final GeneratedColumn<String> taxTreatment = GeneratedColumn<String>(
+      'tax_treatment', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _taxRateMeta =
+      const VerificationMeta('taxRate');
+  @override
+  late final GeneratedColumn<double> taxRate = GeneratedColumn<double>(
+      'tax_rate', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _inputTaxMeta =
+      const VerificationMeta('inputTax');
+  @override
+  late final GeneratedColumn<int> inputTax = GeneratedColumn<int>(
+      'input_tax', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _costBeforeMeta =
+      const VerificationMeta('costBefore');
+  @override
+  late final GeneratedColumn<int> costBefore = GeneratedColumn<int>(
+      'cost_before', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _costAfterMeta =
+      const VerificationMeta('costAfter');
+  @override
+  late final GeneratedColumn<int> costAfter = GeneratedColumn<int>(
+      'cost_after', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        purchaseId,
+        productUnitId,
+        qty,
+        pricePerUnit,
+        subtotal,
+        createdAt,
+        discount,
+        priceIncludesTax,
+        taxTreatment,
+        taxRate,
+        inputTax,
+        costBefore,
+        costAfter
+      ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -10347,6 +10645,40 @@ class $PurchaseItemsTable extends PurchaseItems
       context.handle(_createdAtMeta,
           createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
     }
+    if (data.containsKey('discount')) {
+      context.handle(_discountMeta,
+          discount.isAcceptableOrUnknown(data['discount']!, _discountMeta));
+    }
+    if (data.containsKey('price_includes_tax')) {
+      context.handle(
+          _priceIncludesTaxMeta,
+          priceIncludesTax.isAcceptableOrUnknown(
+              data['price_includes_tax']!, _priceIncludesTaxMeta));
+    }
+    if (data.containsKey('tax_treatment')) {
+      context.handle(
+          _taxTreatmentMeta,
+          taxTreatment.isAcceptableOrUnknown(
+              data['tax_treatment']!, _taxTreatmentMeta));
+    }
+    if (data.containsKey('tax_rate')) {
+      context.handle(_taxRateMeta,
+          taxRate.isAcceptableOrUnknown(data['tax_rate']!, _taxRateMeta));
+    }
+    if (data.containsKey('input_tax')) {
+      context.handle(_inputTaxMeta,
+          inputTax.isAcceptableOrUnknown(data['input_tax']!, _inputTaxMeta));
+    }
+    if (data.containsKey('cost_before')) {
+      context.handle(
+          _costBeforeMeta,
+          costBefore.isAcceptableOrUnknown(
+              data['cost_before']!, _costBeforeMeta));
+    }
+    if (data.containsKey('cost_after')) {
+      context.handle(_costAfterMeta,
+          costAfter.isAcceptableOrUnknown(data['cost_after']!, _costAfterMeta));
+    }
     return context;
   }
 
@@ -10370,6 +10702,20 @@ class $PurchaseItemsTable extends PurchaseItems
           .read(DriftSqlType.int, data['${effectivePrefix}subtotal'])!,
       createdAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at']),
+      discount: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}discount'])!,
+      priceIncludesTax: attachedDatabase.typeMapping.read(
+          DriftSqlType.bool, data['${effectivePrefix}price_includes_tax'])!,
+      taxTreatment: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}tax_treatment']),
+      taxRate: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}tax_rate']),
+      inputTax: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}input_tax'])!,
+      costBefore: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}cost_before']),
+      costAfter: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}cost_after']),
     );
   }
 
@@ -10387,6 +10733,24 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
   final int pricePerUnit;
   final int subtotal;
   final DateTime? createdAt;
+
+  /// Potongan rupiah baris (termasuk alokasi potongan faktur).
+  final int discount;
+
+  /// Harga faktur sudah termasuk PPN?
+  final bool priceIncludesTax;
+
+  /// 'modal' | 'pisah' | 'bebas' — lihat `PurchaseTaxTreatment`.
+  final String? taxTreatment;
+  final double? taxRate;
+
+  /// PPN masukan yang dicatat (hanya perlakuan 'pisah').
+  final int inputTax;
+
+  /// HPP per satuan DASAR sebelum & sesudah pembelian ini. [costAfter] null
+  /// = HPP TIDAK diubah oleh baris ini (harga kosong / "Perbarui HPP" mati).
+  final int? costBefore;
+  final int? costAfter;
   const PurchaseItem(
       {required this.id,
       required this.purchaseId,
@@ -10394,7 +10758,14 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
       required this.qty,
       required this.pricePerUnit,
       required this.subtotal,
-      this.createdAt});
+      this.createdAt,
+      required this.discount,
+      required this.priceIncludesTax,
+      this.taxTreatment,
+      this.taxRate,
+      required this.inputTax,
+      this.costBefore,
+      this.costAfter});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -10406,6 +10777,21 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
     map['subtotal'] = Variable<int>(subtotal);
     if (!nullToAbsent || createdAt != null) {
       map['created_at'] = Variable<DateTime>(createdAt);
+    }
+    map['discount'] = Variable<int>(discount);
+    map['price_includes_tax'] = Variable<bool>(priceIncludesTax);
+    if (!nullToAbsent || taxTreatment != null) {
+      map['tax_treatment'] = Variable<String>(taxTreatment);
+    }
+    if (!nullToAbsent || taxRate != null) {
+      map['tax_rate'] = Variable<double>(taxRate);
+    }
+    map['input_tax'] = Variable<int>(inputTax);
+    if (!nullToAbsent || costBefore != null) {
+      map['cost_before'] = Variable<int>(costBefore);
+    }
+    if (!nullToAbsent || costAfter != null) {
+      map['cost_after'] = Variable<int>(costAfter);
     }
     return map;
   }
@@ -10421,6 +10807,21 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
       createdAt: createdAt == null && nullToAbsent
           ? const Value.absent()
           : Value(createdAt),
+      discount: Value(discount),
+      priceIncludesTax: Value(priceIncludesTax),
+      taxTreatment: taxTreatment == null && nullToAbsent
+          ? const Value.absent()
+          : Value(taxTreatment),
+      taxRate: taxRate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(taxRate),
+      inputTax: Value(inputTax),
+      costBefore: costBefore == null && nullToAbsent
+          ? const Value.absent()
+          : Value(costBefore),
+      costAfter: costAfter == null && nullToAbsent
+          ? const Value.absent()
+          : Value(costAfter),
     );
   }
 
@@ -10435,6 +10836,13 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
       pricePerUnit: serializer.fromJson<int>(json['pricePerUnit']),
       subtotal: serializer.fromJson<int>(json['subtotal']),
       createdAt: serializer.fromJson<DateTime?>(json['createdAt']),
+      discount: serializer.fromJson<int>(json['discount']),
+      priceIncludesTax: serializer.fromJson<bool>(json['priceIncludesTax']),
+      taxTreatment: serializer.fromJson<String?>(json['taxTreatment']),
+      taxRate: serializer.fromJson<double?>(json['taxRate']),
+      inputTax: serializer.fromJson<int>(json['inputTax']),
+      costBefore: serializer.fromJson<int?>(json['costBefore']),
+      costAfter: serializer.fromJson<int?>(json['costAfter']),
     );
   }
   @override
@@ -10448,6 +10856,13 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
       'pricePerUnit': serializer.toJson<int>(pricePerUnit),
       'subtotal': serializer.toJson<int>(subtotal),
       'createdAt': serializer.toJson<DateTime?>(createdAt),
+      'discount': serializer.toJson<int>(discount),
+      'priceIncludesTax': serializer.toJson<bool>(priceIncludesTax),
+      'taxTreatment': serializer.toJson<String?>(taxTreatment),
+      'taxRate': serializer.toJson<double?>(taxRate),
+      'inputTax': serializer.toJson<int>(inputTax),
+      'costBefore': serializer.toJson<int?>(costBefore),
+      'costAfter': serializer.toJson<int?>(costAfter),
     };
   }
 
@@ -10458,7 +10873,14 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
           double? qty,
           int? pricePerUnit,
           int? subtotal,
-          Value<DateTime?> createdAt = const Value.absent()}) =>
+          Value<DateTime?> createdAt = const Value.absent(),
+          int? discount,
+          bool? priceIncludesTax,
+          Value<String?> taxTreatment = const Value.absent(),
+          Value<double?> taxRate = const Value.absent(),
+          int? inputTax,
+          Value<int?> costBefore = const Value.absent(),
+          Value<int?> costAfter = const Value.absent()}) =>
       PurchaseItem(
         id: id ?? this.id,
         purchaseId: purchaseId ?? this.purchaseId,
@@ -10467,6 +10889,14 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
         pricePerUnit: pricePerUnit ?? this.pricePerUnit,
         subtotal: subtotal ?? this.subtotal,
         createdAt: createdAt.present ? createdAt.value : this.createdAt,
+        discount: discount ?? this.discount,
+        priceIncludesTax: priceIncludesTax ?? this.priceIncludesTax,
+        taxTreatment:
+            taxTreatment.present ? taxTreatment.value : this.taxTreatment,
+        taxRate: taxRate.present ? taxRate.value : this.taxRate,
+        inputTax: inputTax ?? this.inputTax,
+        costBefore: costBefore.present ? costBefore.value : this.costBefore,
+        costAfter: costAfter.present ? costAfter.value : this.costAfter,
       );
   PurchaseItem copyWithCompanion(PurchaseItemsCompanion data) {
     return PurchaseItem(
@@ -10482,6 +10912,18 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
           : this.pricePerUnit,
       subtotal: data.subtotal.present ? data.subtotal.value : this.subtotal,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      discount: data.discount.present ? data.discount.value : this.discount,
+      priceIncludesTax: data.priceIncludesTax.present
+          ? data.priceIncludesTax.value
+          : this.priceIncludesTax,
+      taxTreatment: data.taxTreatment.present
+          ? data.taxTreatment.value
+          : this.taxTreatment,
+      taxRate: data.taxRate.present ? data.taxRate.value : this.taxRate,
+      inputTax: data.inputTax.present ? data.inputTax.value : this.inputTax,
+      costBefore:
+          data.costBefore.present ? data.costBefore.value : this.costBefore,
+      costAfter: data.costAfter.present ? data.costAfter.value : this.costAfter,
     );
   }
 
@@ -10494,14 +10936,34 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
           ..write('qty: $qty, ')
           ..write('pricePerUnit: $pricePerUnit, ')
           ..write('subtotal: $subtotal, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('discount: $discount, ')
+          ..write('priceIncludesTax: $priceIncludesTax, ')
+          ..write('taxTreatment: $taxTreatment, ')
+          ..write('taxRate: $taxRate, ')
+          ..write('inputTax: $inputTax, ')
+          ..write('costBefore: $costBefore, ')
+          ..write('costAfter: $costAfter')
           ..write(')'))
         .toString();
   }
 
   @override
   int get hashCode => Object.hash(
-      id, purchaseId, productUnitId, qty, pricePerUnit, subtotal, createdAt);
+      id,
+      purchaseId,
+      productUnitId,
+      qty,
+      pricePerUnit,
+      subtotal,
+      createdAt,
+      discount,
+      priceIncludesTax,
+      taxTreatment,
+      taxRate,
+      inputTax,
+      costBefore,
+      costAfter);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -10512,7 +10974,14 @@ class PurchaseItem extends DataClass implements Insertable<PurchaseItem> {
           other.qty == this.qty &&
           other.pricePerUnit == this.pricePerUnit &&
           other.subtotal == this.subtotal &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.discount == this.discount &&
+          other.priceIncludesTax == this.priceIncludesTax &&
+          other.taxTreatment == this.taxTreatment &&
+          other.taxRate == this.taxRate &&
+          other.inputTax == this.inputTax &&
+          other.costBefore == this.costBefore &&
+          other.costAfter == this.costAfter);
 }
 
 class PurchaseItemsCompanion extends UpdateCompanion<PurchaseItem> {
@@ -10523,6 +10992,13 @@ class PurchaseItemsCompanion extends UpdateCompanion<PurchaseItem> {
   final Value<int> pricePerUnit;
   final Value<int> subtotal;
   final Value<DateTime?> createdAt;
+  final Value<int> discount;
+  final Value<bool> priceIncludesTax;
+  final Value<String?> taxTreatment;
+  final Value<double?> taxRate;
+  final Value<int> inputTax;
+  final Value<int?> costBefore;
+  final Value<int?> costAfter;
   final Value<int> rowid;
   const PurchaseItemsCompanion({
     this.id = const Value.absent(),
@@ -10532,6 +11008,13 @@ class PurchaseItemsCompanion extends UpdateCompanion<PurchaseItem> {
     this.pricePerUnit = const Value.absent(),
     this.subtotal = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.discount = const Value.absent(),
+    this.priceIncludesTax = const Value.absent(),
+    this.taxTreatment = const Value.absent(),
+    this.taxRate = const Value.absent(),
+    this.inputTax = const Value.absent(),
+    this.costBefore = const Value.absent(),
+    this.costAfter = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   PurchaseItemsCompanion.insert({
@@ -10542,6 +11025,13 @@ class PurchaseItemsCompanion extends UpdateCompanion<PurchaseItem> {
     required int pricePerUnit,
     required int subtotal,
     this.createdAt = const Value.absent(),
+    this.discount = const Value.absent(),
+    this.priceIncludesTax = const Value.absent(),
+    this.taxTreatment = const Value.absent(),
+    this.taxRate = const Value.absent(),
+    this.inputTax = const Value.absent(),
+    this.costBefore = const Value.absent(),
+    this.costAfter = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : id = Value(id),
         purchaseId = Value(purchaseId),
@@ -10557,6 +11047,13 @@ class PurchaseItemsCompanion extends UpdateCompanion<PurchaseItem> {
     Expression<int>? pricePerUnit,
     Expression<int>? subtotal,
     Expression<DateTime>? createdAt,
+    Expression<int>? discount,
+    Expression<bool>? priceIncludesTax,
+    Expression<String>? taxTreatment,
+    Expression<double>? taxRate,
+    Expression<int>? inputTax,
+    Expression<int>? costBefore,
+    Expression<int>? costAfter,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -10567,6 +11064,13 @@ class PurchaseItemsCompanion extends UpdateCompanion<PurchaseItem> {
       if (pricePerUnit != null) 'price_per_unit': pricePerUnit,
       if (subtotal != null) 'subtotal': subtotal,
       if (createdAt != null) 'created_at': createdAt,
+      if (discount != null) 'discount': discount,
+      if (priceIncludesTax != null) 'price_includes_tax': priceIncludesTax,
+      if (taxTreatment != null) 'tax_treatment': taxTreatment,
+      if (taxRate != null) 'tax_rate': taxRate,
+      if (inputTax != null) 'input_tax': inputTax,
+      if (costBefore != null) 'cost_before': costBefore,
+      if (costAfter != null) 'cost_after': costAfter,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -10579,6 +11083,13 @@ class PurchaseItemsCompanion extends UpdateCompanion<PurchaseItem> {
       Value<int>? pricePerUnit,
       Value<int>? subtotal,
       Value<DateTime?>? createdAt,
+      Value<int>? discount,
+      Value<bool>? priceIncludesTax,
+      Value<String?>? taxTreatment,
+      Value<double?>? taxRate,
+      Value<int>? inputTax,
+      Value<int?>? costBefore,
+      Value<int?>? costAfter,
       Value<int>? rowid}) {
     return PurchaseItemsCompanion(
       id: id ?? this.id,
@@ -10588,6 +11099,13 @@ class PurchaseItemsCompanion extends UpdateCompanion<PurchaseItem> {
       pricePerUnit: pricePerUnit ?? this.pricePerUnit,
       subtotal: subtotal ?? this.subtotal,
       createdAt: createdAt ?? this.createdAt,
+      discount: discount ?? this.discount,
+      priceIncludesTax: priceIncludesTax ?? this.priceIncludesTax,
+      taxTreatment: taxTreatment ?? this.taxTreatment,
+      taxRate: taxRate ?? this.taxRate,
+      inputTax: inputTax ?? this.inputTax,
+      costBefore: costBefore ?? this.costBefore,
+      costAfter: costAfter ?? this.costAfter,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -10616,6 +11134,27 @@ class PurchaseItemsCompanion extends UpdateCompanion<PurchaseItem> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (discount.present) {
+      map['discount'] = Variable<int>(discount.value);
+    }
+    if (priceIncludesTax.present) {
+      map['price_includes_tax'] = Variable<bool>(priceIncludesTax.value);
+    }
+    if (taxTreatment.present) {
+      map['tax_treatment'] = Variable<String>(taxTreatment.value);
+    }
+    if (taxRate.present) {
+      map['tax_rate'] = Variable<double>(taxRate.value);
+    }
+    if (inputTax.present) {
+      map['input_tax'] = Variable<int>(inputTax.value);
+    }
+    if (costBefore.present) {
+      map['cost_before'] = Variable<int>(costBefore.value);
+    }
+    if (costAfter.present) {
+      map['cost_after'] = Variable<int>(costAfter.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -10632,6 +11171,13 @@ class PurchaseItemsCompanion extends UpdateCompanion<PurchaseItem> {
           ..write('pricePerUnit: $pricePerUnit, ')
           ..write('subtotal: $subtotal, ')
           ..write('createdAt: $createdAt, ')
+          ..write('discount: $discount, ')
+          ..write('priceIncludesTax: $priceIncludesTax, ')
+          ..write('taxTreatment: $taxTreatment, ')
+          ..write('taxRate: $taxRate, ')
+          ..write('inputTax: $inputTax, ')
+          ..write('costBefore: $costBefore, ')
+          ..write('costAfter: $costAfter, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -23922,6 +24468,11 @@ typedef $$PurchasesTableCreateCompanionBuilder = PurchasesCompanion Function({
   Value<DateTime> createdAt,
   Value<DateTime?> syncedAt,
   Value<DateTime?> updatedAt,
+  Value<String?> invoiceNo,
+  Value<DateTime?> invoiceDate,
+  Value<String?> supplierName,
+  Value<int> discountTotal,
+  Value<int> inputTaxTotal,
   Value<int> rowid,
 });
 typedef $$PurchasesTableUpdateCompanionBuilder = PurchasesCompanion Function({
@@ -23936,6 +24487,11 @@ typedef $$PurchasesTableUpdateCompanionBuilder = PurchasesCompanion Function({
   Value<DateTime> createdAt,
   Value<DateTime?> syncedAt,
   Value<DateTime?> updatedAt,
+  Value<String?> invoiceNo,
+  Value<DateTime?> invoiceDate,
+  Value<String?> supplierName,
+  Value<int> discountTotal,
+  Value<int> inputTaxTotal,
   Value<int> rowid,
 });
 
@@ -24001,6 +24557,21 @@ class $$PurchasesTableFilterComposer
   ColumnFilters<DateTime> get updatedAt => $composableBuilder(
       column: $table.updatedAt, builder: (column) => ColumnFilters(column));
 
+  ColumnFilters<String> get invoiceNo => $composableBuilder(
+      column: $table.invoiceNo, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get invoiceDate => $composableBuilder(
+      column: $table.invoiceDate, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get supplierName => $composableBuilder(
+      column: $table.supplierName, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get discountTotal => $composableBuilder(
+      column: $table.discountTotal, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get inputTaxTotal => $composableBuilder(
+      column: $table.inputTaxTotal, builder: (column) => ColumnFilters(column));
+
   Expression<bool> purchaseItemsRefs(
       Expression<bool> Function($$PurchaseItemsTableFilterComposer f) f) {
     final $$PurchaseItemsTableFilterComposer composer = $composerBuilder(
@@ -24064,6 +24635,24 @@ class $$PurchasesTableOrderingComposer
 
   ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
       column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get invoiceNo => $composableBuilder(
+      column: $table.invoiceNo, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get invoiceDate => $composableBuilder(
+      column: $table.invoiceDate, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get supplierName => $composableBuilder(
+      column: $table.supplierName,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get discountTotal => $composableBuilder(
+      column: $table.discountTotal,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get inputTaxTotal => $composableBuilder(
+      column: $table.inputTaxTotal,
+      builder: (column) => ColumnOrderings(column));
 }
 
 class $$PurchasesTableAnnotationComposer
@@ -24107,6 +24696,21 @@ class $$PurchasesTableAnnotationComposer
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<String> get invoiceNo =>
+      $composableBuilder(column: $table.invoiceNo, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get invoiceDate => $composableBuilder(
+      column: $table.invoiceDate, builder: (column) => column);
+
+  GeneratedColumn<String> get supplierName => $composableBuilder(
+      column: $table.supplierName, builder: (column) => column);
+
+  GeneratedColumn<int> get discountTotal => $composableBuilder(
+      column: $table.discountTotal, builder: (column) => column);
+
+  GeneratedColumn<int> get inputTaxTotal => $composableBuilder(
+      column: $table.inputTaxTotal, builder: (column) => column);
 
   Expression<T> purchaseItemsRefs<T extends Object>(
       Expression<T> Function($$PurchaseItemsTableAnnotationComposer a) f) {
@@ -24164,6 +24768,11 @@ class $$PurchasesTableTableManager extends RootTableManager<
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime?> syncedAt = const Value.absent(),
             Value<DateTime?> updatedAt = const Value.absent(),
+            Value<String?> invoiceNo = const Value.absent(),
+            Value<DateTime?> invoiceDate = const Value.absent(),
+            Value<String?> supplierName = const Value.absent(),
+            Value<int> discountTotal = const Value.absent(),
+            Value<int> inputTaxTotal = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               PurchasesCompanion(
@@ -24178,6 +24787,11 @@ class $$PurchasesTableTableManager extends RootTableManager<
             createdAt: createdAt,
             syncedAt: syncedAt,
             updatedAt: updatedAt,
+            invoiceNo: invoiceNo,
+            invoiceDate: invoiceDate,
+            supplierName: supplierName,
+            discountTotal: discountTotal,
+            inputTaxTotal: inputTaxTotal,
             rowid: rowid,
           ),
           createCompanionCallback: ({
@@ -24192,6 +24806,11 @@ class $$PurchasesTableTableManager extends RootTableManager<
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime?> syncedAt = const Value.absent(),
             Value<DateTime?> updatedAt = const Value.absent(),
+            Value<String?> invoiceNo = const Value.absent(),
+            Value<DateTime?> invoiceDate = const Value.absent(),
+            Value<String?> supplierName = const Value.absent(),
+            Value<int> discountTotal = const Value.absent(),
+            Value<int> inputTaxTotal = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               PurchasesCompanion.insert(
@@ -24206,6 +24825,11 @@ class $$PurchasesTableTableManager extends RootTableManager<
             createdAt: createdAt,
             syncedAt: syncedAt,
             updatedAt: updatedAt,
+            invoiceNo: invoiceNo,
+            invoiceDate: invoiceDate,
+            supplierName: supplierName,
+            discountTotal: discountTotal,
+            inputTaxTotal: inputTaxTotal,
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
@@ -24263,6 +24887,13 @@ typedef $$PurchaseItemsTableCreateCompanionBuilder = PurchaseItemsCompanion
   required int pricePerUnit,
   required int subtotal,
   Value<DateTime?> createdAt,
+  Value<int> discount,
+  Value<bool> priceIncludesTax,
+  Value<String?> taxTreatment,
+  Value<double?> taxRate,
+  Value<int> inputTax,
+  Value<int?> costBefore,
+  Value<int?> costAfter,
   Value<int> rowid,
 });
 typedef $$PurchaseItemsTableUpdateCompanionBuilder = PurchaseItemsCompanion
@@ -24274,6 +24905,13 @@ typedef $$PurchaseItemsTableUpdateCompanionBuilder = PurchaseItemsCompanion
   Value<int> pricePerUnit,
   Value<int> subtotal,
   Value<DateTime?> createdAt,
+  Value<int> discount,
+  Value<bool> priceIncludesTax,
+  Value<String?> taxTreatment,
+  Value<double?> taxRate,
+  Value<int> inputTax,
+  Value<int?> costBefore,
+  Value<int?> costAfter,
   Value<int> rowid,
 });
 
@@ -24322,6 +24960,28 @@ class $$PurchaseItemsTableFilterComposer
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get discount => $composableBuilder(
+      column: $table.discount, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get priceIncludesTax => $composableBuilder(
+      column: $table.priceIncludesTax,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get taxTreatment => $composableBuilder(
+      column: $table.taxTreatment, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get taxRate => $composableBuilder(
+      column: $table.taxRate, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get inputTax => $composableBuilder(
+      column: $table.inputTax, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get costBefore => $composableBuilder(
+      column: $table.costBefore, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get costAfter => $composableBuilder(
+      column: $table.costAfter, builder: (column) => ColumnFilters(column));
 
   $$PurchasesTableFilterComposer get purchaseId {
     final $$PurchasesTableFilterComposer composer = $composerBuilder(
@@ -24373,6 +25033,29 @@ class $$PurchaseItemsTableOrderingComposer
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<int> get discount => $composableBuilder(
+      column: $table.discount, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get priceIncludesTax => $composableBuilder(
+      column: $table.priceIncludesTax,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get taxTreatment => $composableBuilder(
+      column: $table.taxTreatment,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get taxRate => $composableBuilder(
+      column: $table.taxRate, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get inputTax => $composableBuilder(
+      column: $table.inputTax, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get costBefore => $composableBuilder(
+      column: $table.costBefore, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get costAfter => $composableBuilder(
+      column: $table.costAfter, builder: (column) => ColumnOrderings(column));
+
   $$PurchasesTableOrderingComposer get purchaseId {
     final $$PurchasesTableOrderingComposer composer = $composerBuilder(
         composer: this,
@@ -24420,6 +25103,27 @@ class $$PurchaseItemsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<int> get discount =>
+      $composableBuilder(column: $table.discount, builder: (column) => column);
+
+  GeneratedColumn<bool> get priceIncludesTax => $composableBuilder(
+      column: $table.priceIncludesTax, builder: (column) => column);
+
+  GeneratedColumn<String> get taxTreatment => $composableBuilder(
+      column: $table.taxTreatment, builder: (column) => column);
+
+  GeneratedColumn<double> get taxRate =>
+      $composableBuilder(column: $table.taxRate, builder: (column) => column);
+
+  GeneratedColumn<int> get inputTax =>
+      $composableBuilder(column: $table.inputTax, builder: (column) => column);
+
+  GeneratedColumn<int> get costBefore => $composableBuilder(
+      column: $table.costBefore, builder: (column) => column);
+
+  GeneratedColumn<int> get costAfter =>
+      $composableBuilder(column: $table.costAfter, builder: (column) => column);
 
   $$PurchasesTableAnnotationComposer get purchaseId {
     final $$PurchasesTableAnnotationComposer composer = $composerBuilder(
@@ -24472,6 +25176,13 @@ class $$PurchaseItemsTableTableManager extends RootTableManager<
             Value<int> pricePerUnit = const Value.absent(),
             Value<int> subtotal = const Value.absent(),
             Value<DateTime?> createdAt = const Value.absent(),
+            Value<int> discount = const Value.absent(),
+            Value<bool> priceIncludesTax = const Value.absent(),
+            Value<String?> taxTreatment = const Value.absent(),
+            Value<double?> taxRate = const Value.absent(),
+            Value<int> inputTax = const Value.absent(),
+            Value<int?> costBefore = const Value.absent(),
+            Value<int?> costAfter = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               PurchaseItemsCompanion(
@@ -24482,6 +25193,13 @@ class $$PurchaseItemsTableTableManager extends RootTableManager<
             pricePerUnit: pricePerUnit,
             subtotal: subtotal,
             createdAt: createdAt,
+            discount: discount,
+            priceIncludesTax: priceIncludesTax,
+            taxTreatment: taxTreatment,
+            taxRate: taxRate,
+            inputTax: inputTax,
+            costBefore: costBefore,
+            costAfter: costAfter,
             rowid: rowid,
           ),
           createCompanionCallback: ({
@@ -24492,6 +25210,13 @@ class $$PurchaseItemsTableTableManager extends RootTableManager<
             required int pricePerUnit,
             required int subtotal,
             Value<DateTime?> createdAt = const Value.absent(),
+            Value<int> discount = const Value.absent(),
+            Value<bool> priceIncludesTax = const Value.absent(),
+            Value<String?> taxTreatment = const Value.absent(),
+            Value<double?> taxRate = const Value.absent(),
+            Value<int> inputTax = const Value.absent(),
+            Value<int?> costBefore = const Value.absent(),
+            Value<int?> costAfter = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               PurchaseItemsCompanion.insert(
@@ -24502,6 +25227,13 @@ class $$PurchaseItemsTableTableManager extends RootTableManager<
             pricePerUnit: pricePerUnit,
             subtotal: subtotal,
             createdAt: createdAt,
+            discount: discount,
+            priceIncludesTax: priceIncludesTax,
+            taxTreatment: taxTreatment,
+            taxRate: taxRate,
+            inputTax: inputTax,
+            costBefore: costBefore,
+            costAfter: costAfter,
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0

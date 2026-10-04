@@ -6,11 +6,13 @@ import 'package:go_router/go_router.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../core/widgets/labeled_tool_button.dart';
 import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/providers/product_providers.dart';
 import '../../core/utils/input_formatters.dart';
 import '../../core/utils/internal_barcode.dart';
+import '../../core/utils/margin_calc.dart';
 import '../../core/utils/unit_ratio_calc.dart';
 import '../../core/widgets/inline_banner.dart';
 import '../../core/widgets/price_category_margin_sheet.dart';
@@ -613,22 +615,29 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
       },
       child: Scaffold(
         appBar: AppBar(
+          toolbarHeight: kLabeledToolbarHeight,
           title: Text(_isEdit
               ? (_readOnly ? 'Detail Produk' : 'Edit Produk')
               : 'Tambah Produk'),
           actions: [
-            if (_isEdit)
-              IconButton(
-                icon: const Icon(Icons.qr_code_2_outlined),
-                tooltip: 'Barcode & Cetak Label',
-                onPressed: () => context.push('/produk/$_productId/barcode'),
-              ),
-            if (_isEdit && !_readOnly)
-              IconButton(
-                icon: const Icon(Icons.delete_outline),
-                tooltip: 'Nonaktifkan',
-                onPressed: _confirmDeactivate,
-              ),
+            LabeledToolbarActions(children: [
+              if (_isEdit)
+                LabeledToolButton(
+                  icon: Icons.qr_code_2_outlined,
+                  label: 'Barcode & Cetak Label',
+                  tooltip: 'Barcode & Cetak Label',
+                  labelWidth: 50,
+                  onTap: () => context.push('/produk/$_productId/barcode'),
+                ),
+              if (_isEdit && !_readOnly)
+                LabeledToolButton(
+                  icon: Icons.delete_outline,
+                  label: 'Nonaktifkan',
+                  tooltip: 'Nonaktifkan',
+                  labelWidth: 50,
+                  onTap: _confirmDeactivate,
+                ),
+            ]),
           ],
         ),
         body: _isLoading
@@ -1905,6 +1914,97 @@ class _UnitCard extends ConsumerStatefulWidget {
 class _UnitCardState extends ConsumerState<_UnitCard> {
   late final TextEditingController _priceCtrl;
   late final TextEditingController _costCtrl;
+
+  /// Item 91 — kalkulator "Margin" dua arah (markup dari modal), dibuka
+  /// lewat ikon "%". Murni bantuan input, tidak disimpan.
+  bool _marginOpen = false;
+  bool _marginPercent = true;
+  final _marginCtrl = TextEditingController();
+  final _marginFocus = FocusNode();
+
+  int get _costValue => int.tryParse(_costCtrl.text) ?? 0;
+  int get _priceValue => int.tryParse(_priceCtrl.text) ?? 0;
+
+  /// Tulis ulang kolom Margin dari harga & HPP saat ini — dilewati selama
+  /// user sedang mengetik di kolom Margin (supaya ketikan tidak tertimpa).
+  void _refreshMargin() {
+    if (!_marginOpen || _marginFocus.hasFocus) return;
+    final m = marginFromPrice(
+        costPrice: _costValue,
+        sellPrice: _priceValue,
+        isPercent: _marginPercent);
+    _marginCtrl.text =
+        m == null ? '' : formatMarginInput(m, isPercent: _marginPercent);
+  }
+
+  void _onMarginChanged(String raw) {
+    final m = parseMarginInput(raw);
+    if (m == null) return;
+    final price = priceFromMargin(
+        costPrice: _costValue, margin: m, isPercent: _marginPercent);
+    if (price == null) return;
+    _priceCtrl.text = price.toString();
+    widget.onChanged(widget.entry.copyWith(price: price));
+    setState(() {});
+  }
+
+  /// Margin baris grosir [i] — info yang bisa diubah lewat dialog.
+  Future<void> _editTierMargin(int i) async {
+    final cost = _costValue;
+    final cur = marginFromPrice(
+        costPrice: cost,
+        sellPrice: int.tryParse(_tierPriceCtrl[i].text) ?? 0,
+        isPercent: _marginPercent);
+    final ctrl = TextEditingController(
+        text: cur == null
+            ? ''
+            : formatMarginInput(cur, isPercent: _marginPercent));
+    final result = await showDialog<double>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Margin Harga Grosir'),
+        content: TextField(
+          key: const ValueKey('tier-margin-input'),
+          controller: ctrl,
+          autofocus: true,
+          keyboardType: const TextInputType.numberWithOptions(
+              decimal: true, signed: true),
+          decoration: InputDecoration(
+            labelText: 'Margin (dari modal)',
+            suffixText: _marginPercent ? '%' : null,
+            prefixText: _marginPercent ? null : 'Rp ',
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Batal')),
+          FilledButton(
+            style: FilledButton.styleFrom(minimumSize: const Size(0, 40)),
+            onPressed: () => Navigator.pop(ctx, parseMarginInput(ctrl.text)),
+            child: const Text('Terapkan'),
+          ),
+        ],
+      ),
+    );
+    if (result == null || !mounted) return;
+    final price = priceFromMargin(
+        costPrice: cost, margin: result, isPercent: _marginPercent);
+    if (price == null) return;
+    _tierPriceCtrl[i].text = price.toString();
+    _syncTier(i);
+    setState(() {});
+  }
+
+  /// Teks "Margin …" utk baris harga (dasar/grosir) — null bila HPP kosong.
+  String? _marginLabel(int sellPrice) {
+    final m = marginFromPrice(
+        costPrice: _costValue, sellPrice: sellPrice, isPercent: _marginPercent);
+    if (m == null) return null;
+    return _marginPercent
+        ? 'Margin ${formatMarginInput(m, isPercent: true)}%'
+        : 'Margin Rp ${formatMarginInput(m, isPercent: false)}';
+  }
   late final TextEditingController _ratioCtrl;
   late final TextEditingController _barcodeCtrl;
 
@@ -1976,6 +2076,8 @@ class _UnitCardState extends ConsumerState<_UnitCard> {
   void dispose() {
     _priceCtrl.dispose();
     _costCtrl.dispose();
+    _marginCtrl.dispose();
+    _marginFocus.dispose();
     _ratioCtrl.dispose();
     _barcodeCtrl.dispose();
     for (final c in _tierMinCtrl) {
@@ -2247,6 +2349,7 @@ class _UnitCardState extends ConsumerState<_UnitCard> {
                         : (v) {
                             widget.onChanged(widget.entry
                                 .copyWith(price: int.tryParse(v) ?? 0));
+                            _refreshMargin();
                           },
                   ),
                 ),
@@ -2267,11 +2370,84 @@ class _UnitCardState extends ConsumerState<_UnitCard> {
                         : (v) {
                             widget.onChanged(widget.entry
                                 .copyWith(costPrice: int.tryParse(v) ?? 0));
+                            _refreshMargin();
+                            setState(() {});
                           },
                   ),
                 ),
+                // Item 91 — ikon "%" saja (hemat ruang) membuka kolom Margin.
+                if (!widget.readOnly)
+                  IconButton(
+                    key: const ValueKey('margin-toggle'),
+                    tooltip: 'Margin',
+                    visualDensity: VisualDensity.compact,
+                    color: _marginOpen ? scheme.primary : null,
+                    icon: const Icon(Icons.percent_rounded, size: 20),
+                    onPressed: () {
+                      setState(() => _marginOpen = !_marginOpen);
+                      _refreshMargin();
+                    },
+                  ),
               ],
             ),
+            if (_marginOpen && !widget.readOnly) ...[
+              const SizedBox(height: 8),
+              Builder(builder: (context) {
+                final hasCost = _costValue > 0;
+                final m = parseMarginInput(_marginCtrl.text);
+                final rugi = hasCost && m != null && m < 0;
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        key: const ValueKey('margin-field'),
+                        controller: _marginCtrl,
+                        focusNode: _marginFocus,
+                        enabled: hasCost,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true, signed: true),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(RegExp(r'[0-9,.\-]'))
+                        ],
+                        style: TextStyle(color: rugi ? scheme.error : null),
+                        decoration: InputDecoration(
+                          labelText: 'Margin (dari modal)',
+                          isDense: true,
+                          suffixText: _marginPercent ? '%' : null,
+                          prefixText: _marginPercent ? null : 'Rp ',
+                          helperText: !hasCost
+                              ? 'Isi Harga Pokok dulu'
+                              : (rugi ? 'Rugi — harga jual di bawah modal' : null),
+                          helperStyle: TextStyle(
+                              color: rugi ? scheme.error : null),
+                        ),
+                        onChanged: (v) {
+                          _onMarginChanged(v);
+                          setState(() {});
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    ToggleButtons(
+                      isSelected: [_marginPercent, !_marginPercent],
+                      constraints:
+                          const BoxConstraints(minHeight: 36, minWidth: 40),
+                      borderRadius: BorderRadius.circular(8),
+                      onPressed: (i) {
+                        setState(() => _marginPercent = i == 0);
+                        _marginFocus.unfocus();
+                        _refreshMargin();
+                      },
+                      children: const [
+                        Text('%', key: ValueKey('margin-mode-percent')),
+                        Text('Rp', key: ValueKey('margin-mode-rp')),
+                      ],
+                    ),
+                  ],
+                );
+              }),
+            ],
             const SizedBox(height: 8),
 
             // ── Ratio & barcode row ──────────────────────────────────────────
@@ -2464,7 +2640,12 @@ class _UnitCardState extends ConsumerState<_UnitCard> {
                         inputFormatters: [
                           FilteringTextInputFormatter.digitsOnly
                         ],
-                        onChanged: widget.readOnly ? null : (_) => _syncTier(i),
+                        onChanged: widget.readOnly
+                            ? null
+                            : (_) {
+                                _syncTier(i);
+                                if (_marginOpen) setState(() {});
+                              },
                       ),
                     ),
                     if (!widget.readOnly) ...[
@@ -2479,6 +2660,31 @@ class _UnitCardState extends ConsumerState<_UnitCard> {
                     ],
                   ],
                 ),
+                // Item 91 — margin baris grosir: info, bisa diubah (dialog).
+                if (_marginOpen && !widget.readOnly)
+                  Builder(builder: (context) {
+                    final label = _marginLabel(
+                        int.tryParse(_tierPriceCtrl[i].text) ?? 0);
+                    if (label == null) return const SizedBox.shrink();
+                    return Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton(
+                        key: ValueKey('tier-margin-$i'),
+                        style: TextButton.styleFrom(
+                          minimumSize: const Size(0, 32),
+                          padding: const EdgeInsets.only(left: 84),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        onPressed: () => _editTierMargin(i),
+                        child: Text(label,
+                            style: TextStyle(
+                                fontSize: 11.5,
+                                color: label.contains('-')
+                                    ? scheme.error
+                                    : scheme.onSurfaceVariant)),
+                      ),
+                    );
+                  }),
               ],
             ],
 

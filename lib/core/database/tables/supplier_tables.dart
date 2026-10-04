@@ -45,6 +45,23 @@ class Purchases extends Table {
   // non-konstan ditolak SQLite).
   DateTimeColumn get updatedAt => dateTime().nullable()();
 
+  // ── PLAN Item 90 (schema 47): Input Pembelian dari faktur supplier. ──
+  // Status dipakai: 'received' (diterapkan) & 'void' (dibatalkan — stok
+  // dikembalikan, HPP dipulihkan bila belum berubah lagi).
+
+  /// Nomor faktur supplier (mis. "124256-RPS").
+  TextColumn get invoiceNo => text().nullable()();
+
+  /// Tanggal di faktur (bukan waktu dicatat — itu [createdAt]).
+  DateTimeColumn get invoiceDate => dateTime().nullable()();
+
+  /// Nama supplier apa adanya (snapshot teks; [supplierId] opsional).
+  TextColumn get supplierName => text().nullable()();
+
+  /// Total potongan (baris + faktur) & total PPN masukan yang dicatat.
+  IntColumn get discountTotal => integer().withDefault(const Constant(0))();
+  IntColumn get inputTaxTotal => integer().withDefault(const Constant(0))();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -70,6 +87,29 @@ class PurchaseItems extends Table {
   // dibackfill saat migrasi (v41), baris baru WAJIB diisi eksplisit saat
   // insert (belum ada kode yang membuat baris ini per 2026-09).
   DateTimeColumn get createdAt => dateTime().nullable()();
+
+  // ── PLAN Item 90 (schema 47). Tetap IMMUTABLE (ditulis sekali). ──
+  // [pricePerUnit] = harga faktur per satuan beli apa adanya, [subtotal] =
+  // nilai bersih baris setelah potongan (apa adanya di faktur).
+
+  /// Potongan rupiah baris (termasuk alokasi potongan faktur).
+  IntColumn get discount => integer().withDefault(const Constant(0))();
+
+  /// Harga faktur sudah termasuk PPN?
+  BoolColumn get priceIncludesTax =>
+      boolean().withDefault(const Constant(false))();
+
+  /// 'modal' | 'pisah' | 'bebas' — lihat `PurchaseTaxTreatment`.
+  TextColumn get taxTreatment => text().nullable()();
+  RealColumn get taxRate => real().nullable()();
+
+  /// PPN masukan yang dicatat (hanya perlakuan 'pisah').
+  IntColumn get inputTax => integer().withDefault(const Constant(0))();
+
+  /// HPP per satuan DASAR sebelum & sesudah pembelian ini. [costAfter] null
+  /// = HPP TIDAK diubah oleh baris ini (harga kosong / "Perbarui HPP" mati).
+  IntColumn get costBefore => integer().nullable()();
+  IntColumn get costAfter => integer().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};

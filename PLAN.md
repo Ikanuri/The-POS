@@ -63,95 +63,14 @@ sekarang, TIDAK ada rencana eksekusi._
 
 ---
 
-## Item 90 — Input Pembelian (harga beli + HPP terkontrol), lalu OCR nota cetak (2 Okt 2026) — RANCANGAN, BELUM ADA KEPUTUSAN FINAL
+## Item 94 — Overflow 4px baris stepper Order Restock (Cek Stok) di lebar 360 (3 Okt 2026) — TEMUAN, BELUM DIEKSEKUSI
 
-Konteks diskusi OCR lengkap ada di [docs/HANDOFF.md](docs/HANDOFF.md) (blok
-"Diskusi OCR"). Jawaban user: nota supplier cetak + tulis tangan, ~2 hari
-sekali, HP kelas atas. Keputusan arah: BANGUN INPUT PEMBELIAN MANUAL DULU,
-OCR (ML Kit on-device, HANYA nota cetak) mengisi layar yang sama belakangan;
-tulis tangan tetap diketik manual; cloud OCR hanya bila nanti terbukti perlu.
-Aturan HPP: user belum familiar -> usulan awal **HPP terakhir** + pratinjau
-(rata-rata bergerak bisa jadi opsi nanti; FIFO tidak sepadan).
-
-**Alur layar** (perluas Penerimaan Barang `receive_goods_screen.dart`, bukan
-layar baru): isi baris via scan barcode / cari nama / tempel teks -> per baris
-isi jumlah, satuan, HARGA BELI per satuan itu (boleh kosong = hanya stok) ->
-pratinjau "harga beli Rp X per dus = Rp Y per biji; HPP lama -> baru (+Z%)"
-+ peringatan bila harga jual di bawah HPP baru + centang "Perbarui HPP" per
-baris -> Terapkan (satu transaksi DB: stok naik via `commitReceive`, HPP
-diperbarui).
-
-**Aturan HPP**: HPP baru satuan dasar = harga beli / `ratioToBase` satuan beli;
-HPP satuan lain = HPP dasar x isi satuannya (bulat rupiah); diterapkan ke semua
-tingkat harga (`price_tiers.costPrice`) satuan itu; TIDAK mengubah riwayat
-(`costAtSale` snapshot); produk non-stok: HPP boleh, stok tidak; varian: ke
-varian terpilih, bukan induk; peringatan bila perubahan > 30% (ambang bisa
-diubah); harga beli 0/kosong = HPP tetap.
-
-**Data**: tabel baru `purchase_entries` (schema 47): id, waktu, product_unit_id,
-qty, satuan dipakai, harga beli, HPP lama, HPP baru, pencatat, status
-(diterapkan/menunggu tinjauan). Append-only, ikut sync (HP lama melewati
-tabel tak dikenal). Pembelian bisa DIBATALKAN (stok dikembalikan; HPP kembali
-ke nilai lama kecuali sudah berubah lagi oleh pembelian berikutnya -> hanya
-stok + peringatan).
-
-**Dua temuan penting**: (a) harga jual Kategori Harga berjangkar "modal" dihitung
-ULANG live dari HPP -> mengubah HPP otomatis mengubah harga kategori; pratinjau
-WAJIB menampilkan "Harga Kategori X: Rp a -> Rp b" (usulan: butuh konfirmasi
-tambahan). (b) Izin: hanya owner/asisten berizin yang boleh memperbarui HPP
-langsung; pegawai hanya menambah stok & perubahan HPP-nya jadi USULAN owner
-(pola Laci Meja). Izin `input_pembelian` (kini tersembunyi di
-`kasir_permissions_screen.dart`) ditampilkan lagi.
-
-**Tahap**: 1) tabel + fungsi terap/batal + aturan HPP + tes DB (sedang); 2) layar
-kolom harga beli + pratinjau + peringatan (sedang); 3) izin pegawai + usulan
-owner (sedang); 4) pratinjau dampak Kategori Harga (kecil); 5) laporan
-pembelian dasar (kecil, opsional). Tahap 1-4 sudah cukup dipakai. Tes: murni
-konversi satuan, DB nyata (stok/HPP/batal), migrasi v46->v47, sync dua DB, widget
-lebar 360, revert-verify.
-
-**Keputusan yang masih menunggu user**: (1) HPP terakhir + pratinjau? (2) pegawai:
-tambah stok saja + HPP jadi usulan, atau dilarang pakai fitur? (3) Kategori Harga
-berubah otomatis dgn pratinjau, atau wajib konfirmasi ekstra? (4) HPP satuan lain
-dihitung dari dasar? (5) ambang peringatan 30% ok? User sudah menyebut "beberapa
-penyesuaian" tapi belum merinci — tanyakan lagi sebelum eksekusi.
-
-## Item 91 — Harga jual dari margin (persen/Rp), dua arah (3 Okt 2026) — DISKUSI, MENUNGGU KEPUTUSAN USER
-
-Usulan user: di form produk, input margin (persen ATAU rupiah) menghitung harga
-jual; sebaliknya, mengubah harga jual membuat margin ikut menyesuaikan.
-Tafsir yang dipakai (dari kalimat user): **Arti A = kalkulator dua arah, hanya
-bantuan input** — yang tersimpan tetap harga jual (+ HPP) saja, margin SELALU
-dihitung saat layar dibuka, harga jual TIDAK ikut berubah bila HPP berubah.
-Arti B (margin disimpan sbg sumber kebenaran, harga jual live mengikuti HPP)
-TIDAK disarankan: schema naik (kolom nullable di \`price_tiers\`), bertabrakan
-dgn Input Pembelian (Item 90: tiap HPP baru akan mengubah harga jual diam-diam)
-dan menduplikasi Kategori Harga (yang sudah live dari HPP + margin lewat
-\`alt_prices\`/\`price_category_calc.dart\`).
-
-**Schema**: Arti A = TIDAK naik (tanpa kolom/tabel/migrasi). **Sinkron**: tidak
-ada dampak (margin tidak di DB; harga jual & HPP sudah ikut sync lewat jalur
-yang ada). Arti B: kolom baru ikut mengalir sbg data master host->klien
-(\`price_tiers\` sudah di \`clientMergeableTables\`), HP lama melewati kolom tak
-dikenal.
-
-**Perilaku A**: baris "Untung" di bawah Harga Jual/Harga Pokok (form produk),
-satu kolom angka + pilihan % / Rp. Ketik margin -> harga = HPP + margin
-(persen: HPP x (1 + p/100), dibulatkan rupiah). Ubah harga -> margin dihitung
-ulang (dalam bentuk yg dipilih). Ubah HPP -> margin dihitung ulang, harga tetap.
-Pilihan %/Rp cukup di layar (opsional diingat di preferensi perangkat).
-Fungsi hitung bisa memakai ulang \`price_category_calc.dart\`
-(\`computeCategoryPrice\`/\`computeMarginValue\`) agar konsisten.
-
-**Keputusan yang menunggu user**: (1) persen dari apa — markup dari modal
-(disarankan, sama dgn Kategori Harga; label "Untung % dari modal") atau margin
-dari harga jual; (2) HPP kosong/0 -> kolom untung dimatikan ("isi HPP dulu"),
-mengikuti guard Kategori Harga; (3) berlaku per satuan di tingkat harga dasar,
-tingkat grosir menampilkan margin sbg info yg boleh diedit sama; (4) margin
-negatif tetap boleh dgn peringatan merah "rugi"; (5) letak UI (usulan: tepat di
-bawah baris Harga Jual & Harga Pokok). Tes: fungsi murni (konversi dua arah,
-pembulatan, HPP 0, negatif), widget lebar 360, revert-verify. Besar: kecil,
-versi MINOR.
+Ditemukan saat menguji Item 93: baris `[−] [qty] [+] [satuan ▾]` per produk
+tercentang di `cek_stok_screen.dart` (Row `mainAxisSize.min` berisi
+`_StepGlyph` + qty minWidth 40 + `UnitDropdown`) overflow 4,1px di lebar 360
+(HP sempit). SUDAH ada sebelum Item 93 (dibuktikan dgn stash). Usulan: perkecil
+padding/minWidth qty atau bungkus dropdown satuan dgn `Flexible`; tes widget
+lebar 360. Kecil.
 
 ## Item 84 — Sisa audit Pra-Bayar (23 Sep 2026) — MENUNGGU KEPUTUSAN USER
 
@@ -175,33 +94,6 @@ apakah ada HP yang sempat memakai build 7–9 Sep & mencatat transaksi
 Pra-Bayar dgn kembalian dicentang diambil SEBELUM checkout? Kalau TIDAK →
 tidak perlu apa-apa. Kalau YA → perlu perbaikan data terarah (mis. daftar
 nota kandidat utk dicek manual owner), bukan tebakan otomatis.
-
----
-
-## Item 48 — Kotak warna avatar produk di kasir dibuat soft/pastel (18 Juli, BELUM dieksekusi — user setuju, siap eksekusi)
-
-**Konteks**: BUKAN aksen fungsional bermakna (beda dari kerjaan Item
-"aksen warna Ringkasan/Laporan/Pengaturan" sebelumnya) — ini avatar-
-huruf (inisial nama produk) di kartu/baris produk kasir, warnanya
-dipilih dari hash huruf pertama nama produk (`_gradFor()`,
-`kasir_screen.dart` ~baris 707-715, palet `_kAvatarGradients` — 6 pasang
-gradient 2-warna cukup vivid/saturated), dipakai di `_ProductCard` (mode
-grid, ~baris 2441+2467-2490) & `_ProductListTileState` (mode list,
-~baris 2609+2636-2659) — teks huruf-nya putih di atas gradient.
-
-**Fix (disetujui, siap eksekusi)**: ganti `_kAvatarGradients` (gradient
-vivid) jadi palet solid pastel/soft — ikuti bahasa desain `AppTheme`
-yang sudah ada (pasangan bg-lembut + fg-redup, theme-aware light/dark,
-pola sama spt `scanFg/scanBg`, `antrianFg/antrianBg` dll di
-`app_theme.dart`). Huruf avatar ikut ganti dari putih ke warna gelap
-redup (fg pasangannya) — putih di atas background pastel terang akan
-sulit terbaca. Perlu palet baru dgn variasi cukup (minimal sama seperti
-jumlah gradient lama, 6 warna) supaya beda produk masih cukup
-terbedakan visual — BUKAN cuma reuse 5 pasang fg/bg yang sudah dipakai
-utk kartu Ringkasan/Laporan/Pengaturan (supaya avatar produk tidak
-tertukar makna dgn aksen fungsional itu). Test: widget test verifikasi
-warna avatar BUKAN dari `_kAvatarGradients` lama (atau verifikasi warna
-baru match palet pastel baru) di kedua mode (grid & list).
 
 ---
 

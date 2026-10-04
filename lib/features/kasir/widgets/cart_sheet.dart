@@ -1293,6 +1293,16 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                 ),
               ),
             ),
+            // Nama pelanggan (+ alamat) tepat di bawah judul "Keranjang #n".
+            // Pelanggan tetap (terdaftar, ada customerId) = terracotta;
+            // ad-hoc (nama bebas) = warna teks biasa (hitam). Alamat lebih
+            // tipis & kecil dari nama, nama sedikit lebih kecil dari judul.
+            if (meta.hasCustomer || meta.hasEmployee)
+              _CartCustomerLine(
+                name: meta.hasCustomer ? meta.customerName : null,
+                customerId: meta.customerId,
+                employeeName: meta.hasEmployee ? meta.employeeName : null,
+              ),
             const Divider(height: 1),
             // Fitur "Lunasi Hutang" — REDESAIN KEDUA (permintaan user,
             // gantikan toggle boolean tunggal `_DebtSettlementCartRow` yang
@@ -2679,6 +2689,102 @@ class _QrTransferIcon extends StatelessWidget {
                 size: 12, color: scheme.primary),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Alamat pelanggan tetap (null/kosong utk ad-hoc) — satu query ringan per
+/// pelanggan, otomatis ter-cache selama sheet terbuka.
+final _cartCustomerAddressProvider =
+    FutureProvider.family<String, String>((ref, customerId) async {
+  final db = ref.watch(databaseProvider);
+  final c = await (db.select(db.customers)
+        ..where((t) => t.id.equals(customerId)))
+      .getSingleOrNull();
+  return c?.address?.trim() ?? '';
+});
+
+class _CartCustomerLine extends ConsumerWidget {
+  const _CartCustomerLine({
+    required this.name,
+    required this.customerId,
+    required this.employeeName,
+  });
+
+  final String? name;
+  final String? customerId;
+  final String? employeeName;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    final tetap = customerId != null && customerId!.isNotEmpty;
+    final address = tetap
+        ? (ref.watch(_cartCustomerAddressProvider(customerId!)).valueOrNull ??
+            '')
+        : '';
+    return Padding(
+      key: const ValueKey('cart-customer-line'),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (name != null)
+                  Flexible(
+                    child: Text(
+                      name!,
+                      key: const ValueKey('cart-customer-name'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: tetap ? AppTheme.accent : scheme.onSurface,
+                      ),
+                    ),
+                  ),
+                if (name != null && employeeName != null)
+                  const SizedBox(width: 10),
+                if (employeeName != null) ...[
+                  Icon(Icons.badge_outlined,
+                      size: 14, color: scheme.onSurfaceVariant),
+                  const SizedBox(width: 3),
+                  Flexible(
+                    child: Text(
+                      employeeName!,
+                      key: const ValueKey('cart-employee-name'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: scheme.onSurface,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            if (address.isNotEmpty)
+              Text(
+                address,
+                key: const ValueKey('cart-customer-address'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w400,
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

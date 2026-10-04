@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/widgets/labeled_tool_button.dart';
 import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/theme/app_theme.dart';
@@ -51,15 +52,20 @@ class _StockOpnameScreenState extends ConsumerState<StockOpnameScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        toolbarHeight: kLabeledToolbarHeight,
         title: const Text('Stock Opname'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.history_outlined),
-            tooltip: 'Riwayat Opname',
-            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => const StockOpnameHistoryScreen(),
-            )),
-          ),
+          LabeledToolbarActions(children: [
+            LabeledToolButton(
+              icon: Icons.history_outlined,
+              label: 'Riwayat Opname',
+              tooltip: 'Riwayat Opname',
+              labelWidth: 50,
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => const StockOpnameHistoryScreen(),
+              )),
+            ),
+          ]),
         ],
       ),
       body: Padding(

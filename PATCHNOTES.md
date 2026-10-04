@@ -8,6 +8,74 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 4 Oktober 2026
+
+### ✨ Fitur Baru
+- **Nama pelanggan, pegawai & alamat di keranjang.** Tepat di bawah judul
+  "Keranjang #nomor" kini tampil nama pelanggan (tebal; terracotta untuk
+  pelanggan tetap, hitam untuk pelanggan sekali-beli), nama pegawai yang
+  bertugas di sebelah kanannya (tebal), dan alamat pelanggan tetap dengan
+  huruf lebih tipis di bawahnya.
+- **Pilih satuan langsung di baris Penerimaan Barang.** Di tiap barang yang
+  sudah cocok, muncul deretan pilihan satuan milik produk itu (mis. Pak,
+  ZAK) — ganti dengan satu ketukan. Beli per dus otomatis dihitung ke
+  satuan terkecil (biji) walau berjenjang.
+
+### 🗑️ Dihapus
+- **Fitur "Hasil AI" di Penerimaan Barang dihapus** (salin prompt, CSV
+  produk, tempel balasan AI). Ternyata input manual lebih efisien. Tempel
+  teks, tambah barang manual, harga beli, potongan, PPN, dan persetujuan
+  owner tetap ada.
+
+### 🐛 Perbaikan
+- **Penerimaan Barang tidak lagi "muter terus" saat menyimpan pembelian.**
+  Pembelian dengan harga beli gagal tersimpan dan layar berputar tanpa
+  henti. Sekarang tersimpan normal, dan kalau ada masalah lain, layar
+  menampilkan pesan galatnya (tercatat di Log Error) alih-alih berputar.
+
+## 3 Oktober 2026
+
+### ✨ Fitur Baru
+- **Penerimaan Barang kini sekaligus mencatat harga beli & memperbarui HPP
+  (modal) otomatis.** Isi harga per satuan beli (mis. per ZAK/dus) dan
+  potongan per barang; aplikasi menghitung modal per satuan terkecil sudah
+  termasuk isi per dus, potongan, dan PPN — lalu menampilkan **modal lama →
+  modal baru** sebelum disimpan.
+  - **PPN fleksibel per barang:** "PPN dipisah" (modal tanpa PPN, PPN
+    masukan dicatat — cocok untuk toko PKP), "PPN ke modal", atau "Bebas
+    PPN". Pilihan terakhir tiap barang diingat untuk pembelian berikutnya.
+  - **Info faktur:** nomor, supplier, tanggal, harga sudah termasuk PPN atau
+    belum, potongan faktur. Faktur yang sama tidak bisa tercatat dua kali
+    tanpa peringatan.
+  - **Peringatan** kalau harga jual jadi di bawah modal baru, atau modal
+    berubah lebih dari batas yang Anda atur (awal 30%). Harga Kategori Harga
+    yang ikut berubah juga ditampilkan dulu.
+  - **Pegawai** yang diberi izin "Input Pembelian" bisa mencatat harga beli;
+    perubahan modalnya **menunggu persetujuan owner** (muncul di Penerimaan
+    Barang HP owner). Stoknya tetap langsung masuk.
+  - **Riwayat Pembelian** (tombol baru di Penerimaan Barang): lihat detail
+    tiap faktur dan **batalkan** bila salah catat — stok dikembalikan, modal
+    dikembalikan ke nilai sebelumnya.
+  - **Pengaturan Pembelian** (owner): perlakuan PPN default, tarif PPN, dan
+    batas peringatan perubahan modal.
+- **Margin di pengaturan produk.** Ketuk ikon **%** di samping Harga Jual
+  dan Harga Pokok untuk membuka kolom **Margin** (dihitung dari modal), dalam
+  persen atau rupiah. Isi margin, harga jual terisi sendiri; ubah harga jual
+  atau harga pokok, margin ikut menyesuaikan. Harga grosir juga
+  menampilkan marginnya dan bisa diubah dengan cara yang sama. Kalau harga
+  jual di bawah modal, margin tampil merah dengan tanda "Rugi". Kolom ini
+  baru aktif setelah Harga Pokok diisi.
+- **Tombol di atas layar Produk kini bertulisan nama fungsinya** (Cek Stok,
+  Sinkron Harga, Kelola Kategori, Kategori Harga, Katalog), sama seperti
+  tombol di layar Kasir — tidak perlu lagi menebak dari ikon. Berlaku juga
+  di layar-layar di dalamnya (Cek Stok, Penerimaan Barang, Stock Opname,
+  Kelola Kategori, Edit Produk, dll). Tombol "+" (Tambah Produk) tetap ikon.
+- **Panel "Teks Order Restock" di Cek Stok lebih lega.** Deretan kategori
+  di atas kolom teks kini bisa dilipat (pilihan terakhir diingat), dan kolom
+  teks bisa diperbesar lewat tombol di pojok kanan atasnya — daftar barang
+  di atas tidak lagi tertutup. Tombol Salin dan Kirim ke Supplier selalu
+  terlihat.
+
 ## 2 Oktober 2026
 
 ### ✨ Fitur Baru

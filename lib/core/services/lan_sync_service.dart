@@ -404,7 +404,13 @@ class LanSyncService {
   /// isinya murni bantuan pencocokan (bukan harga/stok/identitas) — salah
   /// entri paling buruk berakibat satu baris penerimaan salah tunjuk, dan
   /// bisa langsung ditimpa dgn memilih ulang.
-  static const sharedTables = {'product_aliases'};
+  static const sharedTables = {
+    'product_aliases',
+    // PLAN Item 90 tahap 3 — pembelian (usulan HPP dari pegawai naik ke
+    // owner; persetujuan/pembatalan turun lagi). LWW by `updated_at`.
+    'purchases',
+    'purchase_items',
+  };
 
   /// Item 41 B.3 — tabel yang boleh di-merge KLIEN dari respons host.
   /// Host sudah lama punya guard [appendOnlyTables]; klien dulu menerima
@@ -447,6 +453,11 @@ class LanSyncService {
     // Setting toko — key-nya sendiri masih disaring `syncableSettingKeys`
     // di `AppDatabase.mergeRows` (identitas device TIDAK ikut).
     'app_settings',
+    // Supplier & Pembelian (PLAN Item 90) — `dumpSince` host SUDAH lama
+    // mengirimnya (masterData), tapi tanpa baris ini klien diam-diam
+    // MEMBUANGNYA (allowlist menolak nama tabel tak dikenal) — kelas bug
+    // sama dgn `price_categories`. Ketahuan lewat test sync pembelian.
+    'suppliers',
   };
 
   /// Kategori yang bisa dipilih owner saat menyetujui sync. Tabel transaksi
@@ -463,6 +474,7 @@ class LanSyncService {
     'Poin Loyalti': ['loyalty_point_ledger'],
     'Pengeluaran': ['expenses'],
     'Kamus Produk': ['product_aliases'],
+    'Pembelian': ['purchases', 'purchase_items'],
     'Pengaturan Toko': ['app_settings', 'payment_methods', 'employees'],
   };
 
