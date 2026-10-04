@@ -11,6 +11,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ## 4 Oktober 2026
 
 ### ✨ Fitur Baru
+- **Nama & alamat pelanggan di keranjang.** Tepat di bawah judul
+  "Keranjang #nomor" kini tampil nama pelanggan (terracotta untuk pelanggan
+  tetap, hitam untuk pelanggan sekali-beli) dan alamatnya (pelanggan tetap)
+  dengan huruf lebih tipis.
 - **Pilih satuan langsung di baris Penerimaan Barang.** Di tiap barang yang
   sudah cocok, muncul deretan pilihan satuan milik produk itu (mis. Pak,
   ZAK) — ganti dengan satu ketukan. Beli per dus otomatis dihitung ke

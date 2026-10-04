@@ -12,6 +12,7 @@ import 'package:the_pos/core/theme/app_theme.dart';
 import 'package:the_pos/features/kasir/cart_meta_provider.dart';
 import 'package:the_pos/features/kasir/cart_provider.dart';
 import 'package:the_pos/features/kasir/widgets/cart_sheet.dart';
+import 'package:the_pos/features/kasir/widgets/cart_preview_paper.dart';
 
 /// Fitur (permintaan user): "kadang pelanggan minta preview serta estimasi
 /// total" — tombol "Bagikan Pratinjau" di header keranjang membuka sheet
@@ -189,7 +190,11 @@ void main() {
     await tester.tap(find.byTooltip('Bagikan Pratinjau'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Bu Siti'), findsOneWidget);
+    // Nama kini juga tampil di header keranjang -> cek di dalam pratinjau.
+    expect(
+        find.descendant(
+            of: find.byType(CartPreviewPaper), matching: find.text('Bu Siti')),
+        findsOneWidget);
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));
