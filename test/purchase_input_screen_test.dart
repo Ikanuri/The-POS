@@ -55,13 +55,6 @@ void main() {
   });
   tearDown(() async => db.close());
 
-  String aiReply({int price = 167621}) => '''```json
-{"versi":1,"faktur":[{"nomor":"124256-RPS","supplier":"Indomarco",
-"harga_termasuk_ppn":true,"baris":[{"nama":"Terigu Payung 5 kg","satuan":"ZAK",
-"isi":4,"qty_besar":5,"qty_kecil":0,"harga_satuan":$price,
-"potongan_persen":0,"potongan_rupiah":0,"product_unit_id":"zak","yakin":true}]}]}
-```''';
-
   Future<int> cost() async => (await (db.select(db.priceTiers)
             ..where((t) => t.productUnitId.equals('pak')))
           .getSingle())
@@ -76,12 +69,23 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  Future<void> pasteAi(WidgetTester tester, String reply) async {
-    await tester.tap(find.text('Hasil AI'));
+  /// Tempel daftar teks lalu isi harga beli satuan (unit isi 4) di baris pertama.
+  Future<void> pasteList(WidgetTester tester, {int price = 167621}) async {
+    await tester.enterText(
+        find.byWidgetPredicate((w) =>
+            w is TextField &&
+            w.decoration?.hintText?.startsWith('5 pcs') == true),
+        '5 pcs Terigu Payung');
+    await tester.tap(find.text('Proses Daftar'));
+    await tester.pumpAndSettle();
+    // Teks "pcs" cocok ke satuan dasar (Kg); pindah ke satuan isi 4 (ZAK).
+    await tester.tap(find.byKey(const ValueKey('unit-chip-Terigu Payung-zak')));
     await tester.pumpAndSettle();
     await tester.enterText(
-        find.byKey(const ValueKey('purchase-ai-input')), reply);
-    await tester.tap(find.byKey(const ValueKey('purchase-ai-process')));
+        find.byWidgetPredicate((w) =>
+            w is TextField &&
+            (w.decoration?.labelText ?? '').startsWith('Harga per')),
+        '$price');
     await tester.pumpAndSettle();
   }
 
@@ -100,16 +104,11 @@ void main() {
   );
 
   testWidgets(
-      'owner: hasil AI -> saran produk wajib dikonfirmasi -> '
-      'pratinjau HPP -> simpan (stok & HPP berubah, faktur tercatat)',
-      (tester) async {
+      'owner: tempel daftar + harga beli -> pratinjau HPP -> simpan '
+      '(stok & HPP berubah, pembelian tercatat)', (tester) async {
     await open(tester);
-    await pasteAi(tester, aiReply());
+    await pasteList(tester);
 
-    expect(find.text('Tambahkan 0 Barang ke Stok'), findsOneWidget,
-        reason: 'saran AI belum dikonfirmasi -> belum boleh disimpan');
-    await tester.tap(find.text('Benar, ini produknya'));
-    await tester.pumpAndSettle();
     expect(
         find.textContaining('${formatRupiah(36000)} → ${formatRupiah(37752)}'),
         findsOneWidget);
@@ -120,11 +119,7 @@ void main() {
     expect(await db.currentStock('pak'), 20);
     expect(await cost(), 37752);
     final head = (await db.select(db.purchases).get()).single;
-    expect(head.invoiceNo, '124256-RPS');
     expect(head.status, 'received');
-    expect(await db.resolveReceiveUnit(name: 'Terigu Payung 5 kg', unit: 'ZAK'),
-        'zak',
-        reason: 'saran AI yang dikonfirmasi dipelajari ke kamus');
     await drain(tester);
   });
 
@@ -132,9 +127,7 @@ void main() {
       'harga jual di bawah HPP baru & perubahan besar -> dialog '
       'peringatan sebelum simpan', (tester) async {
     await open(tester);
-    await pasteAi(tester, aiReply(price: 200000));
-    await tester.tap(find.text('Benar, ini produknya'));
-    await tester.pumpAndSettle();
+    await pasteList(tester, price: 200000);
     expect(find.textContaining('di bawah HPP baru'), findsOneWidget);
     await tester.tap(find.text('Tambahkan 1 Barang ke Stok'));
     await tester.pumpAndSettle();
@@ -152,9 +145,7 @@ void main() {
           ..where((t) => t.permissionKey.equals('input_pembelian')))
         .write(const KasirPermissionsCompanion(isEnabled: Value(true)));
     await open(tester, device: pegawai);
-    await pasteAi(tester, aiReply());
-    await tester.tap(find.text('Benar, ini produknya'));
-    await tester.pumpAndSettle();
+    await pasteList(tester);
     expect(
         find.text('Perubahan HPP menunggu persetujuan owner'), findsOneWidget);
     await tester.tap(find.text('Tambahkan 1 Barang ke Stok'));
@@ -165,7 +156,9 @@ void main() {
 
     await open(tester); // owner
     expect(find.byKey(const ValueKey('purchase-pending-card')), findsOneWidget);
-    await tester.tap(find.textContaining('Faktur 124256-RPS'));
+    await tester.tap(find.descendant(
+        of: find.byKey(const ValueKey('purchase-pending-card')),
+        matching: find.byType(ListTile)));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('purchase-approve')));
     await tester.pumpAndSettle();
@@ -177,7 +170,6 @@ void main() {
   testWidgets('pegawai TANPA izin: tanpa kolom harga (hanya stok)',
       (tester) async {
     await open(tester, device: pegawai);
-    expect(find.text('Hasil AI'), findsNothing);
     await tester.enterText(find.byType(TextField).first, '2 pcs Apa Saja');
     await tester.tap(find.text('Proses Daftar'));
     await tester.pumpAndSettle();
@@ -185,27 +177,16 @@ void main() {
     await drain(tester);
   });
 
-  testWidgets('pemilih satuan di baris + peringatan isi faktur vs aplikasi',
+  testWidgets('pemilih satuan di baris (ganti satuan dgn satu ketukan)',
       (tester) async {
     await open(tester);
-    await pasteAi(tester, aiReply());
-    await tester.tap(find.text('Benar, ini produknya'));
-    await tester.pumpAndSettle();
-    // Dua chip satuan; satuan ZAK ditandai sbg saran AI.
-    expect(find.byKey(const ValueKey('unit-chip-Terigu Payung 5 kg-zak')),
+    await pasteList(tester);
+    // Dua chip satuan; ganti ke satuan dasar dgn satu ketukan.
+    expect(find.byKey(const ValueKey('unit-chip-Terigu Payung-zak')),
         findsOneWidget);
-    expect(find.textContaining('saran AI'), findsOneWidget);
-    expect(
-        find.byKey(const ValueKey('isi-note-Terigu Payung 5 kg')), findsNothing,
-        reason: 'isi faktur 4 = isi ZAK di aplikasi 4 -> tidak ada peringatan');
-
-    // Ganti ke satuan dasar padahal harga faktur per ZAK -> peringatan.
-    await tester
-        .tap(find.byKey(const ValueKey('unit-chip-Terigu Payung 5 kg-pak')));
+    await tester.tap(find.byKey(const ValueKey('unit-chip-Terigu Payung-pak')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('isi-note-Terigu Payung 5 kg')),
-        findsOneWidget);
-    expect(find.textContaining('pilih satuan besarnya'), findsOneWidget);
+    expect(find.textContaining('Harga per'), findsWidgets);
     await drain(tester);
   });
 

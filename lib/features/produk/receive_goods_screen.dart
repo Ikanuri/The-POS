@@ -1,17 +1,12 @@
-import 'dart:io';
-
 import 'package:drift/drift.dart' show Variable;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../../core/widgets/labeled_tool_button.dart';
 import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/services/crash_log_service.dart';
-import '../../core/services/purchase_ai_format.dart';
 import '../../core/services/receive_text_parser.dart';
 import '../../core/utils/purchase_calc.dart';
 import '../../core/theme/app_theme.dart';
@@ -46,10 +41,6 @@ class _Row {
     this.label,
     int unitPrice = 0,
     int discount = 0,
-    this.aiSuggested = false,
-    this.aiUnitId,
-    this.aiIsi,
-    this.problems = const [],
   })  : qtyCtrl = TextEditingController(text: _fmtNum(qty)),
         priceCtrl =
             TextEditingController(text: unitPrice > 0 ? '$unitPrice' : ''),
@@ -73,24 +64,9 @@ class _Row {
   /// dipakai memutuskan apakah pilihannya perlu disimpan ke kamus.
   bool pickedManually = false;
 
-  /// Item 90 tahap 5 — produk hasil SARAN AI (bukan kamus): wajib
-  /// dikonfirmasi pengguna sebelum ikut disimpan (aturan "tidak fuzzy
-  /// otomatis"); setelah dikonfirmasi dipelajari jadi alias.
-  bool aiSuggested;
-  bool confirmed = false;
-
-  /// Saran satuan AI (id) & isi per satuan yang tercetak di faktur — tetap
-  /// DITAMPILKAN walau pengguna memilih satuan lain (aplikasi = acuan,
-  /// saran AI = pembanding).
-  final String? aiUnitId;
-  final double? aiIsi;
-
   /// Semua satuan produk (pemilih satuan cepat di baris).
   List<({String unitId, String unitName, double ratio, bool isBase})> siblings =
       const [];
-
-  /// Masalah validasi dari parser AI (kosong = aman).
-  final List<String> problems;
 
   final TextEditingController qtyCtrl;
   final TextEditingController priceCtrl;
@@ -111,7 +87,7 @@ class _Row {
       double.tryParse(qtyCtrl.text.trim().replaceAll(',', '.')) ?? 0;
   int get unitPrice => int.tryParse(priceCtrl.text.trim()) ?? 0;
   int get discount => int.tryParse(discountCtrl.text.trim()) ?? 0;
-  bool get ready => unitId != null && qty > 0 && (!aiSuggested || confirmed);
+  bool get ready => unitId != null && qty > 0;
 
   void dispose() {
     qtyCtrl.dispose();
@@ -124,24 +100,11 @@ String _fmtNum(double v) => v % 1 == 0 ? v.toInt().toString() : v.toString();
 
 /// Satu faktur (atau satu "sesi" penerimaan teks/manual).
 class _Invoice {
-  _Invoice({
-    String? invoiceNo,
-    String? supplier,
-    this.invoiceDate,
-    this.priceIncludesTax = true,
-    int invoiceDiscount = 0,
-    this.problems = const [],
-  })  : noCtrl = TextEditingController(text: invoiceNo ?? ''),
-        supplierCtrl = TextEditingController(text: supplier ?? ''),
-        discountCtrl = TextEditingController(
-            text: invoiceDiscount > 0 ? '$invoiceDiscount' : '');
-
-  final TextEditingController noCtrl;
-  final TextEditingController supplierCtrl;
-  final TextEditingController discountCtrl;
+  final noCtrl = TextEditingController();
+  final supplierCtrl = TextEditingController();
+  final discountCtrl = TextEditingController();
   DateTime? invoiceDate;
-  bool priceIncludesTax;
-  final List<String> problems;
+  bool priceIncludesTax = true;
   final List<_Row> rows = [];
 
   int get invoiceDiscount => int.tryParse(discountCtrl.text.trim()) ?? 0;
@@ -176,13 +139,10 @@ final _pendingPurchasesProvider = StreamProvider<List<Purchase>>((ref) => ref
 
 class _ReceiveGoodsScreenState extends ConsumerState<ReceiveGoodsScreen> {
   final _textCtrl = TextEditingController();
-  final _aiCtrl = TextEditingController();
 
   /// 0 = tempel teks, 1 = hasil AI (Item 90 tahap 5).
-  int _source = 0;
   List<_Invoice>? _invoices;
   List<String> _unparsed = const [];
-  String? _aiError;
   bool _busy = false;
 
   /// Item 90 — boleh mengisi harga beli? Owner selalu; HP lain butuh izin
@@ -217,7 +177,6 @@ class _ReceiveGoodsScreenState extends ConsumerState<ReceiveGoodsScreen> {
   @override
   void dispose() {
     _textCtrl.dispose();
-    _aiCtrl.dispose();
     for (final inv in _invoices ?? const <_Invoice>[]) {
       inv.dispose();
     }
@@ -318,97 +277,8 @@ class _ReceiveGoodsScreenState extends ConsumerState<ReceiveGoodsScreen> {
     setState(() {
       _replaceInvoices([inv]);
       _unparsed = parsed.unparsed;
-      _aiError = null;
       _busy = false;
     });
-  }
-
-  /// Item 90 tahap 5 — proses balasan AI yang ditempel.
-  Future<void> _processAi() => _guarded('proses hasil AI', _processAiImpl);
-
-  Future<void> _processAiImpl() async {
-    final text = _aiCtrl.text;
-    if (text.trim().isEmpty) return;
-    setState(() => _busy = true);
-    final db = ref.read(databaseProvider);
-    final known =
-        (await db.getPurchaseAiCsvRows()).map((r) => r.productUnitId).toSet();
-    final res = parsePurchaseAiResponse(text,
-        knownUnitIds: known, taxRate: _settings.taxRate);
-    if (!res.ok) {
-      if (mounted) {
-        setState(() {
-          _aiError = res.error;
-          _busy = false;
-        });
-      }
-      return;
-    }
-    final invoices = <_Invoice>[];
-    for (final ai in res.invoices) {
-      final inv = _Invoice(
-        invoiceNo: ai.invoiceNo,
-        supplier: ai.supplier,
-        invoiceDate: ai.invoiceDate,
-        priceIncludesTax: ai.priceIncludesTax,
-        invoiceDiscount: ai.invoiceDiscount,
-        problems: ai.problems,
-      );
-      for (final l in ai.lines) {
-        // Kamus (pencocokan PERSIS yang pernah dikonfirmasi) menang atas
-        // saran AI — saran AI hanya dipakai bila kamus tidak tahu.
-        final fromAlias =
-            await db.resolveReceiveUnit(name: l.name, unit: l.unit);
-        final unitId = fromAlias ?? l.productUnitId;
-        final r = _Row(
-          sourceName: l.name,
-          sourceUnit: l.unit,
-          raw: '${_fmtNum(l.qty)} ${l.unit} ${l.name}',
-          qty: l.qty,
-          unitId: unitId,
-          label: unitId == null ? null : await _labelFor(unitId),
-          unitPrice: l.unitPrice,
-          discount: l.discount,
-          aiSuggested: fromAlias == null && l.productUnitId != null,
-          aiUnitId: l.productUnitId,
-          aiIsi: l.isi,
-          problems: [
-            ...l.problems,
-            if (!l.confident) 'AI kurang yakin membaca baris ini — cek ulang',
-          ],
-        );
-        await _attachInfo(r);
-        inv.rows.add(r);
-      }
-      invoices.add(inv);
-    }
-    if (!mounted) return;
-    setState(() {
-      _replaceInvoices(invoices);
-      _unparsed = const [];
-      _aiError = null;
-      _busy = false;
-    });
-  }
-
-  Future<void> _copyPrompt() async {
-    await Clipboard.setData(
-        ClipboardData(text: buildPurchaseAiPrompt(taxRate: _settings.taxRate)));
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Prompt disalin — tempel ke AI bersama foto faktur '
-            '& file CSV produk')));
-  }
-
-  Future<void> _shareCsv() async {
-    final db = ref.read(databaseProvider);
-    final csv = buildPurchaseAiCsv(await db.getPurchaseAiCsvRows());
-    final dir = await getTemporaryDirectory();
-    final file = File(
-        '${dir.path}/produk_ai_${DateTime.now().millisecondsSinceEpoch}.csv');
-    await file.writeAsString(csv);
-    await Share.shareXFiles([XFile(file.path, mimeType: 'text/csv')],
-        text: 'Daftar produk untuk pencocokan faktur');
   }
 
   Future<void> _pickProduct(_Row row) async {
@@ -430,7 +300,6 @@ class _ReceiveGoodsScreenState extends ConsumerState<ReceiveGoodsScreen> {
       ..unitId = picked
       ..label = label
       ..pickedManually = true
-      ..aiSuggested = false
       ..treatment = null;
     await _attachInfo(row);
     if (mounted) setState(() {});
@@ -443,31 +312,9 @@ class _ReceiveGoodsScreenState extends ConsumerState<ReceiveGoodsScreen> {
     r
       ..unitId = unitId
       ..label = await _labelFor(unitId)
-      ..pickedManually = true
-      ..aiSuggested = false;
+      ..pickedManually = true;
     await _attachInfo(r);
     if (mounted) setState(() {});
-  }
-
-  /// Peringatan isi per satuan: bandingkan isi di faktur (dibaca AI) dgn isi
-  /// satuan terpilih di aplikasi. Aplikasi = acuan; ini hanya pengingat —
-  /// terutama menangkap salah pilih satuan dasar padahal harga di faktur
-  /// per satuan besar (HPP bisa meleset berkali lipat).
-  String? _isiNote(_Row r) {
-    final isi = r.aiIsi;
-    final info = r.info;
-    if (isi == null || info == null) return null;
-    final isBase = info.baseUnitId == r.unitId;
-    if (isBase && isi > 1) {
-      return 'Faktur menulis isi ${_fmtNum(isi)} per ${r.sourceUnit.isEmpty ? 'satuan besar' : r.sourceUnit}, '
-          'tapi yang dipilih satuan dasar (${info.unitName}). Harga di faktur '
-          'umumnya per satuan besar — pilih satuan besarnya.';
-    }
-    if (!isBase && (info.ratio - isi).abs() > 0.0001) {
-      return 'Isi di faktur ${_fmtNum(isi)}, isi ${info.unitName} di aplikasi '
-          '${_fmtNum(info.ratio)} ${info.baseUnitName} — pastikan sudah benar.';
-    }
-    return null;
   }
 
   /// Tambah barang manual (cari nama/barcode) ke faktur pertama.
@@ -601,10 +448,10 @@ class _ReceiveGoodsScreenState extends ConsumerState<ReceiveGoodsScreen> {
 
     setState(() => _busy = true);
 
-    // Simpan pilihan manual / saran AI yang dikonfirmasi ke kamus DULU —
+    // Simpan pilihan manual ke kamus DULU —
     // supaya kalau commit stok gagal di tengah, pembelajaran teksnya tetap
     // tidak hilang (user tidak perlu memilih ulang barang yang sama).
-    for (final r in ready.where((r) => r.pickedManually || r.confirmed)) {
+    for (final r in ready.where((r) => r.pickedManually)) {
       await db.learnReceiveAlias(
         name: r.sourceName,
         unit: r.sourceUnit,
@@ -820,18 +667,7 @@ class _ReceiveGoodsScreenState extends ConsumerState<ReceiveGoodsScreen> {
                   ),
                   const SizedBox(height: 12),
                 ],
-                if (_canPrice)
-                  SegmentedButton<int>(
-                    segments: const [
-                      ButtonSegment(value: 0, label: Text('Tempel teks')),
-                      ButtonSegment(value: 1, label: Text('Hasil AI')),
-                    ],
-                    selected: {_source},
-                    onSelectionChanged: (s) =>
-                        setState(() => _source = s.first),
-                  ),
-                if (_canPrice) const SizedBox(height: 12),
-                if (_source == 0) ...[
+                ...[
                   Text(
                     'Tempel daftar barang yang datang. Satu baris = '
                     '"jumlah satuan nama", misalnya "5 pcs Indomie Goreng". '
@@ -859,8 +695,7 @@ class _ReceiveGoodsScreenState extends ConsumerState<ReceiveGoodsScreen> {
                       label: const Text('Proses Daftar'),
                     ),
                   ),
-                ] else
-                  ..._aiSection(scheme),
+                ],
                 const SizedBox(height: 8),
                 SizedBox(
                   width: double.infinity,
@@ -921,64 +756,6 @@ class _ReceiveGoodsScreenState extends ConsumerState<ReceiveGoodsScreen> {
     );
   }
 
-  List<Widget> _aiSection(ColorScheme scheme) => [
-        Text(
-          '1) Salin prompt & bagikan file CSV produk ke AI (Claude/Meta AI), '
-          'lampirkan foto faktur. 2) Salin SELURUH balasan AI, tempel di '
-          'bawah. Aplikasi yang menghitung HPP — hasil tetap dicek dulu.',
-          style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                key: const ValueKey('purchase-ai-copy-prompt'),
-                style: OutlinedButton.styleFrom(minimumSize: const Size(0, 40)),
-                onPressed: _copyPrompt,
-                icon: const Icon(Icons.copy, size: 16),
-                label: const Text('Salin prompt'),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: OutlinedButton.icon(
-                key: const ValueKey('purchase-ai-share-csv'),
-                style: OutlinedButton.styleFrom(minimumSize: const Size(0, 40)),
-                onPressed: _shareCsv,
-                icon: const Icon(Icons.table_view_outlined, size: 16),
-                label: const Text('CSV produk'),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        TextField(
-          key: const ValueKey('purchase-ai-input'),
-          controller: _aiCtrl,
-          maxLines: 6,
-          decoration: const InputDecoration(
-            border: OutlineInputBorder(),
-            hintText: 'Tempel balasan AI di sini',
-            isDense: true,
-          ),
-        ),
-        if (_aiError != null) ...[
-          const SizedBox(height: 6),
-          Text(_aiError!, style: TextStyle(fontSize: 12, color: scheme.error)),
-        ],
-        const SizedBox(height: 8),
-        SizedBox(
-          width: double.infinity,
-          child: FilledButton.icon(
-            key: const ValueKey('purchase-ai-process'),
-            onPressed: _processAi,
-            icon: const Icon(Icons.auto_awesome_outlined),
-            label: const Text('Proses hasil AI'),
-          ),
-        ),
-      ];
-
   Widget _invoiceHeader(_Invoice inv, ColorScheme scheme) {
     final title = [
       if (inv.noCtrl.text.trim().isNotEmpty) 'Faktur ${inv.noCtrl.text.trim()}',
@@ -991,10 +768,6 @@ class _ReceiveGoodsScreenState extends ConsumerState<ReceiveGoodsScreen> {
         childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
         title: Text(title.isEmpty ? 'Info faktur (opsional)' : title,
             style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-        subtitle: inv.problems.isEmpty
-            ? null
-            : Text(inv.problems.join('\n'),
-                style: TextStyle(fontSize: 11, color: scheme.error)),
         children: [
           TextField(
             controller: inv.noCtrl,
@@ -1064,7 +837,6 @@ class _ReceiveGoodsScreenState extends ConsumerState<ReceiveGoodsScreen> {
 
   Widget _rowTile(_Row r, ColorScheme scheme) {
     final matched = r.unitId != null;
-    final needsConfirm = r.aiSuggested && !r.confirmed;
     final info = r.info;
     final unitName =
         info?.unitName ?? (r.sourceUnit.isEmpty ? 'satuan' : r.sourceUnit);
@@ -1086,16 +858,8 @@ class _ReceiveGoodsScreenState extends ConsumerState<ReceiveGoodsScreen> {
               dense: true,
               contentPadding: const EdgeInsets.only(left: 8),
               leading: Icon(
-                !matched
-                    ? Icons.help_outline
-                    : needsConfirm
-                        ? Icons.auto_awesome_outlined
-                        : Icons.check_circle_outline,
-                color: !matched
-                    ? scheme.error
-                    : needsConfirm
-                        ? Colors.amber.shade800
-                        : scheme.tertiary,
+                !matched ? Icons.help_outline : Icons.check_circle_outline,
+                color: !matched ? scheme.error : scheme.tertiary,
                 size: 20,
               ),
               title: Text(
@@ -1105,16 +869,10 @@ class _ReceiveGoodsScreenState extends ConsumerState<ReceiveGoodsScreen> {
               subtitle: Text(
                 !matched
                     ? 'Tidak ketemu — pilih produknya'
-                    : needsConfirm
-                        ? 'Saran AI dari "${r.sourceName}" — konfirmasi atau ganti'
-                        : 'Dari teks: "${r.raw}"',
+                    : 'Dari teks: "${r.raw}"',
                 style: TextStyle(
                     fontSize: 11,
-                    color: !matched
-                        ? scheme.error
-                        : needsConfirm
-                            ? Colors.amber.shade800
-                            : scheme.onSurfaceVariant),
+                    color: !matched ? scheme.error : scheme.onSurfaceVariant),
               ),
               trailing: _canPrice
                   ? null
@@ -1125,17 +883,6 @@ class _ReceiveGoodsScreenState extends ConsumerState<ReceiveGoodsScreen> {
                     ),
               onTap: () => _pickProduct(r),
             ),
-            if (needsConfirm)
-              Padding(
-                padding: const EdgeInsets.only(left: 8),
-                child: TextButton.icon(
-                  key: ValueKey('purchase-ai-confirm-${r.sourceName}'),
-                  style: TextButton.styleFrom(minimumSize: const Size(0, 36)),
-                  onPressed: () => setState(() => r.confirmed = true),
-                  icon: const Icon(Icons.check, size: 16),
-                  label: const Text('Benar, ini produknya'),
-                ),
-              ),
             if (matched && r.siblings.length > 1)
               Padding(
                 padding: const EdgeInsets.only(left: 8, top: 2),
@@ -1151,8 +898,7 @@ class _ReceiveGoodsScreenState extends ConsumerState<ReceiveGoodsScreen> {
                         key: ValueKey('unit-chip-${r.sourceName}-${u.unitId}'),
                         visualDensity: VisualDensity.compact,
                         label: Text(
-                          '${u.unitName}${u.isBase ? '' : ' (isi ${_fmtNum(u.ratio)})'}'
-                          '${u.unitId == r.aiUnitId ? ' · saran AI' : ''}',
+                          '${u.unitName}${u.isBase ? '' : ' (isi ${_fmtNum(u.ratio)})'}',
                           style: const TextStyle(fontSize: 11),
                         ),
                         selected: u.unitId == r.unitId,
@@ -1160,19 +906,6 @@ class _ReceiveGoodsScreenState extends ConsumerState<ReceiveGoodsScreen> {
                       ),
                   ],
                 ),
-              ),
-            if (_isiNote(r) case final note?)
-              Padding(
-                key: ValueKey('isi-note-${r.sourceName}'),
-                padding: const EdgeInsets.only(left: 12, bottom: 2),
-                child: Text('⚠ $note',
-                    style: TextStyle(fontSize: 11, color: scheme.error)),
-              ),
-            for (final p in r.problems)
-              Padding(
-                padding: const EdgeInsets.only(left: 12, bottom: 2),
-                child: Text('⚠ $p',
-                    style: TextStyle(fontSize: 11, color: scheme.error)),
               ),
             if (_canPrice) ...[
               Padding(

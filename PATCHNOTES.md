@@ -13,11 +13,14 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 ### ✨ Fitur Baru
 - **Pilih satuan langsung di baris Penerimaan Barang.** Di tiap barang yang
   sudah cocok, muncul deretan pilihan satuan milik produk itu (mis. Pak,
-  ZAK) — ganti dengan satu ketukan. Satuan yang disarankan AI diberi tanda
-  "saran AI", dan aplikasi memperingatkan kalau isi per satuan di faktur
-  berbeda dengan isi di aplikasi, atau kalau yang terpilih satuan terkecil
-  padahal harga di faktur per satuan besar. Beli per dus otomatis dihitung
-  ke satuan terkecil (biji) walau berjenjang.
+  ZAK) — ganti dengan satu ketukan. Beli per dus otomatis dihitung ke
+  satuan terkecil (biji) walau berjenjang.
+
+### 🗑️ Dihapus
+- **Fitur "Hasil AI" di Penerimaan Barang dihapus** (salin prompt, CSV
+  produk, tempel balasan AI). Ternyata input manual lebih efisien. Tempel
+  teks, tambah barang manual, harga beli, potongan, PPN, dan persetujuan
+  owner tetap ada.
 
 ### 🐛 Perbaikan
 - **Penerimaan Barang tidak lagi "muter terus" saat menyimpan pembelian.**
@@ -42,11 +45,6 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   - **Peringatan** kalau harga jual jadi di bawah modal baru, atau modal
     berubah lebih dari batas yang Anda atur (awal 30%). Harga Kategori Harga
     yang ikut berubah juga ditampilkan dulu.
-  - **Tempel hasil AI:** salin prompt & bagikan file CSV produk ke AI
-    (Claude/Meta AI) bersama foto faktur, lalu tempel balasannya — barang,
-    jumlah, harga, dan potongan terisi sendiri, termasuk beberapa faktur
-    sekaligus. Angka dicek ulang oleh aplikasi (selisih dengan total faktur
-    ditandai), dan produk yang ditebak AI harus Anda konfirmasi dulu.
   - **Pegawai** yang diberi izin "Input Pembelian" bisa mencatat harga beli;
     perubahan modalnya **menunggu persetujuan owner** (muncul di Penerimaan
     Barang HP owner). Stoknya tetap langsung masuk.

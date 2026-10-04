@@ -14,7 +14,7 @@ import 'package:path_provider/path_provider.dart';
 class TempShareCleanup {
   TempShareCleanup._();
 
-  static const _prefixes = ['struk_', 'katalog_', 'backup_', 'produk_ai_'];
+  static const _prefixes = ['struk_', 'katalog_', 'backup_'];
   static const _maxAge = Duration(hours: 24);
 
   static Future<void> run() async {

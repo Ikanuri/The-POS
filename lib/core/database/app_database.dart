@@ -2099,16 +2099,13 @@ class AppDatabase extends _$AppDatabase {
   /// Pengaturan pembelian toko: perlakuan PPN default (awal 'pisah' — toko
   /// PKP, keputusan owner), tarif PPN (11), ambang peringatan perubahan HPP
   /// (30%). Diubah owner, ikut sync antar-HP.
-  Future<
-      ({
-        PurchaseTaxTreatment treatment,
-        double taxRate,
-        double warnPct
-      })> getPurchaseSettings() async {
+  Future<({PurchaseTaxTreatment treatment, double taxRate, double warnPct})>
+      getPurchaseSettings() async {
     final t = PurchaseTaxTreatment.fromCode(
             await getSetting(kPurchaseTaxTreatmentKey)) ??
         PurchaseTaxTreatment.pisah;
-    final r = double.tryParse(await getSetting(kPurchaseTaxRateKey) ?? '') ?? 11;
+    final r =
+        double.tryParse(await getSetting(kPurchaseTaxRateKey) ?? '') ?? 11;
     final w =
         double.tryParse(await getSetting(kPurchaseCostWarnPctKey) ?? '') ?? 30;
     return (treatment: t, taxRate: r, warnPct: w);
@@ -2254,8 +2251,8 @@ class AppDatabase extends _$AppDatabase {
         discountTotal += l.discount + alloc[i];
         taxTotal += r.inputTax;
       }
-      await (update(purchases)..where((t) => t.id.equals(id))).write(
-          PurchasesCompanion(
+      await (update(purchases)..where((t) => t.id.equals(id)))
+          .write(PurchasesCompanion(
         status: Value(proposed ? 'pending' : 'received'),
         total: Value(total),
         discountTotal: Value(discountTotal),
@@ -2294,7 +2291,8 @@ class AppDatabase extends _$AppDatabase {
             type: 'purchase',
             referenceId: purchaseId,
             kasirId: kasirId,
-            note: 'Batal pembelian${head.invoiceNo == null ? '' : ' ${head.invoiceNo}'}',
+            note:
+                'Batal pembelian${head.invoiceNo == null ? '' : ' ${head.invoiceNo}'}',
             now: now,
           );
         }
@@ -2310,7 +2308,8 @@ class AppDatabase extends _$AppDatabase {
         }
       }
       await (update(purchases)..where((t) => t.id.equals(purchaseId))).write(
-          PurchasesCompanion(status: const Value('void'), updatedAt: Value(now)));
+          PurchasesCompanion(
+              status: const Value('void'), updatedAt: Value(now)));
     });
     return notRestored;
   }
@@ -2427,9 +2426,9 @@ class AppDatabase extends _$AppDatabase {
         <({String unitId, String unitName, double ratio, bool isBase})>[];
     for (final u in units) {
       final name = (await (select(unitTypes)
-                ..where((t) => t.id.equals(u.unitTypeId ?? 1)))
-              .getSingleOrNull())
-          ?.name ??
+                    ..where((t) => t.id.equals(u.unitTypeId ?? 1)))
+                  .getSingleOrNull())
+              ?.name ??
           'satuan';
       out.add((
         unitId: u.id,
@@ -2476,9 +2475,9 @@ class AppDatabase extends _$AppDatabase {
       final ratio = u.id == baseUnitId || u.isBaseUnit ? 1.0 : u.ratioToBase;
       final newCost = (newBaseCost * ratio).round();
       final unitName = (await (select(unitTypes)
-                ..where((t) => t.id.equals(u.unitTypeId ?? 1)))
-              .getSingleOrNull())
-          ?.name ??
+                    ..where((t) => t.id.equals(u.unitTypeId ?? 1)))
+                  .getSingleOrNull())
+              ?.name ??
           'satuan';
       for (final r in rows) {
         int price(int cost) {
@@ -2495,7 +2494,8 @@ class AppDatabase extends _$AppDatabase {
         final o = price(oldCost);
         final n = price(newCost);
         if (o != n) {
-          out.add((label: r.label, unitName: unitName, oldPrice: o, newPrice: n));
+          out.add(
+              (label: r.label, unitName: unitName, oldPrice: o, newPrice: n));
         }
       }
     }
@@ -2503,11 +2503,10 @@ class AppDatabase extends _$AppDatabase {
   }
 
   /// Tahap 6 — daftar pembelian terbaru dulu (riwayat).
-  Stream<List<Purchase>> watchPurchases({int limit = 200}) =>
-      (select(purchases)
-            ..orderBy([(t) => OrderingTerm.desc(t.createdAt)])
-            ..limit(limit))
-          .watch();
+  Stream<List<Purchase>> watchPurchases({int limit = 200}) => (select(purchases)
+        ..orderBy([(t) => OrderingTerm.desc(t.createdAt)])
+        ..limit(limit))
+      .watch();
 
   /// Baris pembelian + label produk/satuan (satu JOIN, bukan N+1).
   Future<List<({PurchaseItem item, String productName, String unitName})>>
@@ -2538,46 +2537,6 @@ class AppDatabase extends _$AppDatabase {
           item: it,
           productName: labels[it.id]?.$1 ?? '-',
           unitName: labels[it.id]?.$2 ?? '',
-        ),
-    ];
-  }
-
-  /// Tahap 5 — baris CSV produk minimal utk dilampirkan ke AI (semua satuan
-  /// produk aktif; TANPA harga jual/HPP). Satu query JOIN.
-  Future<
-      List<
-          ({
-            String productUnitId,
-            String productName,
-            String unitName,
-            double ratioToBase,
-            String baseUnitName,
-          })>> getPurchaseAiCsvRows() async {
-    final rows = await customSelect(
-      'SELECT pu.id AS uid, p.name AS pname, ut.name AS uname, '
-      '  pu.is_base_unit AS isbase, pu.ratio_to_base AS ratio, '
-      '  (SELECT ut2.name FROM product_units b '
-      '     LEFT JOIN unit_types ut2 ON ut2.id = b.unit_type_id '
-      '     WHERE b.product_id = pu.product_id AND b.is_base_unit = 1 '
-      '     LIMIT 1) AS bname '
-      'FROM product_units pu '
-      'JOIN products p ON p.id = pu.product_id '
-      'LEFT JOIN unit_types ut ON ut.id = pu.unit_type_id '
-      'WHERE p.is_active = 1 '
-      'ORDER BY p.name, pu.ratio_to_base',
-      readsFrom: {productUnits, products, unitTypes},
-    ).get();
-    return [
-      for (final r in rows)
-        (
-          productUnitId: r.data['uid'] as String,
-          productName: r.data['pname'] as String? ?? '',
-          unitName: r.data['uname'] as String? ?? '',
-          ratioToBase: (r.data['isbase'] as int? ?? 0) == 1
-              ? 1.0
-              : ((r.data['ratio'] as num?)?.toDouble() ?? 1.0),
-          baseUnitName: r.data['bname'] as String? ??
-              (r.data['uname'] as String? ?? ''),
         ),
     ];
   }

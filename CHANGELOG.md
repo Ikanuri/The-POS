@@ -7,6 +7,10 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-10-04 (sesi kedelapan puluh tiga — hapus jalur AI)
+
+- (hash menyusul) — refactor(pembelian): hapus jalur "Hasil AI" di Penerimaan Barang (parser, prompt, CSV produk, konfirmasi saran, catatan isi); kamus alias & Tempel teks tetap; bump 2.76.0+170
+
 ## 2026-10-03 (sesi kedelapan puluh tiga lanjutan — Item 90 tahap 2-6 maraton)
 
 - `c038933` — feat(pembelian): pemilih satuan di baris + peringatan isi faktur vs
