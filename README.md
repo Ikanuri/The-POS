@@ -99,7 +99,7 @@ serta terintegrasi dengan printer thermal Bluetooth dan barcode scanner.
 │  csv_import · db_export · archive · tutup_buku            │
 ├──────────────────────────────────────────────────────────┤
 │              Database (Drift + SQLCipher)                 │
-│  SQLite terenkripsi · skema v25 · pre-aggregate summaries │
+│  SQLite terenkripsi · skema v47 · pre-aggregate summaries │
 └──────────────────────────────────────────────────────────┘
 ```
 
