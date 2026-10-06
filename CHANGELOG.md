@@ -9,7 +9,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-10-06 (sesi kedelapan puluh tiga lanjutan — pratinjau keranjang)
 
-- (hash menyusul) — feat(kasir): pilihan QRIS (chip, hanya bila >=2 QRIS aktif) utk struk bagikan/cetak & pratinjau keranjang, satu pilihan utk semua, tersimpan per-device; bump 2.79.0+174
+- `9419bf3` — feat(kasir): pilihan QRIS (chip, hanya bila >=2 QRIS aktif) utk struk bagikan/cetak & pratinjau keranjang, satu pilihan utk semua, tersimpan per-device; bump 2.79.0+174
 - `f16c8ae` — fix(cloudflare): Publish ke Web memakai Direct Upload 4 tahap (upload-token, assets/upload, upsert-hashes, deployments + manifest) dgn hash BLAKE3 murni-Dart; bump 2.78.1+173
 - `e3854ec` — feat(kasir): pratinjau keranjang memuat catatan item + blok Pra-Bayar (sisa/kembalian, kembalian sudah diambil, pelunasan hutang/pre-order) dengan toggle default nyala; QR mengikuti sisa bayar; bump 2.78.0+172
 
