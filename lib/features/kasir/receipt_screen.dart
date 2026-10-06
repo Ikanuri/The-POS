@@ -29,6 +29,7 @@ import '../../core/utils/input_formatters.dart';
 import '../../core/utils/preorder_calc.dart';
 import '../../core/widgets/item_count_badge.dart';
 import '../../core/widgets/status_watermark_stamp.dart';
+import 'qris_choice.dart';
 import 'widgets/debt_payment_sheet.dart';
 import 'widgets/payment_qris_view.dart';
 import 'widgets/tx_history_sheet.dart';
@@ -2816,19 +2817,8 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
 
   /// Metode QRIS aktif pertama yang payload statisnya sudah diisi, atau
   /// null kalau belum ada satu pun dikonfigurasi.
-  Future<PaymentMethod?> _activeQrisMethod() async {
-    final db = ref.read(databaseProvider);
-    final methods = await (db.select(db.paymentMethods)
-          ..where((t) => t.isActive.equals(true))
-          ..orderBy([(t) => OrderingTerm.asc(t.sortOrder)]))
-        .get();
-    for (final m in methods) {
-      if (m.type == 'qris' && (m.qrValue?.trim().isNotEmpty ?? false)) {
-        return m;
-      }
-    }
-    return null;
-  }
+  Future<PaymentMethod?> _activeQrisMethod() =>
+      resolveSharedQrisMethod(ref.read(databaseProvider));
 
   /// Susulan (permintaan user) — "Salin Kode Pesanan" di nota LAMA/SUDAH
   /// SELESAI, supaya pesanan pelanggan langganan (beli barang sama tiap
@@ -2929,18 +2919,23 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     // "Tampilkan Laba" di menu Pengaturan Struk) — BUKAN per-transaksi:
     // ini preferensi TAMPILAN milik device yang membuka struk, bukan data
     // nota itu sendiri.
-    final qrisMethod = _eligibleForShareQr ? await _activeQrisMethod() : null;
+    final qrisList = _eligibleForShareQr
+        ? await activeQrisMethods(ref.read(databaseProvider))
+        : const <PaymentMethod>[];
     if (!mounted) return;
     final sharedPrefs = await SharedPreferences.getInstance();
+    var qrisMethod =
+        pickQrisMethod(qrisList, sharedPrefs.getString(kShareQrisMethodKey));
     var showQr =
         qrisMethod != null && (sharedPrefs.getBool('receipt_show_qr') ?? false);
     var qrDynamic = sharedPrefs.getBool('receipt_qr_dynamic') ?? true;
     final remaining = netRemainingOwed(_tx!, _payments);
 
     String? resolveQr() {
-      if (!showQr || qrisMethod == null) return null;
+      final qm = qrisMethod;
+      if (!showQr || qm == null) return null;
       return resolveQrisPayload(
-        staticPayload: qrisMethod.qrValue!,
+        staticPayload: qm.qrValue!,
         amount: remaining,
         dynamicMode: qrDynamic,
       ).data;
@@ -3036,6 +3031,15 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
                       sharedPrefs.setBool('receipt_show_qr', v);
                     },
                   ),
+                  if (showQr && qrisList.length >= 2)
+                    QrisChoiceRow(
+                      methods: qrisList,
+                      selectedId: qrisMethod?.id,
+                      onSelected: (m) {
+                        setSheetState(() => qrisMethod = m);
+                        sharedPrefs.setString(kShareQrisMethodKey, m.id);
+                      },
+                    ),
                   if (showQr)
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,

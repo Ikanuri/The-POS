@@ -3,7 +3,6 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:ui' as ui;
 
-import 'package:drift/drift.dart' show OrderingTerm;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -28,6 +27,7 @@ import '../cart_debt_settlement_provider.dart';
 import '../cart_meta_provider.dart';
 import '../cart_prabayar_provider.dart';
 import '../cart_preorder_settlement_provider.dart';
+import '../qris_choice.dart';
 import '../cart_price_category_provider.dart';
 import '../cart_provider.dart';
 import '../handoff_gate_provider.dart';
@@ -686,20 +686,6 @@ class _CartSheetState extends ConsumerState<CartSheet> {
   /// Metode QRIS aktif pertama yang payload statisnya sudah diisi — sama
   /// persis pola `_activeQrisMethod` di receipt_screen.dart, tapi TANPA
   /// syarat status nota (di titik ini memang belum ada nota sama sekali).
-  Future<PaymentMethod?> _activeQrisMethodForPreview() async {
-    final db = ref.read(databaseProvider);
-    final methods = await (db.select(db.paymentMethods)
-          ..where((t) => t.isActive.equals(true))
-          ..orderBy([(t) => OrderingTerm.asc(t.sortOrder)]))
-        .get();
-    for (final m in methods) {
-      if (m.type == 'qris' && (m.qrValue?.trim().isNotEmpty ?? false)) {
-        return m;
-      }
-    }
-    return null;
-  }
-
   /// Susulan (permintaan user): "kadang pelanggan minta preview serta
   /// estimasi total" sebelum checkout — sheet share struk "Pratinjau
   /// Keranjang" (`CartPreviewPaper`), pola sheet & toggle QR SAMA persis
@@ -743,9 +729,11 @@ class _CartSheetState extends ConsumerState<CartSheet> {
     final device = ref.read(deviceProvider);
     if (!ctx.mounted) return;
 
-    final qrisMethod = await _activeQrisMethodForPreview();
+    final qrisList = await activeQrisMethods(ref.read(databaseProvider));
     if (!ctx.mounted) return;
     final sharedPrefs = await SharedPreferences.getInstance();
+    var qrisMethod =
+        pickQrisMethod(qrisList, sharedPrefs.getString(kShareQrisMethodKey));
     var showQr = qrisMethod != null &&
         (sharedPrefs.getBool('cart_preview_show_qr') ?? false);
     var qrDynamic = sharedPrefs.getBool('cart_preview_qr_dynamic') ?? true;
@@ -762,11 +750,12 @@ class _CartSheetState extends ConsumerState<CartSheet> {
     }
 
     String? resolveQr() {
-      if (!showQr || qrisMethod == null) return null;
+      final qm = qrisMethod;
+      if (!showQr || qm == null) return null;
       final amount = payableForQr();
       if (amount == null) return null;
       return resolveQrisPayload(
-        staticPayload: qrisMethod.qrValue!,
+        staticPayload: qm.qrValue!,
         amount: amount,
         dynamicMode: qrDynamic,
       ).data;
@@ -855,6 +844,15 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                       sharedPrefs.setBool('cart_preview_show_qr', v);
                     },
                   ),
+                  if (showQr && qrisList.length >= 2)
+                    QrisChoiceRow(
+                      methods: qrisList,
+                      selectedId: qrisMethod?.id,
+                      onSelected: (m) {
+                        setSheetState(() => qrisMethod = m);
+                        sharedPrefs.setString(kShareQrisMethodKey, m.id);
+                      },
+                    ),
                   if (showQr)
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
