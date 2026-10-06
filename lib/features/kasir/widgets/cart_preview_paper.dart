@@ -35,6 +35,11 @@ class CartPreviewPaper extends StatelessWidget {
     this.receiptHeader = '',
     this.receiptFooter = '',
     this.qrData,
+    this.qrAmount,
+    this.prabayarLines = const [],
+    this.changeTakenTotal = 0,
+    this.debtSettlementTotal = 0,
+    this.preorderSettlementTotal = 0,
   });
 
   final List<CartItem> items;
@@ -59,6 +64,20 @@ class CartPreviewPaper extends StatelessWidget {
   /// identik `_ReceiptPaper.qrData`. null = tidak ditampilkan.
   final String? qrData;
 
+  /// Nominal yang tampil di bawah QR (null = [totalAmount]) — dgn blok
+  /// Pra-Bayar aktif, yang perlu dibayar lewat QR adalah SISA, bukan total.
+  final int? qrAmount;
+
+  /// Blok Pra-Bayar (opsional, kosong = tidak tampil): satu baris per entri
+  /// yang sudah dikunci (label metode + nominal). Logika Sisa/Kembalian SAMA
+  /// dgn footer keranjang (`_PrabayarFooterSummary`): saldo = total terkunci
+  /// - [changeTakenTotal] (kembalian yang sudah diserahkan tidak ikut
+  /// dihitung), dibandingkan dgn total + pelunasan hutang/pre-order.
+  final List<({String label, int amount})> prabayarLines;
+  final int changeTakenTotal;
+  final int debtSettlementTotal;
+  final int preorderSettlementTotal;
+
   static const _ink = Color(0xFF111111);
   static const _accent = AppTheme.accent;
 
@@ -77,6 +96,52 @@ class CartPreviewPaper extends StatelessWidget {
 
   static String _fmtQty(double q) =>
       q % 1 == 0 ? q.toInt().toString() : q.toString();
+
+  Widget _row(String a, int amount,
+      {bool bold = false, Color? color, String sign = ''}) {
+    final st = _mono.copyWith(
+        fontSize: 11,
+        fontWeight: bold ? FontWeight.w800 : FontWeight.w400,
+        color: color);
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Expanded(child: Text(a, style: st)),
+        Text('${sign}Rp ${_fmtNum(amount)}', style: st),
+      ],
+    );
+  }
+
+  /// Blok Pra-Bayar (lihat dok [prabayarLines]). Kosong bila tidak ada entri.
+  List<Widget> _prabayarBlock() {
+    if (prabayarLines.isEmpty) return const [];
+    final prabayarTotal = prabayarLines.fold<int>(0, (s, e) => s + e.amount);
+    final pool = prabayarTotal - changeTakenTotal;
+    final grand = totalAmount + debtSettlementTotal + preorderSettlementTotal;
+    final diff = grand - pool;
+    return [
+      const _DashedLine(),
+      if (debtSettlementTotal > 0)
+        _row('+ Lunasi Hutang', debtSettlementTotal),
+      if (preorderSettlementTotal > 0)
+        _row('+ Melunasi Pre-order', preorderSettlementTotal),
+      if (debtSettlementTotal > 0 || preorderSettlementTotal > 0)
+        _row('Total Tagihan', grand, bold: true),
+      for (final l in prabayarLines) _row(l.label, l.amount, sign: '-'),
+      if (changeTakenTotal > 0) ...[
+        _row('Kembalian sudah diambil', changeTakenTotal, sign: '+'),
+        _row('Saldo Pra-Bayar', pool),
+      ],
+      const SizedBox(height: 2),
+      if (diff > 0)
+        _row('Sisa Bayar', diff, bold: true)
+      else if (diff < 0)
+        _row('Kembalian', -diff, bold: true, color: const Color(0xFF2E7D32))
+      else
+        Text('Lunas (Pra-Bayar pas)',
+            style: _mono.copyWith(fontSize: 11, fontWeight: FontWeight.w800)),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -189,6 +254,13 @@ class CartPreviewPaper extends StatelessWidget {
                       '${item.isVariant ? '  └ ' : ''}${item.productName}',
                       style: _mono.copyWith(
                           fontWeight: item.isVariant ? FontWeight.w400 : FontWeight.w700)),
+                  if ((item.itemNote ?? '').trim().isNotEmpty)
+                    Text(
+                        '${item.isVariant ? '  ' : ''}Catatan: ${item.itemNote!.trim()}',
+                        style: _mono.copyWith(
+                            fontSize: 10.5,
+                            fontStyle: FontStyle.italic,
+                            color: const Color(0xFF6B6156))),
                   if (effectiveQtyOf(item) > 0)
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -210,6 +282,7 @@ class CartPreviewPaper extends StatelessWidget {
                 Text('Rp ${_fmtNum(totalAmount)}',
                     textAlign: TextAlign.center,
                     style: _mono.copyWith(fontSize: 20, fontWeight: FontWeight.w900)),
+                ..._prabayarBlock(),
                 Text(
                     'Harga & total masih bisa berubah sampai transaksi '
                     'diselesaikan di kasir.',
@@ -224,7 +297,7 @@ class CartPreviewPaper extends StatelessWidget {
                   const SizedBox(height: 6),
                   Center(child: QrisQrBox(data: qrData!, size: 160)),
                   const SizedBox(height: 4),
-                  Text('Rp ${_fmtNum(totalAmount)}',
+                  Text('Rp ${_fmtNum(qrAmount ?? totalAmount)}',
                       textAlign: TextAlign.center,
                       style: _mono.copyWith(fontSize: 13, fontWeight: FontWeight.w800)),
                   Text(
