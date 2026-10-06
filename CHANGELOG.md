@@ -9,7 +9,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-10-06 (sesi kedelapan puluh tiga lanjutan — pratinjau keranjang)
 
-- (hash menyusul) — feat(kasir): pratinjau keranjang memuat catatan item + blok Pra-Bayar (sisa/kembalian, kembalian sudah diambil, pelunasan hutang/pre-order) dengan toggle default nyala; QR mengikuti sisa bayar; bump 2.78.0+172
+- `e3854ec` — feat(kasir): pratinjau keranjang memuat catatan item + blok Pra-Bayar (sisa/kembalian, kembalian sudah diambil, pelunasan hutang/pre-order) dengan toggle default nyala; QR mengikuti sisa bayar; bump 2.78.0+172
 
 ## 2026-10-04 (sesi kedelapan puluh tiga — hapus jalur AI)
 
