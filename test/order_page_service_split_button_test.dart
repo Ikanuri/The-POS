@@ -81,4 +81,41 @@ void main() {
     expect(body, isNot(contains('showConfirm')));
     expect(body, contains('saveCart();'));
   });
+
+  test('modal produk: X lingkaran merah di pojok kanan atas', () {
+    expect(html, contains('.sheet-x{position:absolute;top:10px;right:14px;'));
+    expect(html, contains('border-radius:50%;background:#D64545;color:#fff'));
+  });
+
+  test('modal produk: geser ke bawah menutup (touch non-pasif, tanpa refresh)',
+      () {
+    expect(html, contains("sheet.addEventListener('touchmove'"));
+    expect(html, contains('{passive: false}'));
+    expect(html, contains('e.preventDefault()'));
+    expect(html, contains('body.scrollTop <= 0'));
+    expect(html, contains('sheet.offsetHeight * 0.3'));
+    expect(html, contains('overscroll-behavior-y:contain'));
+    // Pull-to-refresh hanya dimatikan SELAMA modal terbuka.
+    expect(
+        html,
+        contains(
+            'html.modal-open,html.modal-open body{overscroll-behavior-y:none;}'));
+    expect(
+        html, contains("document.documentElement.classList.add('modal-open')"));
+    expect(html,
+        contains("document.documentElement.classList.remove('modal-open')"));
+  });
+
+  test('draf modal persisten di localStorage (kunci versi katalog + TTL)', () {
+    expect(html, contains("DRAFT_KEY = 'posOrderItemDraft'"));
+    expect(html, contains('d.generatedAt !== DATA.generatedAt'));
+    expect(html, contains('> CART_TTL_MS'));
+    expect(html, contains('function noteDraft()'));
+    // Dibersihkan saat tambah/hapus/ubah qty/kosongkan.
+    expect(html, contains('dropDraft(unitId);\n  closeItemModal();'));
+    expect(html, contains('localStorage.removeItem(DRAFT_KEY)'));
+    final setQty = html.substring(html.indexOf('function setQty(unitId, qty){'),
+        html.indexOf('function refreshProwControls'));
+    expect(setQty, contains('dropDraft(unitId);'));
+  });
 }

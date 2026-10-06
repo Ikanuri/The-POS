@@ -472,14 +472,24 @@ body{
 .sheet.show{transform:translateY(0);}
 .sheet-grip{width:38px;height:4px;background:var(--line);border-radius:2px;
   margin:10px auto 4px;flex-shrink:0;}
-.sheet-head{display:flex;align-items:center;padding:6px 16px 10px;flex-shrink:0;}
+.sheet-head{display:flex;align-items:center;padding:6px 56px 10px 16px;flex-shrink:0;}
 .sheet-head b{font-size:18px;}
 .clear-cart-btn{margin-left:auto;border:1px solid var(--danger);background:var(--danger-bg);
   color:var(--danger);font-size:13px;font-weight:700;cursor:pointer;padding:8px 12px;
   border-radius:999px;display:flex;align-items:center;gap:6px;white-space:nowrap;flex-shrink:0;}
 .clear-cart-btn svg{width:15px;height:15px;flex-shrink:0;}
-.sheet-x{margin-left:8px;border:none;background:transparent;color:var(--ink-3);
-  font-size:24px;cursor:pointer;padding:4px;flex-shrink:0;}
+/* Tombol tutup: lingkaran merah di POJOK KANAN ATAS modal (bukan lagi di
+   samping nama produk). */
+.sheet-x{position:absolute;top:10px;right:14px;width:34px;height:34px;border:none;
+  border-radius:50%;background:#D64545;color:#fff;font-size:22px;line-height:1;
+  cursor:pointer;padding:0;display:flex;align-items:center;justify-content:center;
+  box-shadow:0 2px 6px rgba(0,0,0,.18);z-index:2;}
+.sheet-x:active{transform:scale(.92);}
+/* Geser-ke-bawah menutup modal: cegah gulir/refresh bawaan browser (pull-to-
+   refresh) selagi modal terbuka — gestur ditangani JS (lihat blok swipe). */
+.sheet-body{overscroll-behavior-y:contain;}
+.sheet{touch-action:pan-y;}
+html.modal-open,html.modal-open body{overscroll-behavior-y:none;}
 .sheet-body{overflow-y:auto;padding:0 16px;flex:1;}
 .citem{display:flex;flex-direction:column;gap:7px;padding:11px 0;
   border-bottom:1px solid var(--line);}
@@ -815,7 +825,8 @@ function clearCart(){
     function(){
       cart = {};
       cartNotes = {};
-      try { localStorage.removeItem(CART_STORAGE_KEY); } catch (e) {}
+      _drafts = {};
+      try { localStorage.removeItem(CART_STORAGE_KEY); localStorage.removeItem(DRAFT_KEY); } catch (e) {}
       render();
     }
   );
@@ -1015,6 +1026,7 @@ function findProductForUnit(unitId){
 }
 
 function setQty(unitId, qty){
+  dropDraft(unitId);
   if (qty <= 0) {
     delete cart[unitId];
     delete cartNotes[unitId];
@@ -1285,17 +1297,62 @@ document.getElementById('cartItems').addEventListener('click', function(e){
 // dipilih). Harga MURNI tampilan (dari katalog, tidak bisa diketik ulang
 // oleh pelanggan) — kasir tetap satu-satunya sumber harga final saat
 // transaksi diproses (lihat komentar di kelas OrderPageService).
+// ── Draf modal (qty & catatan) PERSISTEN di localStorage — bila halaman
+// ter-refresh/modal ditutup tak sengaja, isian tidak hilang. Pola sama dgn
+// cache keranjang di atas: dikunci DATA.generatedAt + kedaluwarsa 1 hari,
+// semua akses dibungkus try/catch (mode privat/diblokir). Disimpan per
+// satuan, hanya bila BEDA dari kondisi keranjang (tidak ada draf basi).
+var DRAFT_KEY = 'posOrderItemDraft';
+var _drafts = {};
+function loadDrafts(){
+  try {
+    var raw = localStorage.getItem(DRAFT_KEY);
+    if (!raw) return;
+    var d = JSON.parse(raw);
+    if (!d || d.generatedAt !== DATA.generatedAt) return;
+    if (typeof d.savedAt !== 'number' || (Date.now() - d.savedAt) > CART_TTL_MS) return;
+    _drafts = d.drafts || {};
+  } catch (e) {}
+}
+function saveDrafts(){
+  try {
+    if (Object.keys(_drafts).length === 0) { localStorage.removeItem(DRAFT_KEY); return; }
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({
+      generatedAt: DATA.generatedAt, savedAt: Date.now(), drafts: _drafts
+    }));
+  } catch (e) {}
+}
+function dropDraft(unitId){
+  if (_drafts[unitId] !== undefined) { delete _drafts[unitId]; saveDrafts(); }
+}
+function noteDraft(){
+  var uid = itemModalUnitId;
+  if (!uid) return;
+  var note = document.getElementById('itemNote').value;
+  var baseQty = cart[uid] || 1;
+  var baseNote = cartNotes[uid] || '';
+  if (itemModalQty === baseQty && note.trim() === baseNote.trim()) {
+    delete _drafts[uid];
+  } else {
+    _drafts[uid] = {qty: itemModalQty, note: note};
+  }
+  saveDrafts();
+}
+loadDrafts();
+
 function openItemModal(p, preselectUnitId){
   itemModalProduct = p;
   document.getElementById('itemTitle').textContent = p.name;
   loadUnitIntoForm(p, preselectUnitId || p.unitId);
   document.getElementById('itemScrim').classList.add('show');
   document.getElementById('itemSheet').classList.add('show');
+  document.documentElement.classList.add('modal-open');
 }
 
 function closeItemModal(){
   document.getElementById('itemScrim').classList.remove('show');
   document.getElementById('itemSheet').classList.remove('show');
+  document.documentElement.classList.remove('modal-open');
   itemModalProduct = null;
   itemModalUnitId = null;
 }
@@ -1321,8 +1378,11 @@ function loadUnitIntoForm(p, unitId){
   document.getElementById('itemPriceDisplay').textContent =
       rp(byUnit[unitId].price) + ' /' + esc(byUnit[unitId].unit);
   itemModalQty = cart[unitId] || 1;
+  var draftNote = cartNotes[unitId] || '';
+  var dr = _drafts[unitId];
+  if (dr && typeof dr.qty === 'number') { itemModalQty = dr.qty; draftNote = dr.note || ''; }
   document.getElementById('itemQtyVal').value = fmtQty(itemModalQty);
-  document.getElementById('itemNote').value = cartNotes[unitId] || '';
+  document.getElementById('itemNote').value = draftNote;
   document.getElementById('itemActions').classList.toggle('nodel', !cart[unitId]);
   updateItemSubtotal();
 }
@@ -1337,19 +1397,64 @@ document.getElementById('itemQtyVal').addEventListener('input', function(){
   var v = parseFloat(this.value);
   itemModalQty = (isNaN(v) || v < 0) ? 0 : v;
   updateItemSubtotal();
+  noteDraft();
 });
+document.getElementById('itemNote').addEventListener('input', noteDraft);
 document.getElementById('itemQtyDec').addEventListener('click', function(){
   itemModalQty = Math.max(0, itemModalQty - 1);
   document.getElementById('itemQtyVal').value = fmtQty(itemModalQty);
   updateItemSubtotal();
+  noteDraft();
 });
 document.getElementById('itemQtyInc').addEventListener('click', function(){
   itemModalQty += 1;
   document.getElementById('itemQtyVal').value = fmtQty(itemModalQty);
   updateItemSubtotal();
+  noteDraft();
 });
 document.getElementById('itemSheetClose').addEventListener('click', closeItemModal);
 document.getElementById('itemScrim').addEventListener('click', closeItemModal);
+
+// ── Geser ke bawah menutup modal (perilaku seperti keranjang di aplikasi
+// kasir): modal IKUT BERGESER mengikuti jari saat isi sudah mentok di atas,
+// menutup bila ditarik > 30% tinggi atau cukup cepat, selain itu kembali
+// (snap-back). touchmove non-pasif + preventDefault supaya browser TIDAK
+// ikut refresh (pull-to-refresh) / membekukan halaman.
+(function(){
+  var sheet = document.getElementById('itemSheet');
+  var body = sheet.querySelector('.sheet-body');
+  var startY = 0, dy = 0, startT = 0, tracking = false, dragging = false;
+  sheet.addEventListener('touchstart', function(e){
+    if (!sheet.classList.contains('show') || e.touches.length !== 1) return;
+    if (body.contains(e.target) && body.scrollTop > 0) return;
+    startY = e.touches[0].clientY; startT = Date.now(); dy = 0;
+    tracking = true; dragging = false;
+  }, {passive: true});
+  sheet.addEventListener('touchmove', function(e){
+    if (!tracking) return;
+    dy = e.touches[0].clientY - startY;
+    if (!dragging) {
+      if (dy > 6 && body.scrollTop <= 0) { dragging = true; sheet.style.transition = 'none'; }
+      else if (dy < -6) { tracking = false; return; }
+      else return;
+    }
+    if (e.cancelable) e.preventDefault();
+    sheet.style.transform = 'translateY(' + Math.max(0, dy) + 'px)';
+  }, {passive: false});
+  function end(){
+    if (!tracking) return;
+    tracking = false;
+    if (!dragging) return;
+    dragging = false;
+    var vel = dy / Math.max(1, Date.now() - startT);
+    sheet.style.transition = '';
+    var close = dy > sheet.offsetHeight * 0.3 || vel > 0.6;
+    sheet.style.transform = '';
+    if (close) closeItemModal();
+  }
+  sheet.addEventListener('touchend', end);
+  sheet.addEventListener('touchcancel', end);
+})();
 
 document.getElementById('itemAddBtn').addEventListener('click', function(){
   if (!itemModalProduct || !itemModalUnitId) return;
@@ -1362,6 +1467,7 @@ document.getElementById('itemAddBtn').addEventListener('click', function(){
     delete cart[unitId];
     delete cartNotes[unitId];
   }
+  dropDraft(unitId);
   closeItemModal();
   render();
   saveCart();
@@ -1370,6 +1476,7 @@ document.getElementById('itemRemoveBtn').addEventListener('click', function(){
   if (!itemModalUnitId) return;
   delete cart[itemModalUnitId];
   delete cartNotes[itemModalUnitId];
+  dropDraft(itemModalUnitId);
   closeItemModal();
   render();
   saveCart();
