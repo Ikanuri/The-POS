@@ -713,6 +713,28 @@ class _CartSheetState extends ConsumerState<CartSheet> {
     final items = List<CartItem>.from(ref.read(cartProvider(widget.cartId)));
     final meta = ref.read(cartMetaProvider(widget.cartId));
     final totalAmount = notifier.totalAmount;
+    // Pra-Bayar (logika SAMA dgn footer keranjang): entri terkunci, riwayat
+    // "kembalian sudah diambil", dan pelunasan hutang/pre-order yang ikut
+    // menaikkan total tagihan.
+    final prabayarNotifier = ref.read(cartPrabayarProvider(widget.cartId).notifier);
+    final prabayarLines = [
+      for (final e in ref.read(cartPrabayarProvider(widget.cartId)))
+        (
+          label: 'Pra-Bayar ${(e.methodName ?? '').isNotEmpty ? e.methodName! : '${e.method[0].toUpperCase()}${e.method.substring(1)}'}',
+          amount: e.amount,
+        ),
+    ];
+    final changeTakenTotal = prabayarNotifier.changeTakenTotal;
+    final debtSettlementTotal = ref
+        .read(cartDebtSettlementProvider(widget.cartId))
+        .fold<int>(0, (s, e) => s + e.amount);
+    final preorderSettlementTotal = ref
+        .read(cartPreorderSettlementProvider(widget.cartId))
+        .fold<int>(0, (s, e) => s + e.amount);
+    final prabayarSum = prabayarLines.fold<int>(0, (s, e) => s + e.amount);
+    final grandTotal =
+        totalAmount + debtSettlementTotal + preorderSettlementTotal;
+    final prabayarDiff = grandTotal - (prabayarSum - changeTakenTotal);
     final customerName = (meta.customerName?.trim().isNotEmpty ?? false)
         ? meta.customerName!.trim()
         : 'Umum';
@@ -727,12 +749,25 @@ class _CartSheetState extends ConsumerState<CartSheet> {
     var showQr = qrisMethod != null &&
         (sharedPrefs.getBool('cart_preview_show_qr') ?? false);
     var qrDynamic = sharedPrefs.getBool('cart_preview_qr_dynamic') ?? true;
+    // Blok Pra-Bayar di pratinjau — default NYALA, hanya relevan bila ada
+    // entri Pra-Bayar di keranjang ini.
+    var showPrabayar = prabayarLines.isNotEmpty &&
+        (sharedPrefs.getBool('cart_preview_show_prabayar') ?? true);
+
+    // Nominal yang perlu dibayar lewat QR: dgn Pra-Bayar aktif = SISA (null
+    // bila sudah tertutup/lebih -> tidak ada yang perlu dibayar lewat QR).
+    int? payableForQr() {
+      if (!showPrabayar) return totalAmount;
+      return prabayarDiff > 0 ? prabayarDiff : null;
+    }
 
     String? resolveQr() {
       if (!showQr || qrisMethod == null) return null;
+      final amount = payableForQr();
+      if (amount == null) return null;
       return resolveQrisPayload(
         staticPayload: qrisMethod.qrValue!,
-        amount: totalAmount,
+        amount: amount,
         dynamicMode: qrDynamic,
       ).data;
     }
@@ -794,6 +829,12 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                           receiptHeader: prefs.header,
                           receiptFooter: prefs.footer,
                           qrData: resolveQr(),
+                          qrAmount: payableForQr(),
+                          prabayarLines:
+                              showPrabayar ? prabayarLines : const [],
+                          changeTakenTotal: changeTakenTotal,
+                          debtSettlementTotal: debtSettlementTotal,
+                          preorderSettlementTotal: preorderSettlementTotal,
                         ),
                       ),
                     ),
@@ -829,6 +870,21 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                       },
                     ),
                 ],
+                if (prabayarLines.isNotEmpty)
+                  SwitchListTile(
+                    key: const ValueKey('cart-preview-prabayar-toggle'),
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    title: const Text('Tampilkan Pra-Bayar'),
+                    subtitle: const Text(
+                        'Rincian Pra-Bayar, kembalian yang sudah diambil, dan sisa bayar',
+                        style: TextStyle(fontSize: 11)),
+                    value: showPrabayar,
+                    onChanged: (v) {
+                      setSheetState(() => showPrabayar = v);
+                      sharedPrefs.setBool('cart_preview_show_prabayar', v);
+                    },
+                  ),
                 const SizedBox(height: 12),
                 FilledButton.icon(
                   onPressed: () =>

@@ -8,6 +8,23 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 6 Oktober 2026
+
+### 🐛 Perbaikan
+- **"Publish ke Web" tidak lagi gagal dengan pesan "manifest field was
+  expected".** Sebelumnya tombol Publish ke Web di Katalog Pesanan ditolak
+  Cloudflare (error 400) sehingga link katalog tidak pernah jadi. Cara
+  unggah disesuaikan dengan aturan terbaru Cloudflare Pages.
+
+### ✨ Fitur Baru
+- **Pratinjau keranjang kini memuat catatan item dan Pra-Bayar.** Catatan
+  per barang ikut tampil di bawah nama barangnya. Jika ada Pra-Bayar,
+  pratinjau menampilkan rincian Pra-Bayar, pelunasan hutang/pre-order yang
+  ikut ditagih, kembalian yang sudah diambil, lalu **Sisa Bayar** atau
+  **Kembalian**. Bisa dimatikan lewat sakelar "Tampilkan Pra-Bayar" (default
+  nyala, di bawah pilihan QR QRIS). Jika QR QRIS ikut ditampilkan, nominalnya
+  mengikuti sisa bayar.
+
 ## 4 Oktober 2026
 
 ### ✨ Fitur Baru

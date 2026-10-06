@@ -4,6 +4,8 @@ import 'dart:typed_data';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../utils/blake3.dart';
+
 /// Item 37 — publish katalog HTML otomatis ke Cloudflare Pages (Direct
 /// Upload API, HTTP murni tanpa Git/CLI/Wrangler). Nama project Cloudflare
 /// Pages DETERMINISTIK: slug(storeName) + suffix hex storeUuid, dihitung
@@ -35,8 +37,7 @@ class CloudflareCredentials {
 }
 
 class CloudflarePublishResult {
-  const CloudflarePublishResult(
-      {required this.url, required this.projectName});
+  const CloudflarePublishResult({required this.url, required this.projectName});
   final String url;
   final String projectName;
 }
@@ -62,9 +63,12 @@ abstract class CloudflareApi {
 /// `lan_sync_service.dart` — project ini sudah pakai HttpClient mentah,
 /// bukan package `http`, jadi konsisten tanpa dependency baru).
 class HttpCloudflareApi implements CloudflareApi {
-  const HttpCloudflareApi();
+  const HttpCloudflareApi({this.base = 'https://api.cloudflare.com/client/v4'});
 
-  static const _base = 'https://api.cloudflare.com/client/v4';
+  /// Alamat dasar API — diganti server lokal HANYA di test.
+  final String base;
+
+  String get _base => base;
 
   @override
   Future<void> ensureProject({
@@ -99,6 +103,11 @@ class HttpCloudflareApi implements CloudflareApi {
     }
   }
 
+  /// Direct Upload API Cloudflare Pages (alur yang sama dgn Wrangler):
+  /// 1) minta JWT upload, 2) unggah berkas (base64) ke penyimpanan aset,
+  /// 3) catat hash-nya, 4) buat deployment berisi `manifest` (path -> hash).
+  /// Hash berkas = BLAKE3(base64(isi) + ekstensi) dipotong 32 heks — bukan
+  /// SHA biasa; hash yang salah membuat halaman 404 diam-diam.
   @override
   Future<void> uploadDeployment({
     required String accountId,
@@ -106,17 +115,72 @@ class HttpCloudflareApi implements CloudflareApi {
     required String projectName,
     required String html,
   }) async {
+    final b64 = base64.encode(utf8.encode(html));
+    final hash = cloudflareFileHash(b64, 'html');
+
+    // 1) JWT upload (GET; sebagian akun/versi API menerima POST).
+    final tokenUrl =
+        '$_base/accounts/$accountId/pages/projects/$projectName/upload-token';
+    var tokenRes = await _json('GET', tokenUrl, apiToken);
+    if (tokenRes.status == 404 || tokenRes.status == 405) {
+      tokenRes = await _json('POST', tokenUrl, apiToken);
+    }
+    final jwt = _decode(tokenRes.body)?['result']?['jwt'] as String?;
+    if (tokenRes.status != 200 || jwt == null) {
+      throw CloudflarePublishException(
+          'Gagal meminta izin upload Cloudflare Pages (${tokenRes.status}): '
+          '${tokenRes.body}');
+    }
+
+    // 2) unggah berkas.
+    final up = await _json(
+        'POST',
+        '$_base/pages/assets/upload',
+        jwt,
+        jsonEncode([
+          {
+            'key': hash,
+            'value': b64,
+            'metadata': {'contentType': 'text/html'},
+            'base64': true,
+          }
+        ]));
+    if (up.status != 200) {
+      throw CloudflarePublishException(
+          'Gagal upload ke Cloudflare Pages (${up.status}): ${up.body}');
+    }
+
+    // 3) catat hash.
+    final upsert = await _json(
+        'POST',
+        '$_base/pages/assets/upsert-hashes',
+        jwt,
+        jsonEncode({
+          'hashes': [hash]
+        }));
+    if (upsert.status != 200) {
+      throw CloudflarePublishException(
+          'Gagal mencatat berkas Cloudflare Pages (${upsert.status}): '
+          '${upsert.body}');
+    }
+
+    // 4) deployment: hanya `manifest` (+ branch) — berkas sudah di langkah 2.
     final client = HttpClient();
     try {
       final boundary =
           '----BerkahPOSBoundary${DateTime.now().microsecondsSinceEpoch}';
       final buffer = BytesBuilder();
-      buffer.add(ascii.encode('--$boundary\r\n'));
-      buffer.add(ascii.encode(
-          'Content-Disposition: form-data; name="index.html"; filename="index.html"\r\n'));
-      buffer.add(ascii.encode('Content-Type: text/html\r\n\r\n'));
-      buffer.add(utf8.encode(html));
-      buffer.add(ascii.encode('\r\n--$boundary--\r\n'));
+      void field(String name, String value) {
+        buffer.add(ascii.encode('--$boundary\r\n'));
+        buffer.add(ascii
+            .encode('Content-Disposition: form-data; name="$name"\r\n\r\n'));
+        buffer.add(utf8.encode(value));
+        buffer.add(ascii.encode('\r\n'));
+      }
+
+      field('manifest', jsonEncode({'/index.html': hash}));
+      field('branch', 'main');
+      buffer.add(ascii.encode('--$boundary--\r\n'));
 
       final req = await client.postUrl(Uri.parse(
           '$_base/accounts/$accountId/pages/projects/$projectName/deployments'));
@@ -128,13 +192,47 @@ class HttpCloudflareApi implements CloudflareApi {
       final body = await res.transform(utf8.decoder).join();
       if (res.statusCode != 200) {
         throw CloudflarePublishException(
-            'Gagal upload ke Cloudflare Pages (${res.statusCode}): $body');
+            'Gagal membuat deployment Cloudflare Pages (${res.statusCode}): '
+            '$body');
       }
     } finally {
       client.close(force: true);
     }
   }
+
+  static Map<String, dynamic>? _decode(String body) {
+    try {
+      final d = jsonDecode(body);
+      return d is Map<String, dynamic> ? d : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<({int status, String body})> _json(
+      String method, String url, String bearer,
+      [String? body]) async {
+    final client = HttpClient();
+    try {
+      final req = await client.openUrl(method, Uri.parse(url));
+      req.headers.set('Authorization', 'Bearer $bearer');
+      if (body != null) {
+        req.headers.set('Content-Type', 'application/json');
+        req.write(body);
+      }
+      final res = await req.close();
+      final text = await res.transform(utf8.decoder).join();
+      return (status: res.statusCode, body: text);
+    } finally {
+      client.close(force: true);
+    }
+  }
 }
+
+/// Hash berkas ala Cloudflare Pages: BLAKE3(base64 + ekstensi tanpa titik),
+/// 32 karakter heks pertama. Diekspos agar bisa diuji.
+String cloudflareFileHash(String base64Content, String extension) =>
+    blake3Hex(utf8.encode('$base64Content$extension')).substring(0, 32);
 
 class CloudflarePublishService {
   CloudflarePublishService({CloudflareApi? api, FlutterSecureStorage? storage})

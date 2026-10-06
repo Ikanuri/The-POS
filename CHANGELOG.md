@@ -7,6 +7,11 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-10-06 (sesi kedelapan puluh tiga lanjutan — pratinjau keranjang)
+
+- `f16c8ae` — fix(cloudflare): Publish ke Web memakai Direct Upload 4 tahap (upload-token, assets/upload, upsert-hashes, deployments + manifest) dgn hash BLAKE3 murni-Dart; bump 2.78.1+173
+- `e3854ec` — feat(kasir): pratinjau keranjang memuat catatan item + blok Pra-Bayar (sisa/kembalian, kembalian sudah diambil, pelunasan hutang/pre-order) dengan toggle default nyala; QR mengikuti sisa bayar; bump 2.78.0+172
+
 ## 2026-10-04 (sesi kedelapan puluh tiga — hapus jalur AI)
 
 - `fea9868` — feat(kasir): nama pelanggan bold + nama pegawai bold di kanannya di header Keranjang
