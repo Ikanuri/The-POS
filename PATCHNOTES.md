@@ -10,6 +10,18 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ## 6 Oktober 2026 (Katalog Pesanan)
 
+### 🎨 Tampilan Baru Katalog
+- **Modal pilih produk didesain ulang:** ikon, nama, dan harga besar di
+  tengah; pilihan satuan berupa tombol geser (dengan petunjuk panah
+  berdenyut bila satuannya banyak); jumlah dengan tombol bulat besar; catatan
+  berupa garis bawah sederhana.
+- **Halaman Pesanan kini berbentuk struk:** daftar barang di atas kertas
+  bergerigi ("2× Gula Pasir ······ 30.000"), TOTAL besar, dan isian Nama/HP
+  bergaris bawah. Untuk mengubah jumlah, ketuk kata kecil **"Tambah?"** di
+  bawah harga barang — berubah mulus menjadi tombol − dan +. Tombol − di
+  jumlah 1 menghapus barang. Ketuk nama barang untuk mengubah satuan/catatan.
+- Kedua halaman mengikuti **mode gelap**.
+
 ### ✨ Fitur Baru
 - **Toko tutup di katalog.** Atur jam buka di Pengaturan → Katalog Pesanan
   (dan tombol darurat "Tutup sekarang"). Di luar jam buka, katalog tampil

@@ -10,6 +10,8 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 ## 2026-10-06 (sesi kedelapan puluh tiga lanjutan — katalog HTML, task #19-#24)
 
 - `d3fc3f6` — feat(katalog): tombol hapus pesanan pindah ke kiri (halaman awal & modal), konfirmasi hapus inline Ya/Tidak (Ya merah 1/4 kiri), ikon lebih besar & teks lebih kecil, keterangan menyusut saat scroll ke bawah; bump 2.81.0+176
+- `7cc70b1` — feat(katalog): redesign halaman Pesanan (Mockup B) — kertas struk bergerigi, baris titik-titik, TOTAL besar, isian garis bawah, "Tambah?" -> stepper, mode gelap
+- `86d2f25` — feat(katalog): redesign modal tap produk (Mockup B) — hero, harga besar, segmen satuan yang bisa digeser + walk-through panah, stepper bulat besar, catatan garis bawah; mode gelap
 - `9258f8a` — feat(pelanggan): kartu Kode katalog di form pelanggan (buat/buat ulang/cabut/salin/bagikan, khusus owner)
 - `8ffe924` — feat(katalog): kartu Jam buka katalog di layar Katalog Pesanan (jadwal, jam buka/tutup, Tutup sekarang)
 - `37e0a19` — feat(katalog): mode toko tutup di HTML — jadwal jam (zona HP owner), daftar abu-abu + harga disembunyikan, banner merah menetap, kode per pelanggan (PBKDF2), cek ulang berkala
