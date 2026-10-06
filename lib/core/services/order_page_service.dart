@@ -365,7 +365,7 @@ body{
 @media (prefers-reduced-motion: reduce){
   .pc-qty.badge-incr,.pc-qty.badge-incr2,.mb-badge.badge-incr,.mb-badge.badge-incr2,
   .prow-icon.icon-pop{animation:none;}
-  .pc-minus,.pc-add,.page{transition:none;}
+  .pc-minus,.pc-add,.page,.mb-clear,.mainbtn,.mainbtn>*{transition:none;}
 }
 
 /* Item 79 M2 — mode Tile: grid 2 kolom, kartu vertikal. Murni CSS di
@@ -403,19 +403,51 @@ body{
   transition:opacity .26s ease,transform .3s cubic-bezier(.22,.61,.36,1);}
 .mainbtn-wrap>*{pointer-events:auto;}
 .mainbtn-wrap.hidden{opacity:0;transform:translateY(130%);pointer-events:none;}
-.mainbtn{width:100%;border:none;border-radius:999px;background:var(--accent);
+.mb-row{display:flex;align-items:stretch;}
+.mainbtn{flex:1 1 0;min-width:0;border:none;border-radius:999px;background:var(--accent);
   color:#fff;padding:15px 16px;font-size:16px;font-weight:700;cursor:pointer;
-  font-family:var(--font);display:flex;align-items:center;gap:10px;
+  font-family:var(--font);display:grid;grid-template-columns:auto 1fr auto;
+  align-items:center;column-gap:10px;min-height:56px;text-align:left;
   box-shadow:0 8px 22px rgba(0,0,0,.22);
-  transition:background-color .24s ease,transform .14s ease;}
+  transition:background-color .24s ease,transform .14s ease,padding .32s ease;}
 .mainbtn:active{transform:scale(.985);}
+/* Halaman awal: tombol dipecah (Lihat Pesanan ~3/4 + Kosongkan ~1/4 merah).
+   Pindah ke halaman Pesanan: tombol Kosongkan MENYUSUT ke lebar 0 sambil
+   tombol utama melebar & berganti warna hijau — satu gerak yang sama dgn
+   pil +/- produk (cubic-bezier memantul yg sama), dan sebaliknya. */
+.mb-clear{flex:0 0 auto;width:27%;margin-left:8px;padding:0 7px;border:none;
+  border-radius:999px;background:#D64545;color:#fff;cursor:pointer;
+  font-family:var(--font);font-size:10.5px;font-weight:700;line-height:1.15;
+  display:flex;align-items:center;justify-content:center;gap:4px;overflow:hidden;
+  text-align:left;box-shadow:0 8px 22px rgba(0,0,0,.22);
+  transition:width .32s cubic-bezier(.3,1.25,.45,1),margin-left .32s cubic-bezier(.3,1.25,.45,1),
+             padding .32s ease,opacity .2s ease,transform .14s ease;}
+.mb-clear:active{transform:scale(.96);}
+.mb-clear svg{width:15px;height:15px;flex-shrink:0;}
+.mb-clear span{min-width:0;}
+#app.order-mode .mb-clear{width:0;margin-left:0;padding:0;opacity:0;pointer-events:none;}
+/* Halaman awal (terpecah): isi tombol utama ditumpuk — label kecil di atas,
+   total besar di bawahnya — supaya total jutaan tetap utuh di lebar 1/4
+   yang tersisa. Halaman Pesanan: satu baris (badge | label | total). Saat
+   mode berganti isi tombol disamarkan sesaat (.swapping, tanpa transisi
+   saat sembunyi, fade-in saat tampil) supaya perubahan susunan tidak
+   terlihat melompat. */
+#app:not(.order-mode) .mainbtn{grid-template-columns:auto 1fr;column-gap:9px;padding:8px 12px;}
+#app:not(.order-mode) .mb-badge{grid-row:1 / span 2;min-width:24px;height:24px;padding:0 6px;font-size:13px;}
+#app:not(.order-mode) .mb-label{grid-column:2;grid-row:1;font-size:12.5px;font-weight:600;opacity:.92;}
+#app:not(.order-mode) .mb-total{grid-column:2;grid-row:2;font-size:17px;text-align:left;line-height:1.15;}
+#app.order-mode .mainbtn{padding:8px 14px;column-gap:8px;font-size:15px;}
+#app.order-mode .mb-total{font-size:17px;}
+.mainbtn>*{transition:opacity .2s ease;}
+.mainbtn.swapping>*{opacity:0;transition:none;}
+@media (max-width:340px){ .mb-clear{width:30%;font-size:10px;padding:0 5px;} }
 .mainbtn.wa{background:#25D366;}
 .mainbtn:disabled{opacity:.6;cursor:default;}
 .mb-badge{min-width:26px;height:26px;padding:0 8px;border-radius:999px;
   background:rgba(255,255,255,.24);display:flex;align-items:center;
   justify-content:center;font-size:14px;flex-shrink:0;line-height:1;}
-.mb-label{flex:1;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.mb-total{font-family:var(--serif);font-size:18px;white-space:nowrap;flex-shrink:0;}
+.mb-label{text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}
+.mb-total{font-family:var(--serif);font-size:18px;white-space:nowrap;text-align:right;}
 /* Halaman 2 (Pesanan) — header sendiri dgn tombol kembali ("Edit" di
    blueprint §6), body scroll sendiri. */
 .order-top{align-items:center;gap:12px;}
@@ -582,11 +614,14 @@ textarea.tfield{resize:none;min-height:64px;}
 
   <!-- Blueprint §5 — tombol aksi utama tunggal, total menyatu di dalamnya. -->
   <div class="mainbtn-wrap hidden" id="mainBtnWrap">
-    <button class="mainbtn" id="mainBtn" type="button">
-      <span class="mb-badge" id="mbBadge">0</span>
-      <span class="mb-label" id="mbLabel">Lihat Pesanan</span>
-      <span class="mb-total" id="mbTotal">Rp 0</span>
-    </button>
+    <div class="mb-row">
+      <button class="mainbtn" id="mainBtn" type="button">
+        <span class="mb-badge" id="mbBadge">0</span>
+        <span class="mb-label" id="mbLabel">Lihat Pesanan</span>
+        <span class="mb-total" id="mbTotal">Rp 0</span>
+      </button>
+      <button class="mb-clear" id="mbClear" type="button" aria-label="Kosongkan pesanan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg><span>Kosongkan pesanan</span></button>
+    </div>
   </div>
 </div>
 
@@ -633,10 +668,12 @@ var DATA = __DATA_JSON__;
 var cart = {}; // unitId -> qty
 var cartNotes = {}; // unitId -> catatan per-produk (Item 26a)
 var byUnit = {}; // unitId -> {name, unit, price, parentName}
+var unitProduct = {}; // unitId -> indeks produk induk (utk hitung badge per PRODUK)
 var sheetOpen = false; // hindari renderCartSheet() sia-sia saat sheet tertutup
 var itemModalProduct = null; // produk aktif di modal tap-item (Item 14)
 var itemModalUnitId = null; // satuan/varian aktif di modal
 var itemModalQty = 1;
+var _mbOrderMode = null; // mode terakhir yg dirender tombol utama (utk samarkan saat susunan berganti)
 var _mbBadgeCount = 0; // qty terakhir dirender di badge tombol utama — dipakai
                         // renderCartBar() utk tahu kapan HARUS retrigger animasi
                         // (badge per-baris sudah begini, tombol utama belum, Item 79 lanjutan).
@@ -766,7 +803,7 @@ function clearCart(){
   if (cartCount() === 0) return;
   showConfirm(
     'Kosongkan Keranjang?',
-    'Semua barang (' + cartCount() + ' item) akan dihapus dari pesanan ini. Tindakan ini tidak bisa dibatalkan.',
+    'Semua barang (' + cartCount() + ' produk) akan dihapus dari pesanan ini. Tindakan ini tidak bisa dibatalkan.',
     'Kosongkan',
     function(){
       cart = {};
@@ -777,6 +814,7 @@ function clearCart(){
   );
 }
 document.getElementById('clearCartBtn').addEventListener('click', clearCart);
+document.getElementById('mbClear').addEventListener('click', clearCart);
 
 // Hapus SATU barang langsung (terpisah dari stepper −) — sebelumnya cuma
 // bisa dihapus dgn menekan − berulang sampai qty 0, tidak eksplisit &
@@ -792,7 +830,7 @@ function deleteCartItem(unitId){
   );
 }
 
-DATA.products.forEach(function(p){
+DATA.products.forEach(function(p, pIdx){
   // Satuan lain (mis. Dus di samping Biji) sama-sama milik produk INI —
   // dikelompokkan di keranjang/pesanan sama seperti varian (parentName
   // diisi) begitu ada lebih dari 1 satuan, supaya tidak ambigu antara 2
@@ -800,6 +838,7 @@ DATA.products.forEach(function(p){
   var pUnits = (p.units && p.units.length) ? p.units : [{unitId:p.unitId, unit:p.unit, price:p.price}];
   var pMulti = pUnits.length > 1;
   pUnits.forEach(function(u){
+    unitProduct[u.unitId] = pIdx;
     byUnit[u.unitId] = {
       name: pMulti ? (p.name + ' — ' + u.unit) : p.name,
       unit: u.unit, price: u.price,
@@ -810,6 +849,7 @@ DATA.products.forEach(function(p){
     var vUnits = (v.units && v.units.length) ? v.units : [{unitId:v.unitId, unit:v.unit, price:v.price}];
     var vMulti = vUnits.length > 1;
     vUnits.forEach(function(u){
+      unitProduct[u.unitId] = pIdx;
       byUnit[u.unitId] = {
         name: p.name + ' — ' + v.name + (vMulti ? ' (' + u.unit + ')' : ''),
         unit: u.unit, price: u.price, parentName: p.name
@@ -894,9 +934,16 @@ function fmtQty(q){
   return (q % 1 === 0) ? String(q) : String(q);
 }
 
+// Jumlah PRODUK berbeda di pesanan (bukan total qty): satu produk dgn
+// beberapa satuan/varian tetap dihitung 1 (mis. gula pcs + gula dus = 1).
+// Nol <=> keranjang kosong, jadi tetap aman dipakai sbg penjaga "kosong?".
 function cartCount(){
-  var n = 0;
-  for (var k in cart) n += cart[k];
+  var seen = {}, n = 0;
+  for (var k in cart) {
+    if (!(cart[k] > 0)) continue;
+    var key = (unitProduct[k] !== undefined) ? 'p' + unitProduct[k] : 'u' + k;
+    if (!seen[key]) { seen[key] = true; n++; }
+  }
   return n;
 }
 function cartTotal(){
@@ -1150,11 +1197,18 @@ function renderCartBar(){
     _mbBadgeCount = n;
   }
   document.getElementById('mbTotal').textContent = rp(cartTotal());
+  var mainBtn = document.getElementById('mainBtn');
+  if (_mbOrderMode !== null && _mbOrderMode !== orderMode) {
+    // Susunan isi tombol berubah (tumpuk <-> satu baris): samarkan sesaat.
+    mainBtn.classList.add('swapping');
+    setTimeout(function(){ mainBtn.classList.remove('swapping'); }, 60);
+  }
+  _mbOrderMode = orderMode;
   document.getElementById('mbLabel').textContent =
       orderMode ? 'Kirim via WhatsApp' : 'Lihat Pesanan';
   document.getElementById('mainBtn').classList.toggle('wa', orderMode);
   document.getElementById('orderSub').textContent =
-      n === 0 ? 'Belum ada barang dipilih' : fmtQty(n) + ' barang dipilih';
+      n === 0 ? 'Belum ada barang dipilih' : fmtQty(n) + ' produk dipilih';
 }
 
 function renderCartSheet(){
