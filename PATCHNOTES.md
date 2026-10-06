@@ -20,11 +20,15 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
   (buat, buat ulang, cabut, salin, bagikan). Pelanggan langganan memasukkan
   kodenya lewat tautan "Pelanggan langganan? Masukkan kode" agar tetap bisa
   memesan saat toko tutup. Pesanannya berjalan seperti pesanan biasa.
-- **Tombol bawah katalog dipecah:** "Lihat Pesanan" + tombol merah "Kosongkan
-  pesanan" (dengan konfirmasi). Saat masuk halaman Pesanan, tombolnya menyatu
-  dengan animasi halus. Angka di tombol kini menghitung **jumlah produk**,
-  bukan total qty.
-- **Modal produk lebih rapi:** Tambah + Hapus (merah) satu baris, tombol
+- **Tombol bawah katalog dipecah:** tombol merah "Kosongkan pesanan" di
+  kiri dan "Lihat Pesanan" di kanan. Menekan Kosongkan memunculkan
+  konfirmasi langsung di baris tombol itu (Ya merah di kiri, Tidak di
+  kanan), tanpa popup, dan bertahan walau Bapak/Ibu menggulir atau mengetik
+  di pencarian. Saat daftar digulir ke bawah, tulisan di tombol Kosongkan
+  menyusut jadi ikon saja; muncul lagi saat digulir ke atas. Saat masuk
+  halaman Pesanan, tombol menyatu dengan animasi halus. Angka di tombol kini
+  menghitung **jumlah produk**, bukan total qty.
+- **Modal produk lebih rapi:** Hapus (merah, kiri) + Tambah satu baris, tombol
   tutup (X) lingkaran merah di pojok kanan atas, geser ke bawah untuk
   menutup (tanpa memicu refresh browser), dan isian jumlah/catatan tidak
   hilang walau halaman ter-refresh.

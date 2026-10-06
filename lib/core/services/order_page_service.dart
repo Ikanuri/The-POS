@@ -392,7 +392,7 @@ body{
 @media (prefers-reduced-motion: reduce){
   .pc-qty.badge-incr,.pc-qty.badge-incr2,.mb-badge.badge-incr,.mb-badge.badge-incr2,
   .prow-icon.icon-pop{animation:none;}
-  .pc-minus,.pc-add,.page,.mb-clear,.mainbtn,.mainbtn>*{transition:none;}
+  .pc-minus,.pc-add,.page,.mb-clear,.mb-clear span,.mb-clear svg,.mainbtn,.mainbtn>*{transition:none;}
 }
 
 /* Item 79 M2 — mode Tile: grid 2 kolom, kartu vertikal. Murni CSS di
@@ -442,17 +442,37 @@ body{
    Pindah ke halaman Pesanan: tombol Kosongkan MENYUSUT ke lebar 0 sambil
    tombol utama melebar & berganti warna hijau — satu gerak yang sama dgn
    pil +/- produk (cubic-bezier memantul yg sama), dan sebaliknya. */
-.mb-clear{flex:0 0 auto;width:27%;margin-left:8px;padding:0 7px;border:none;
+.mb-clear{flex:0 0 auto;width:27%;margin-right:8px;padding:0 7px;border:none;
   border-radius:999px;background:#D64545;color:#fff;cursor:pointer;
-  font-family:var(--font);font-size:10.5px;font-weight:700;line-height:1.15;
+  font-family:var(--font);font-size:9.5px;font-weight:700;line-height:1.15;
   display:flex;align-items:center;justify-content:center;gap:4px;overflow:hidden;
   text-align:left;box-shadow:0 8px 22px rgba(0,0,0,.22);
-  transition:width .32s cubic-bezier(.3,1.25,.45,1),margin-left .32s cubic-bezier(.3,1.25,.45,1),
-             padding .32s ease,opacity .2s ease,transform .14s ease;}
+  transition:width .32s cubic-bezier(.3,1.25,.45,1),margin-right .32s cubic-bezier(.3,1.25,.45,1),
+             padding .32s ease,gap .32s ease,opacity .2s ease,transform .14s ease,font-size .32s ease;}
 .mb-clear:active{transform:scale(.96);}
-.mb-clear svg{width:15px;height:15px;flex-shrink:0;}
-.mb-clear span{min-width:0;}
-#app.order-mode .mb-clear{width:0;margin-left:0;padding:0;opacity:0;pointer-events:none;}
+.mb-clear svg{width:20px;height:20px;flex-shrink:0;transition:width .32s ease,height .32s ease;}
+.mb-clear span{min-width:0;max-width:90px;overflow:hidden;white-space:normal;
+  transition:max-width .32s cubic-bezier(.3,1.25,.45,1),opacity .22s ease;}
+/* Scroll ke bawah: keterangan menyusut (sisa ikon, tombol jadi bulatan dan
+   tombol utama melebar); scroll ke atas: keterangan muncul lagi. */
+#mainBtnWrap.mb-collapsed .mb-clear{width:56px;padding:0;gap:0;}
+#mainBtnWrap.mb-collapsed .mb-clear span{max-width:0;opacity:0;}
+/* Konfirmasi hapus INLINE (halaman awal): Ya merah 1/4 di kiri, Tidak
+   netral 3/4 di kanan, di baris tombol yang sama. Bertahan walau scroll /
+   mengetik; hanya berakhir saat Ya/Tidak ditekan atau pesanan kosong. */
+#mainBtnWrap.mb-confirm .mb-clear{width:25%;padding:0 8px;gap:6px;font-size:15px;}
+#mainBtnWrap.mb-confirm .mb-clear svg{width:20px;height:20px;}
+#mainBtnWrap.mb-confirm .mb-clear span{max-width:90px;opacity:1;}
+.mb-q,.mb-no{display:none;}
+#mainBtnWrap.mb-confirm .mainbtn{background:var(--field);color:var(--ink);
+  box-shadow:0 8px 22px rgba(0,0,0,.14);outline:1px solid var(--line);outline-offset:-1px;}
+#mainBtnWrap.mb-confirm .mb-badge,#mainBtnWrap.mb-confirm .mb-label,
+#mainBtnWrap.mb-confirm .mb-total{display:none;}
+#mainBtnWrap.mb-confirm .mb-q,#mainBtnWrap.mb-confirm .mb-no{display:block;
+  grid-column:1 / -1;grid-row:auto;text-align:center;}
+.mb-q{font-size:11px;font-weight:600;opacity:.75;line-height:1.2;}
+.mb-no{font-size:17px;font-weight:700;line-height:1.2;}
+#app.order-mode .mb-clear{width:0;margin-right:0;padding:0;opacity:0;pointer-events:none;}
 /* Halaman awal (terpecah): isi tombol utama ditumpuk — label kecil di atas,
    total besar di bawahnya — supaya total jutaan tetap utuh di lebar 1/4
    yang tersisa. Halaman Pesanan: satu baris (badge | label | total). Saat
@@ -467,7 +487,8 @@ body{
 #app.order-mode .mb-total{font-size:17px;}
 .mainbtn>*{transition:opacity .2s ease;}
 .mainbtn.swapping>*{opacity:0;transition:none;}
-@media (max-width:340px){ .mb-clear{width:30%;font-size:10px;padding:0 5px;} }
+.mb-clear.swapping>*{opacity:0;transition:none;}
+@media (max-width:340px){ .mb-clear{width:30%;font-size:9px;padding:0 5px;} }
 .mainbtn.wa{background:#25D366;}
 .mainbtn:disabled{opacity:.6;cursor:default;}
 .mb-badge{min-width:26px;height:26px;padding:0 8px;border-radius:999px;
@@ -577,7 +598,7 @@ textarea.tfield{resize:none;min-height:64px;}
 /* Pola SAMA dgn tombol bawah halaman awal (Lihat Pesanan + Kosongkan): aksi
    utama ~3/4, Hapus merah ~1/4. Belum ada di pesanan -> Hapus menyusut ke
    lebar 0 (Tambah selebar penuh), dgn animasi yang sama. */
-.im-actions.nodel .mb-clear{width:0;margin-left:0;padding:0;opacity:0;pointer-events:none;}
+.im-actions.nodel .mb-clear{width:0;margin-right:0;padding:0;opacity:0;pointer-events:none;}
 .add-cta{flex:1 1 0;min-width:0;border:none;background:var(--accent);color:#fff;border-radius:999px;
   padding:15px;font-size:16.5px;font-weight:700;cursor:pointer;}
 .add-cta:disabled{opacity:.4;}
@@ -660,13 +681,15 @@ textarea.tfield{resize:none;min-height:64px;}
 
   <!-- Blueprint §5 — tombol aksi utama tunggal, total menyatu di dalamnya. -->
   <div class="mainbtn-wrap hidden" id="mainBtnWrap">
-    <div class="mb-row">
+    <div class="mb-row" id="mbRow">
+      <button class="mb-clear" id="mbClear" type="button" aria-label="Kosongkan pesanan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg><span>Kosongkan pesanan</span></button>
       <button class="mainbtn" id="mainBtn" type="button">
+        <span class="mb-q">Kosongkan pesanan?</span>
+        <span class="mb-no">Tidak</span>
         <span class="mb-badge" id="mbBadge">0</span>
         <span class="mb-label" id="mbLabel">Lihat Pesanan</span>
         <span class="mb-total roll" id="mbTotal">Rp 0</span>
       </button>
-      <button class="mb-clear" id="mbClear" type="button" aria-label="Kosongkan pesanan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg><span>Kosongkan pesanan</span></button>
     </div>
   </div>
 </div>
@@ -691,8 +714,8 @@ textarea.tfield{resize:none;min-height:64px;}
   <div class="sheet-foot">
     <div class="grand"><span class="gl">Subtotal</span><span class="gv roll" id="itemSubtotal">Rp 0</span></div>
     <div class="im-actions nodel" id="itemActions">
-      <button class="add-cta" id="itemAddBtn" type="button">Tambah ke Pesanan</button>
       <button class="mb-clear" id="itemRemoveBtn" type="button" aria-label="Hapus dari pesanan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg><span>Hapus dari pesanan</span></button>
+      <button class="add-cta" id="itemAddBtn" type="button">Tambah ke Pesanan</button>
     </div>
   </div>
 </div>
@@ -860,23 +883,70 @@ document.getElementById('confirmOk').addEventListener('click', function(){
   if (cb) cb();
 });
 
+function doClearCart(){
+  cart = {};
+  cartNotes = {};
+  _drafts = {};
+  try { localStorage.removeItem(CART_STORAGE_KEY); localStorage.removeItem(DRAFT_KEY); } catch (e) {}
+  setClearConfirm(false);
+  render();
+}
+// Header halaman Pesanan: tetap popup konfirmasi.
 function clearCart(){
   if (cartCount() === 0) return;
   showConfirm(
     'Kosongkan Keranjang?',
     'Semua barang (' + cartCount() + ' produk) akan dihapus dari pesanan ini. Tindakan ini tidak bisa dibatalkan.',
     'Kosongkan',
-    function(){
-      cart = {};
-      cartNotes = {};
-      _drafts = {};
-      try { localStorage.removeItem(CART_STORAGE_KEY); localStorage.removeItem(DRAFT_KEY); } catch (e) {}
-      render();
-    }
+    doClearCart
   );
 }
 document.getElementById('clearCartBtn').addEventListener('click', clearCart);
-document.getElementById('mbClear').addEventListener('click', clearCart);
+
+// Halaman awal: tombol Kosongkan memakai konfirmasi INLINE Ya/Tidak di baris
+// tombol yang sama (tombol hapus jadi "Ya" merah 1/4 di kiri, tombol utama
+// jadi "Tidak" netral 3/4 di kanan), dgn animasi lebar yang sama. Bertahan
+// sampai Ya/Tidak ditekan (atau pesanan kosong) — scroll/ketik tidak membatalkan.
+var clearConfirm = false;
+function setClearConfirm(on){
+  if (clearConfirm === on) return;
+  clearConfirm = on;
+  var wrap = document.getElementById('mainBtnWrap');
+  var mainBtn = document.getElementById('mainBtn');
+  var clr = document.getElementById('mbClear');
+  // Susunan isi berganti: samarkan sesaat supaya tidak melompat.
+  mainBtn.classList.add('swapping');
+  clr.classList.add('swapping');
+  wrap.classList.toggle('mb-confirm', on);
+  clr.querySelector('span').textContent = on ? 'Ya' : 'Kosongkan pesanan';
+  clr.setAttribute('aria-label', on ? 'Ya, kosongkan pesanan' : 'Kosongkan pesanan');
+  setTimeout(function(){ mainBtn.classList.remove('swapping'); clr.classList.remove('swapping'); }, 60);
+}
+document.getElementById('mbClear').addEventListener('click', function(){
+  if (clearConfirm) { doClearCart(); return; }
+  if (cartCount() === 0) return;
+  setClearConfirm(true);
+});
+
+// Scroll daftar ke bawah: keterangan tombol Kosongkan menyusut (sisa ikon);
+// scroll ke atas / di posisi paling atas: muncul lagi.
+(function(){
+  var listEl = document.getElementById('list');
+  var wrap = document.getElementById('mainBtnWrap');
+  var last = 0, ticking = false;
+  listEl.addEventListener('scroll', function(){
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(function(){
+      ticking = false;
+      var y = listEl.scrollTop, d = y - last;
+      if (y <= 8) wrap.classList.remove('mb-collapsed');
+      else if (d > 6) wrap.classList.add('mb-collapsed');
+      else if (d < -6) wrap.classList.remove('mb-collapsed');
+      if (Math.abs(d) > 6 || y <= 8) last = y;
+    });
+  }, {passive: true});
+})();
 
 // Hapus SATU barang langsung (terpisah dari stepper −) — sebelumnya cuma
 // bisa dihapus dgn menekan − berulang sampai qty 0, tidak eksplisit &
@@ -1423,6 +1493,7 @@ function renderCartBar(){
   var n = cartCount();
   var orderMode = document.getElementById('app').classList.contains('order-mode');
   document.getElementById('mainBtnWrap').classList.toggle('hidden', n === 0 || shopClosed);
+  if (n === 0) setClearConfirm(false);
   var mbBadge = document.getElementById('mbBadge');
   mbBadge.textContent = fmtQty(n);
   // Blueprint §4 — badge per-baris SELALU memantul saat qty berubah; badge di
@@ -1726,6 +1797,7 @@ document.getElementById('q').addEventListener('input', function(){
 // jadi tidak pernah menumpuk berapa kali pun pelanggan bolak-balik.
 var _histPushed = false;
 function openSheet(){
+  setClearConfirm(false);
   sheetOpen = true;
   renderCartSheet();
   document.getElementById('app').classList.add('order-mode');
@@ -1855,6 +1927,7 @@ function submitOrder(){
 // Blueprint §5 — satu tombol, dua aksi tergantung mode: dari daftar produk
 // membuka ringkasan, dari ringkasan mengirim pesanan.
 document.getElementById('mainBtn').addEventListener('click', function(){
+  if (clearConfirm) { setClearConfirm(false); return; } // tombol "Tidak"
   if (cartCount() === 0) return;
   if (document.getElementById('app').classList.contains('order-mode')) {
     submitOrder();

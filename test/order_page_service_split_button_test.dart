@@ -18,21 +18,58 @@ void main() {
   });
 
   test(
-      'tombol Kosongkan terpisah, merah, memakai clearCart() (gerbang konfirmasi)',
+      'tombol Kosongkan terpisah, merah, di KIRI tombol utama, konfirmasi inline',
       () {
     expect(html, contains('id="mbClear"'));
     expect(html, contains('aria-label="Kosongkan pesanan"'));
     expect(html, contains('<span>Kosongkan pesanan</span>'));
     expect(html, contains(".mb-clear{"));
     expect(html, contains('background:#D64545'));
+    // Halaman awal: tombol hapus DI KIRI tombol utama (urutan DOM).
     expect(
-        html,
-        contains(
-            "document.getElementById('mbClear').addEventListener('click', clearCart)"));
-    // clearCart() tetap lewat showConfirm — anti-misclick.
+        html.indexOf('id="mbClear"'), lessThan(html.indexOf('id="mainBtn"')));
+    // Header halaman Pesanan: clearCart() tetap popup (showConfirm).
     final body = html.substring(html.indexOf('function clearCart(){'),
         html.indexOf("document.getElementById('clearCartBtn')"));
     expect(body, contains('showConfirm('));
+  });
+
+  test('konfirmasi hapus INLINE Ya (merah 1/4 kiri) / Tidak (netral 3/4)', () {
+    expect(html, contains('function setClearConfirm(on)'));
+    expect(html, contains('setClearConfirm(true);'));
+    expect(html, contains("if (clearConfirm) { doClearCart(); return; }"));
+    expect(
+        html,
+        contains(
+            "if (clearConfirm) { setClearConfirm(false); return; } // tombol \"Tidak\""));
+    expect(html, contains('<span class="mb-q">Kosongkan pesanan?</span>'));
+    expect(html, contains('<span class="mb-no">Tidak</span>'));
+    expect(html, contains('#mainBtnWrap.mb-confirm .mb-clear{width:25%;'));
+    expect(html,
+        contains('#mainBtnWrap.mb-confirm .mainbtn{background:var(--field);'));
+    // Berakhir hanya saat Ya/Tidak, pesanan kosong, atau pindah ke Pesanan —
+    // TIDAK ada pembatalan otomatis (timer) maupun karena scroll/ketik.
+    expect(html, contains('if (n === 0) setClearConfirm(false);'));
+    expect(html, contains('function openSheet(){\n  setClearConfirm(false);'));
+    final confirm = html.substring(html.indexOf('function setClearConfirm(on)'),
+        html.indexOf("document.getElementById('mbClear').addEventListener"));
+    expect(confirm, isNot(contains('setTimeout(function(){ setClearConfirm')));
+  });
+
+  test(
+      'scroll ke bawah: keterangan Kosongkan menyusut (sisa ikon); naik: muncul',
+      () {
+    expect(html, contains("listEl.addEventListener('scroll'"));
+    expect(html, contains("wrap.classList.add('mb-collapsed')"));
+    expect(html, contains("wrap.classList.remove('mb-collapsed')"));
+    expect(html, contains('#mainBtnWrap.mb-collapsed .mb-clear{width:56px;'));
+    expect(
+        html,
+        contains(
+            '#mainBtnWrap.mb-collapsed .mb-clear span{max-width:0;opacity:0;}'));
+    // Ikon lebih besar, keterangan lebih kecil.
+    expect(html, contains('.mb-clear svg{width:20px;height:20px;'));
+    expect(html, contains('font-size:9.5px;font-weight:700;line-height:1.15;'));
   });
 
   test(
@@ -41,7 +78,7 @@ void main() {
     expect(
         html,
         contains(
-            '#app.order-mode .mb-clear{width:0;margin-left:0;padding:0;opacity:0;pointer-events:none;}'));
+            '#app.order-mode .mb-clear{width:0;margin-right:0;padding:0;opacity:0;pointer-events:none;}'));
     expect(html, contains('width .32s cubic-bezier(.3,1.25,.45,1)'));
     // Header halaman Pesanan tetap punya tombol Kosongkan sendiri.
     expect(html, contains('id="clearCartBtn"'));
@@ -64,12 +101,15 @@ void main() {
     expect(html, contains('id="itemActions"'));
     // Hapus memakai kelas tombol merah yang SAMA dgn Kosongkan (desain persis).
     expect(html, contains('class="mb-clear" id="itemRemoveBtn"'));
+    // Hapus di KIRI, Tambah di kanan.
+    expect(html.indexOf('id="itemRemoveBtn"'),
+        lessThan(html.indexOf('id="itemAddBtn"')));
     expect(html, contains('<span>Hapus dari pesanan</span>'));
     // Belum ada di pesanan -> Hapus menyusut ke 0 (Tambah selebar penuh).
     expect(
         html,
         contains(
-            '.im-actions.nodel .mb-clear{width:0;margin-left:0;padding:0;opacity:0;pointer-events:none;}'));
+            '.im-actions.nodel .mb-clear{width:0;margin-right:0;padding:0;opacity:0;pointer-events:none;}'));
     expect(
         html,
         contains(
