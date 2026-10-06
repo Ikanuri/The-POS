@@ -7,6 +7,28 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-10-06 (susulan — revolver qty)
+
+- feat(kasir): revolver qty — geser tombol "+" ke kiri memunculkan pita bertanda (tuner) untuk input qty cepat, kecepatan adaptif; di grid/list kasir, baris varian, dan keranjang; bump 2.84.0+179
+
+## 2026-10-06 (susulan — pisah satuan & varian)
+
+- feat(katalog): modal produk memisah baris Satuan (atas) dan Varian (bawah), masing-masing dengan petunjuk geser sendiri; bump 2.83.0+178
+
+## 2026-10-06 (sesi kedelapan puluh tiga lanjutan — katalog HTML, task #19-#24)
+
+- `d3fc3f6` — feat(katalog): tombol hapus pesanan pindah ke kiri (halaman awal & modal), konfirmasi hapus inline Ya/Tidak (Ya merah 1/4 kiri), ikon lebih besar & teks lebih kecil, keterangan menyusut saat scroll ke bawah; bump 2.81.0+176
+- `7cc70b1` — feat(katalog): redesign halaman Pesanan (Mockup B) — kertas struk bergerigi, baris titik-titik, TOTAL besar, isian garis bawah, "Tambah?" -> stepper, mode gelap
+- `86d2f25` — feat(katalog): redesign modal tap produk (Mockup B) — hero, harga besar, segmen satuan yang bisa digeser + walk-through panah, stepper bulat besar, catatan garis bawah; mode gelap
+- `9258f8a` — feat(pelanggan): kartu Kode katalog di form pelanggan (buat/buat ulang/cabut/salin/bagikan, khusus owner)
+- `8ffe924` — feat(katalog): kartu Jam buka katalog di layar Katalog Pesanan (jadwal, jam buka/tutup, Tutup sekarang)
+- `37e0a19` — feat(katalog): mode toko tutup di HTML — jadwal jam (zona HP owner), daftar abu-abu + harga disembunyikan, banner merah menetap, kode per pelanggan (PBKDF2), cek ulang berkala
+- `eedd76e` — feat(katalog): layanan jam buka & kode akses per pelanggan (PBKDF2 ringan, hash dihitung saat kode dibuat, tanpa migrasi)
+- `ecb060a` — feat(katalog): angka total/subtotal berputar seperti roll mesin slot (hanya digit yang berubah, arah acak, transform saja, hormati reduced-motion)
+- `b2ec121` — feat(katalog): modal produk — swipe-down menutup (tanpa pull-to-refresh), X lingkaran merah di pojok kanan atas, draf qty/catatan persisten di localStorage
+- `f31fb41` — feat(katalog): modal produk — Tambah (3/4) + Hapus merah (1/4) satu baris, Hapus menyusut saat belum ada di pesanan
+- `111e7d3` — feat(katalog): tombol bawah dipecah (Lihat Pesanan 3/4 + Kosongkan merah 1/4, animasi menyatu/memecah) dan badge menghitung produk, bukan qty
+
 ## 2026-10-06 (sesi kedelapan puluh tiga lanjutan — pratinjau keranjang)
 
 - `9419bf3` — feat(kasir): pilihan QRIS (chip, hanya bila >=2 QRIS aktif) utk struk bagikan/cetak & pratinjau keranjang, satu pilihan utk semua, tersimpan per-device; bump 2.79.0+174

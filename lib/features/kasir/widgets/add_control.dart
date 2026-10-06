@@ -1,4 +1,7 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../core/theme/app_theme.dart';
 
@@ -13,12 +16,20 @@ class AddControl extends StatefulWidget {
     required this.qty,
     required this.onTap,
     this.onMinus,
+    this.onSetQty,
     this.size = 34,
   });
 
   final double qty;
   final VoidCallback onTap;
   final VoidCallback? onMinus;
+
+  /// "Revolver": menggeser tombol "+" ke KIRI memunculkan pita bertanda
+  /// (seperti tuner radio) untuk input qty cepat — geser kiri = qty naik,
+  /// balik ke kanan = turun (minimum 1; menghapus tetap lewat tombol "-").
+  /// Menerima qty ABSOLUT (bukan selisih) supaya aman dipanggil beberapa kali
+  /// per frame tanpa terpengaruh closure basi. null = fitur nonaktif.
+  final void Function(double qty)? onSetQty;
   final double size;
 
   @override
@@ -66,6 +77,99 @@ class _AddControlState extends State<AddControl> {
   // tombol +/kanan). Hanya berpengaruh saat stepper aktif — begitu tidak
   // aktif, rendering selalu normal (lihat `qtyOnLeft` di build).
   bool _qtyOnLeft = false;
+
+  // ── Revolver (geser "+" ke kiri) ──────────────────────────────────────────
+  final LayerLink _dialLink = LayerLink();
+  OverlayEntry? _dialOverlay;
+  final ValueNotifier<double> _dialValue = ValueNotifier(0);
+  double _dialBase = 0;
+  double _dialAcc = 0;
+  double _dialVel = 0;
+  bool _dialing = false;
+
+  // Satu langkah qty = sekian px geser pelan; makin cepat jari, makin besar
+  // pengali (lihat `_dialUpdate`).
+  static const _kPxPerStep = 11.0;
+  static const _kDialMax = 9999.0;
+
+  bool get _dialEnabled =>
+      widget.onSetQty != null && widget.qty >= 0 && widget.qty % 1 == 0;
+
+  void _dialStart(DragStartDetails d, double circleSize) {
+    if (!_dialEnabled) return;
+    _dialing = true;
+    _dialBase = widget.qty;
+    _dialAcc = 0;
+    _dialVel = 0;
+    _dialLastTs = d.sourceTimeStamp?.inMilliseconds ?? 0;
+    _dialValue.value = math.max(1, widget.qty);
+    _activate();
+    final box = context.findRenderObject() as RenderBox?;
+    final right = box == null
+        ? MediaQuery.of(context).size.width
+        : box.localToGlobal(Offset(box.size.width, 0)).dx;
+    final width = math.min(270.0, right - circleSize - 14);
+    if (width < 120) {
+      _dialing = false;
+      return;
+    }
+    _dialOverlay = OverlayEntry(
+      builder: (_) => Positioned(
+        left: 0,
+        top: 0,
+        child: CompositedTransformFollower(
+          link: _dialLink,
+          showWhenUnlinked: false,
+          targetAnchor: Alignment.centerRight,
+          followerAnchor: Alignment.centerRight,
+          offset: Offset(-(circleSize + 6), 0),
+          child: _DialPill(value: _dialValue, width: width, height: circleSize),
+        ),
+      ),
+    );
+    Overlay.of(context, rootOverlay: true).insert(_dialOverlay!);
+    HapticFeedback.selectionClick();
+  }
+
+  void _dialUpdate(DragUpdateDetails d) {
+    if (!_dialing) return;
+    final dx = d.delta.dx;
+    final dtMs = math.max(
+        1, (d.sourceTimeStamp ?? const Duration(milliseconds: 16)).inMilliseconds -
+            _dialLastTs);
+    _dialLastTs = (d.sourceTimeStamp ?? Duration.zero).inMilliseconds;
+    final v = dx.abs() / math.min(dtMs, 50);
+    _dialVel = _dialVel * 0.7 + v * 0.3;
+    // Pelan (<~0.4 px/ms) = 1x; makin cepat makin besar, dibatasi 6x.
+    final mult = 1 + math.min(5.0, math.max(0.0, _dialVel - 0.4) * 3.5);
+    _dialAcc += (-dx) * mult / _kPxPerStep;
+    // Jangan menumpuk "utang" geser di bawah batas minimum/maksimum.
+    _dialAcc = _dialAcc.clamp(1 - _dialBase, _kDialMax - _dialBase);
+    final next = (_dialBase + _dialAcc).round().clamp(1, _kDialMax.toInt());
+    if (next.toDouble() != _dialValue.value) {
+      _dialValue.value = next.toDouble();
+      HapticFeedback.selectionClick();
+      widget.onSetQty!(next.toDouble());
+    }
+  }
+
+  int _dialLastTs = 0;
+
+  void _dialEnd([DragEndDetails? _]) {
+    if (!_dialing) return;
+    _dialing = false;
+    _dialOverlay?.remove();
+    _dialOverlay = null;
+    if (mounted) setState(() => _qtyOnLeft = true);
+  }
+
+  @override
+  void dispose() {
+    _dialOverlay?.remove();
+    _dialOverlay = null;
+    _dialValue.dispose();
+    super.dispose();
+  }
 
   void _activate() => AddControl.activeStepper.value = this;
 
@@ -159,6 +263,11 @@ class _AddControlState extends State<AddControl> {
         final mainCircle = GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: _handleTap,
+          onHorizontalDragStart:
+              _dialEnabled ? (d) => _dialStart(d, circleSize) : null,
+          onHorizontalDragUpdate: _dialEnabled ? _dialUpdate : null,
+          onHorizontalDragEnd: _dialEnabled ? _dialEnd : null,
+          onHorizontalDragCancel: _dialEnabled ? _dialEnd : null,
           child: AnimatedScale(
             scale: isActive ? _kActiveScale : 1.0,
             duration: _kActiveScaleDuration,
@@ -198,7 +307,9 @@ class _AddControlState extends State<AddControl> {
         // garis ini TIDAK boleh menyambung ke kartu/baris di bawahnya,
         // harus tetap ada jeda di atas & bawahnya.
         if (!inCart) {
-          return markDown(Row(
+          return CompositedTransformTarget(
+              link: _dialLink,
+              child: markDown(Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               CustomPaint(
@@ -208,7 +319,7 @@ class _AddControlState extends State<AddControl> {
               const SizedBox(width: 10),
               mainCircle,
             ],
-          ));
+          )));
         }
 
         // Tombol minus: TANPA latar/fill (lihat dok `redSlot`), cakupan
@@ -236,17 +347,128 @@ class _AddControlState extends State<AddControl> {
           ),
         );
 
-        return markDown(Row(
+        return CompositedTransformTarget(
+            link: _dialLink,
+            child: markDown(Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             minusButton,
             const SizedBox(width: 6),
             mainCircle,
           ],
-        ));
+        )));
       },
     );
   }
+}
+
+/// Pita "revolver" qty: angka besar di kiri (tidak tertutup jari yang ada di
+/// tombol "+" di kanan) + penggaris bertanda yang bergeser mengikuti nilai,
+/// jarum tetap di ujung kanan. Murni tampilan — logika ada di [AddControl].
+class _DialPill extends StatelessWidget {
+  const _DialPill(
+      {required this.value, required this.width, required this.height});
+
+  final ValueNotifier<double> value;
+  final double width;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Material(
+      color: cs.surface,
+      elevation: 6,
+      shadowColor: Colors.black54,
+      borderRadius: BorderRadius.circular(height / 2),
+      child: Container(
+        width: width,
+        height: height,
+        padding: const EdgeInsets.only(left: 14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(height / 2),
+          border: Border.all(color: cs.outlineVariant),
+        ),
+        child: ValueListenableBuilder<double>(
+          valueListenable: value,
+          builder: (_, v, __) => Row(
+            children: [
+              SizedBox(
+                width: 62,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    v.toInt().toString(),
+                    style: AppTheme.numStyle(context,
+                        size: height * 0.62,
+                        weight: FontWeight.w700,
+                        color: cs.onSurface),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: CustomPaint(
+                  size: Size.infinite,
+                  painter: _RulerPainter(
+                    value: v,
+                    tick: cs.onSurfaceVariant,
+                    needle: cs.primary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RulerPainter extends CustomPainter {
+  const _RulerPainter(
+      {required this.value, required this.tick, required this.needle});
+
+  final double value;
+  final Color tick;
+  final Color needle;
+
+  static const gap = 10.0;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final needleX = size.width - 22;
+    final cy = size.height / 2;
+    final paint = Paint()
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = 1.5;
+    final first = (value - needleX / gap).floor();
+    final last = (value + (size.width - needleX) / gap).ceil();
+    for (var n = first; n <= last; n++) {
+      if (n < 1) continue;
+      final x = needleX + (n - value) * gap;
+      if (x < 0 || x > size.width) continue;
+      final major = n % 10 == 0;
+      final mid = n % 5 == 0;
+      final h = size.height * (major ? 0.5 : mid ? 0.36 : 0.22);
+      // Memudar di tepi kiri supaya penggaris tidak terpotong kasar.
+      final fade = (x / 40).clamp(0.0, 1.0);
+      paint.color = tick.withOpacity((major ? 0.9 : 0.55) * fade);
+      canvas.drawLine(Offset(x, cy - h / 2), Offset(x, cy + h / 2), paint);
+    }
+    canvas.drawLine(
+      Offset(needleX, cy - size.height * 0.36),
+      Offset(needleX, cy + size.height * 0.36),
+      Paint()
+        ..color = needle
+        ..strokeWidth = 2.5
+        ..strokeCap = StrokeCap.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _RulerPainter old) =>
+      old.value != value || old.tick != tick || old.needle != needle;
 }
 
 /// Ketebalan garis rambut putus-putus idle (lihat [_DashedVLinePainter]).

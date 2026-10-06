@@ -9,6 +9,7 @@ import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../laporan/stats/customer_stats_screen.dart';
+import 'catalog_code_card.dart';
 
 const _custUuid = Uuid();
 
@@ -279,6 +280,12 @@ class _PelangganFormScreenState
                       ),
                     ),
                     const SizedBox(height: 12),
+                    // Kode katalog (toko tutup) — khusus owner, bukan
+                    // pegawai/asisten.
+                    if (ref.watch(deviceProvider).isOwner) ...[
+                      CatalogCodeCard(customerId: _existing!.id),
+                      const SizedBox(height: 12),
+                    ],
                   ],
                   TextFormField(
                     controller: _nameCtrl,

@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/providers/device_provider.dart';
+import '../../core/services/catalog_access_service.dart';
 import '../../core/services/cloudflare_publish_service.dart';
 import '../../core/services/order_page_service.dart';
 
@@ -28,6 +29,12 @@ class OrderShareScreen extends ConsumerStatefulWidget {
   ConsumerState<OrderShareScreen> createState() => _OrderShareScreenState();
 }
 
+/// Jam buka katalog (toko tutup) — lihat `CatalogAccessService`.
+final _hoursProvider = FutureProvider<CatalogHours>((ref) async {
+  final db = ref.watch(databaseProvider);
+  return CatalogAccessService.loadHours(db);
+});
+
 /// Item 12 — toggle direct WA (wa.me ke nomor toko) vs share generik.
 /// Default ON (true) supaya perilaku lama tetap sama sebelum user mengatur.
 final _waDirectProvider = FutureProvider<bool>((ref) async {
@@ -49,11 +56,9 @@ class _OrderShareScreenState extends ConsumerState<OrderShareScreen> {
     final db = ref.read(databaseProvider);
     final device = ref.read(deviceProvider);
     final storeName = (await db.getSetting('store_name'))?.trim();
-    final storeWhatsapp =
-        (await db.getSetting('store_whatsapp'))?.trim() ?? '';
-    final name = (storeName == null || storeName.isEmpty)
-        ? device.storeName
-        : storeName;
+    final storeWhatsapp = (await db.getSetting('store_whatsapp'))?.trim() ?? '';
+    final name =
+        (storeName == null || storeName.isEmpty) ? device.storeName : storeName;
     final waDirect = ref.read(_waDirectProvider).valueOrNull ?? true;
     final result = await OrderPageService.generateHtml(
       db: db,
@@ -68,6 +73,91 @@ class _OrderShareScreenState extends ConsumerState<OrderShareScreen> {
       });
     }
     return result.html;
+  }
+
+  Future<void> _saveHours(CatalogHours h) async {
+    await CatalogAccessService.saveHours(ref.read(databaseProvider), h);
+    ref.invalidate(_hoursProvider);
+  }
+
+  Future<void> _pickTime(CatalogHours h, {required bool open}) async {
+    final cur = open ? h.openMinutes : h.closeMinutes;
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: cur ~/ 60, minute: cur % 60),
+    );
+    if (picked == null) return;
+    final m = picked.hour * 60 + picked.minute;
+    await _saveHours(
+        open ? h.copyWith(openMinutes: m) : h.copyWith(closeMinutes: m));
+  }
+
+  /// Jam buka katalog + tombol darurat "Tutup sekarang". Jadwal berjalan
+  /// sendiri di halaman katalog (tak perlu Publish tiap pagi/malam); Publish
+  /// ulang hanya perlu saat jadwal/tombol darurat berubah.
+  Widget _buildHoursCard() {
+    final h = ref.watch(_hoursProvider).valueOrNull ?? const CatalogHours();
+    return Column(
+      children: [
+        SwitchListTile(
+          key: const ValueKey('hours-enabled'),
+          secondary: const Icon(Icons.schedule),
+          title: const Text('Atur jam buka katalog'),
+          subtitle: Text(h.enabled
+              ? 'Di luar jam buka, katalog tampil tutup (abu-abu, harga '
+                  'disembunyikan)'
+              : 'Mati: katalog selalu buka'),
+          value: h.enabled,
+          onChanged: (v) => _saveHours(h.copyWith(enabled: v)),
+        ),
+        if (h.enabled)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    key: const ValueKey('hours-open'),
+                    style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(0, 44)),
+                    onPressed: () => _pickTime(h, open: true),
+                    child: Text('Buka ${CatalogHours.hhmm(h.openMinutes)}'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton(
+                    key: const ValueKey('hours-close'),
+                    style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(0, 44)),
+                    onPressed: () => _pickTime(h, open: false),
+                    child: Text('Tutup ${CatalogHours.hhmm(h.closeMinutes)}'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        SwitchListTile(
+          key: const ValueKey('hours-forced'),
+          secondary: Icon(Icons.store_mall_directory_outlined,
+              color:
+                  h.forcedClosed ? Theme.of(context).colorScheme.error : null),
+          title: const Text('Tutup sekarang'),
+          subtitle:
+              const Text('Libur/darurat: katalog tutup walau dalam jam buka'),
+          value: h.forcedClosed,
+          onChanged: (v) => _saveHours(h.copyWith(forcedClosed: v)),
+        ),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 0, 16, 10),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text('Berlaku di katalog setelah Publish/bagikan ulang.',
+                style: TextStyle(fontSize: 11.5)),
+          ),
+        ),
+      ],
+    );
   }
 
   Future<void> _openCloudflareSettings() async {
@@ -261,8 +351,7 @@ class _OrderShareScreenState extends ConsumerState<OrderShareScreen> {
           const SizedBox(height: 8),
           Card(
             child: Builder(builder: (context) {
-              final waDirect =
-                  ref.watch(_waDirectProvider).valueOrNull ?? true;
+              final waDirect = ref.watch(_waDirectProvider).valueOrNull ?? true;
               return SwitchListTile(
                 secondary: const Icon(Icons.chat_outlined),
                 title: const Text('Kirim Langsung ke Nomor WA Toko'),
@@ -280,6 +369,8 @@ class _OrderShareScreenState extends ConsumerState<OrderShareScreen> {
               );
             }),
           ),
+          const SizedBox(height: 8),
+          Card(child: _buildHoursCard()),
           const SizedBox(height: 8),
           Card(
             color: scheme.errorContainer.withOpacity(0.4),
@@ -305,7 +396,8 @@ class _OrderShareScreenState extends ConsumerState<OrderShareScreen> {
             onPressed: _publishing ? null : _publishToWeb,
             icon: _publishing
                 ? const SizedBox(
-                    width: 16, height: 16,
+                    width: 16,
+                    height: 16,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.cloud_upload_outlined),

@@ -269,7 +269,10 @@ void main() {
     // terang (cek marker fungsional, bukan sekadar substring bebas — teks
     // "prefers-color-scheme" masih boleh muncul di komentar penjelas).
     expect(result.html.contains('@media (prefers-color-scheme'), isFalse);
-    expect(result.html.contains('matchMedia'), isFalse);
+    // `matchMedia` kini dipakai HANYA utk prefers-reduced-motion (angka roll) —
+    // yang dilarang tetap pemakaiannya utk prefers-color-scheme.
+    expect(result.html.contains("matchMedia('(prefers-color-scheme"), isFalse);
+    expect(result.html.contains("matchMedia('(prefers-reduced-motion"), isTrue);
     expect(result.html.contains("saved = 'light'"), isTrue);
 
     // Font disamakan dengan app (Hanken Grotesk = UI, Newsreader = angka),
@@ -877,7 +880,7 @@ void main() {
     expect(html.contains('id="mbTotal"'), isTrue,
         reason: 'nominal total harus menyatu di dalam tombol utama');
     expect(html.contains('id="mbBadge"'), isTrue);
-    expect(html.contains("classList.toggle('hidden', n === 0)"), isTrue,
+    expect(html.contains("classList.toggle('hidden', n === 0 || shopClosed)"), isTrue,
         reason: 'tombol sembunyi total saat belum ada barang dipilih');
     expect(html.contains("orderMode ? 'Kirim via WhatsApp' : 'Lihat Pesanan'"),
         isTrue);

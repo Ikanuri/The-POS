@@ -261,6 +261,13 @@ class CloudflarePublishService {
     return CloudflareCredentials(apiToken: token, accountId: accountId);
   }
 
+  /// URL katalog yang sudah pernah dipublish (null bila belum pernah) —
+  /// dipakai utk menyertakan link saat membagikan kode katalog pelanggan.
+  Future<String?> publishedUrl() async {
+    final name = await _storage.read(key: _kProjectName);
+    return (name == null || name.isEmpty) ? null : 'https://$name.pages.dev';
+  }
+
   Future<void> saveCredentials(
       {required String apiToken, required String accountId}) async {
     await _storage.write(key: _kApiToken, value: apiToken);

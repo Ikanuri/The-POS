@@ -8,6 +8,58 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 6 Oktober 2026 (Revolver Qty)
+
+- **Input jumlah cepat dengan geser:** geser tombol **+** ke **kiri** (di daftar produk kasir maupun keranjang) dan muncul pita bertanda seperti tuner radio. Geser pelan = naik satu-satu, geser cepat = meloncat lebih jauh; geser balik ke kanan untuk menurunkan. Angka besar tampil di kiri sehingga tidak tertutup jari. Tap biasa pada + tetap menambah 1.
+
+---
+
+## 6 Oktober 2026 (Satuan & Varian Terpisah)
+
+- **Pilihan produk di katalog lebih jelas:** baris **Satuan** di atas, baris **Varian** di bawahnya. Pindah varian tetap mempertahankan satuan yang sama bila tersedia. Masing-masing punya petunjuk geser sendiri bila pilihannya banyak. Perlu Publish ulang katalog.
+
+---
+
+## 6 Oktober 2026 (Katalog Pesanan)
+
+### 🎨 Tampilan Baru Katalog
+- **Modal pilih produk didesain ulang:** ikon, nama, dan harga besar di
+  tengah; pilihan satuan berupa tombol geser (dengan petunjuk panah
+  berdenyut bila satuannya banyak); jumlah dengan tombol bulat besar; catatan
+  berupa garis bawah sederhana.
+- **Halaman Pesanan kini berbentuk struk:** daftar barang di atas kertas
+  bergerigi ("2× Gula Pasir ······ 30.000"), TOTAL besar, dan isian Nama/HP
+  bergaris bawah. Untuk mengubah jumlah, ketuk kata kecil **"Tambah?"** di
+  bawah harga barang — berubah mulus menjadi tombol − dan +. Tombol − di
+  jumlah 1 menghapus barang. Ketuk nama barang untuk mengubah satuan/catatan.
+- Kedua halaman mengikuti **mode gelap**.
+
+### ✨ Fitur Baru
+- **Toko tutup di katalog.** Atur jam buka di Pengaturan → Katalog Pesanan
+  (dan tombol darurat "Tutup sekarang"). Di luar jam buka, katalog tampil
+  abu-abu dan tidak bisa dipakai, harga disembunyikan, dengan pesan merah
+  "Toko tutup · buka besok 07.00". Jadwal berjalan sendiri tiap hari — cukup
+  Publish sekali setelah mengubah jadwal.
+- **Kode katalog per pelanggan.** Di form pelanggan ada kartu "Kode katalog"
+  (buat, buat ulang, cabut, salin, bagikan). Pelanggan langganan memasukkan
+  kodenya lewat tautan "Pelanggan langganan? Masukkan kode" agar tetap bisa
+  memesan saat toko tutup. Pesanannya berjalan seperti pesanan biasa.
+- **Tombol bawah katalog dipecah:** tombol merah "Kosongkan pesanan" di
+  kiri dan "Lihat Pesanan" di kanan. Menekan Kosongkan memunculkan
+  konfirmasi langsung di baris tombol itu (Ya merah di kiri, Tidak di
+  kanan), tanpa popup, dan bertahan walau Bapak/Ibu menggulir atau mengetik
+  di pencarian. Saat daftar digulir ke bawah, tulisan di tombol Kosongkan
+  menyusut jadi ikon saja; muncul lagi saat digulir ke atas. Saat masuk
+  halaman Pesanan, tombol menyatu dengan animasi halus. Angka di tombol kini
+  menghitung **jumlah produk**, bukan total qty.
+- **Modal produk lebih rapi:** Hapus (merah, kiri) + Tambah satu baris, tombol
+  tutup (X) lingkaran merah di pojok kanan atas, geser ke bawah untuk
+  menutup (tanpa memicu refresh browser), dan isian jumlah/catatan tidak
+  hilang walau halaman ter-refresh.
+- **Angka total berputar seperti roll mesin slot** saat berubah.
+
+> Perubahan katalog baru terlihat pelanggan setelah **Publish ulang**.
+
 ## 6 Oktober 2026
 
 ### ✨ Fitur Baru

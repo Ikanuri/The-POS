@@ -2826,6 +2826,30 @@ typedef _TbBtn = LabeledToolButton;
 /// Item 16: bila produk punya >1 baris satuan NON-varian di keranjang (mis.
 /// Dus + Pcs), tombol minus TIDAK menebak baris mana yang dikurangi — beri
 /// info & arahkan atur lewat keranjang. Kasus umum (1 satuan) tetap langsung.
+/// Revolver (geser "+" ke kiri) untuk produk induk: set qty ABSOLUT satuan
+/// dasar. Membaca `notifier.current` (bukan `cart` closure) karena dipanggil
+/// beberapa kali per frame. Produk dgn >1 satuan di keranjang dilewati
+/// (ambigu — sama seperti tombol "-").
+void _dialSetProductQty({
+  required CartNotifier notifier,
+  required Product product,
+  required CatalogDetail d,
+  required void Function(Product, CatalogDetail) onQuickAdd,
+  required double target,
+}) {
+  final lines = notifier.current
+      .where((c) => c.productId == product.id && !c.isVariant)
+      .toList();
+  if (lines.length > 1) return;
+  if (lines.isEmpty) {
+    if (d.baseUnitId.isEmpty) return;
+    onQuickAdd(product, d);
+    if (target > 1) notifier.setEffectiveQty(d.baseUnitId, target);
+    return;
+  }
+  notifier.setEffectiveQty(lines.first.productUnitId, target);
+}
+
 void _decrementProduct(BuildContext context, List<CartItem> cart,
     CartNotifier notifier, String productId) {
   final unitLines =
@@ -2984,6 +3008,15 @@ class _ProductCard extends ConsumerWidget {
                           } else {
                             onQuickAdd(product, d);
                           }
+                          onAfterQtyChange?.call();
+                        },
+                        onSetQty: (q) {
+                          _dialSetProductQty(
+                              notifier: notifier,
+                              product: product,
+                              d: d,
+                              onQuickAdd: onQuickAdd,
+                              target: q);
                           onAfterQtyChange?.call();
                         },
                         onMinus: qty > 0
@@ -3220,6 +3253,15 @@ class _ProductListTileState extends ConsumerState<_ProductListTile> {
                         }
                         widget.onAfterQtyChange?.call();
                       },
+                      onSetQty: (q) {
+                        _dialSetProductQty(
+                            notifier: notifier,
+                            product: product,
+                            d: d,
+                            onQuickAdd: widget.onQuickAdd,
+                            target: q);
+                        widget.onAfterQtyChange?.call();
+                      },
                       onMinus: qty > 0
                           ? () {
                               _decrementProduct(
@@ -3341,6 +3383,22 @@ class _VariantDropdown extends ConsumerWidget {
                               parentDetail: d,
                               v: v,
                             );
+                            onAfterQtyChange?.call();
+                          },
+                          onSetQty: (q) {
+                            final d = parentDetail;
+                            if (d == null) return;
+                            if (!notifier.current
+                                .any((c) => c.productUnitId == v.unitId)) {
+                              _incrementVariant(
+                                notifier: notifier,
+                                cart: notifier.current,
+                                parent: parent,
+                                parentDetail: d,
+                                v: v,
+                              );
+                            }
+                            if (q > 1) notifier.setEffectiveQty(v.unitId, q);
                             onAfterQtyChange?.call();
                           },
                           onMinus: vQty > 0
