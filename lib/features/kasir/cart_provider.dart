@@ -22,6 +22,10 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
   /// untuk fitur tambah belanjaan.
   final String cartId;
 
+  /// Isi keranjang TERKINI (bukan snapshot closure) — untuk pemanggil yang
+  /// bisa beraksi beberapa kali per frame (mis. revolver qty).
+  List<CartItem> get current => state;
+
   static const _prefPrefix = 'cart_v1_';
   String get _prefKey => '$_prefPrefix$cartId';
 

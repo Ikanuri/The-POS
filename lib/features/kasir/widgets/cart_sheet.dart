@@ -2323,6 +2323,10 @@ class _CartItemTileState extends ConsumerState<_CartItemTile>
                     size: 44,
                     onTap: () => notifier.setEffectiveQty(
                         item.productUnitId, effectiveQty + 1),
+                    onSetQty: isZeroed
+                        ? null
+                        : (q) =>
+                            notifier.setEffectiveQty(item.productUnitId, q),
                     onMinus: isZeroed
                         ? null
                         : minusConfirm

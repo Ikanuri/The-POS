@@ -8,6 +8,12 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 6 Oktober 2026 (Revolver Qty)
+
+- **Input jumlah cepat dengan geser:** geser tombol **+** ke **kiri** (di daftar produk kasir maupun keranjang) dan muncul pita bertanda seperti tuner radio. Geser pelan = naik satu-satu, geser cepat = meloncat lebih jauh; geser balik ke kanan untuk menurunkan. Angka besar tampil di kiri sehingga tidak tertutup jari. Tap biasa pada + tetap menambah 1.
+
+---
+
 ## 6 Oktober 2026 (Satuan & Varian Terpisah)
 
 - **Pilihan produk di katalog lebih jelas:** baris **Satuan** di atas, baris **Varian** di bawahnya. Pindah varian tetap mempertahankan satuan yang sama bila tersedia. Masing-masing punya petunjuk geser sendiri bila pilihannya banyak. Perlu Publish ulang katalog.

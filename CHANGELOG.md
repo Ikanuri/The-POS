@@ -7,6 +7,10 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-10-06 (susulan — revolver qty)
+
+- feat(kasir): revolver qty — geser tombol "+" ke kiri memunculkan pita bertanda (tuner) untuk input qty cepat, kecepatan adaptif; di grid/list kasir, baris varian, dan keranjang; bump 2.84.0+179
+
 ## 2026-10-06 (susulan — pisah satuan & varian)
 
 - feat(katalog): modal produk memisah baris Satuan (atas) dan Varian (bawah), masing-masing dengan petunjuk geser sendiri; bump 2.83.0+178
