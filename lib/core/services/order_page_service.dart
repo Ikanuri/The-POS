@@ -514,7 +514,7 @@ body{
   opacity:0;visibility:hidden;transition:opacity .2s ease,visibility 0s linear .2s;}
 .scrim.show{opacity:1;visibility:visible;transition:opacity .2s ease;}
 .sheet{position:fixed;left:0;right:0;bottom:0;max-width:480px;margin:0 auto;
-  background:var(--panel);border-radius:18px 18px 0 0;z-index:21;
+  background:var(--card);border-radius:30px 30px 0 0;z-index:21;
   max-height:86vh;display:flex;flex-direction:column;
   transform:translateY(100%);transition:transform .22s ease-out;}
 .sheet.show{transform:translateY(0);}
@@ -538,7 +538,7 @@ body{
 .sheet-body{overscroll-behavior-y:contain;}
 .sheet{touch-action:pan-y;}
 html.modal-open,html.modal-open body{overscroll-behavior-y:none;}
-.sheet-body{overflow-y:auto;padding:0 16px;flex:1;}
+.sheet-body{overflow-y:auto;padding:0 20px 12px;flex:1;}
 .citem{display:flex;flex-direction:column;gap:7px;padding:11px 0;
   border-bottom:1px solid var(--line);}
 .ci-top{display:flex;align-items:center;gap:10px;cursor:pointer;}
@@ -580,20 +580,51 @@ html.modal-open,html.modal-open body{overscroll-behavior-y:none;}
   border-radius:var(--r-btn);padding:11px 13px;font-size:16px;color:var(--ink);
   font-family:var(--font);outline:none;}
 textarea.tfield{resize:none;min-height:64px;}
-.unit-chips{display:flex;flex-wrap:wrap;gap:9px;margin-bottom:4px;}
-.unit-chip{border:1px solid var(--line);background:var(--field);color:var(--ink);
-  border-radius:999px;padding:10px 16px;font-size:14.5px;font-weight:600;cursor:pointer;}
-.unit-chip.sel{background:var(--accent);border-color:var(--accent);color:#fff;}
-.im-price-display{border:1px solid var(--line);background:var(--field);
-  border-radius:var(--r-btn);padding:11px 13px;font-size:18px;font-weight:700;
-  font-family:var(--serif);color:var(--ink);}
-.im-qty{display:flex;align-items:center;gap:14px;margin-top:14px;}
-.im-qty button{width:42px;height:42px;border:1px solid var(--line);background:var(--field);
-  color:var(--accent);font-size:22px;font-weight:700;border-radius:999px;cursor:pointer;
-  flex-shrink:0;}
-.im-qty-input{width:70px;text-align:center;border:1px solid var(--line);
-  background:var(--field);border-radius:var(--r-btn);padding:10px 4px;
-  font-size:19px;font-weight:700;font-family:var(--serif);color:var(--ink);outline:none;}
+.im-hero{text-align:center;padding:14px 8px 0;}
+.im-emoji{font-size:54px;line-height:1;}
+.im-name{margin:8px 0 0;font-family:var(--serif);font-size:26px;font-weight:600;line-height:1.15;}
+.im-cat{display:inline-block;margin-top:7px;font-size:11.5px;font-weight:700;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--accent);background:rgba(201,100,66,.13);border-radius:999px;padding:4px 11px;}
+.im-cat:empty{display:none;}
+.im-price{text-align:center;margin-top:12px;font-family:var(--serif);font-size:38px;font-weight:600;
+  letter-spacing:-.5px;display:flex;align-items:baseline;justify-content:center;gap:6px;}
+.im-price .roll{justify-content:center;}
+.im-price small{font-family:var(--font);font-size:14px;color:var(--ink-3);font-weight:500;letter-spacing:0;}
+/* Satuan/varian: segmented control yang bisa DIGESER bila banyak. */
+.im-seg-wrap{margin-top:16px;position:relative;}
+.im-seg{display:flex;gap:4px;background:var(--field);border-radius:24px;padding:4px;
+  overflow-x:auto;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+.im-seg::-webkit-scrollbar{display:none;}
+.unit-chip{flex:1 0 auto;min-width:88px;border:none;background:transparent;color:var(--ink-2);
+  border-radius:20px;padding:8px 14px;font-family:var(--font);font-size:14px;font-weight:700;
+  cursor:pointer;text-align:center;scroll-snap-align:center;line-height:1.2;
+  transition:background-color .2s ease,color .2s ease,box-shadow .2s ease;}
+.unit-chip small{display:block;font-size:11.5px;font-weight:600;color:var(--ink-3);margin-top:1px;}
+.unit-chip.sel{background:var(--card);color:var(--ink);box-shadow:0 2px 8px rgba(60,40,20,.16);}
+.unit-chip.sel small{color:var(--accent);}
+/* Walk-through kecil (permanen tiap modal dibuka) bila pilihan melebihi lebar. */
+.im-seg-hint{display:none;align-items:center;justify-content:center;gap:6px;margin-top:8px;
+  font-size:12px;font-weight:600;color:var(--ink-3);}
+.im-seg-hint.show{display:flex;}
+.im-seg-hint .arr{display:inline-block;font-size:20px;line-height:1;color:var(--accent);
+  animation:arr-pulse 1.1s ease-in-out infinite;}
+@keyframes arr-pulse{0%,100%{transform:translateX(0);opacity:.55;}50%{transform:translateX(6px);opacity:1;}}
+.im-qty{display:flex;align-items:center;justify-content:center;gap:22px;margin-top:20px;}
+.im-qty button{width:54px;height:54px;border:1.5px solid var(--line);background:transparent;
+  color:var(--accent);font-size:26px;font-weight:500;border-radius:50%;cursor:pointer;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;padding:0;transition:transform .12s ease;}
+.im-qty button:active{transform:scale(.92);}
+.im-qty button.p{background:var(--accent);border-color:var(--accent);color:#fff;}
+.im-qty-input{width:96px;text-align:center;border:none;background:transparent;padding:0;
+  font-size:54px;line-height:1;font-weight:600;font-family:var(--serif);color:var(--ink);outline:none;
+  -moz-appearance:textfield;appearance:textfield;}
+.im-qty-input::-webkit-outer-spin-button,.im-qty-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
+.im-eq{text-align:center;margin-top:8px;font-size:13px;color:var(--ink-3);min-height:18px;}
+.im-note{margin-top:18px;border-bottom:1.5px solid var(--line);padding:6px 2px 8px;}
+.im-note label{display:block;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);}
+.im-note textarea{width:100%;border:none;background:transparent;resize:none;outline:none;
+  font-family:var(--font);font-size:15px;color:var(--ink);padding:5px 0 0;min-height:28px;}
+.im-note textarea::placeholder{color:var(--ink-3);opacity:.7;}
 .im-actions{display:flex;align-items:stretch;}
 /* Pola SAMA dgn tombol bawah halaman awal (Lihat Pesanan + Kosongkan): aksi
    utama ~3/4, Hapus merah ~1/4. Belum ada di pesanan -> Hapus menyusut ke
@@ -602,7 +633,7 @@ textarea.tfield{resize:none;min-height:64px;}
 .add-cta{flex:1 1 0;min-width:0;border:none;background:var(--accent);color:#fff;border-radius:999px;
   padding:15px;font-size:16.5px;font-weight:700;cursor:pointer;}
 .add-cta:disabled{opacity:.4;}
-.sheet-foot{padding:14px 16px calc(16px + env(safe-area-inset-bottom));
+.sheet-foot{background:var(--card);padding:14px 16px calc(16px + env(safe-area-inset-bottom));
   border-top:1px solid var(--line);flex-shrink:0;}
 .grand{display:flex;justify-content:space-between;align-items:baseline;
   margin-bottom:12px;}
@@ -697,19 +728,28 @@ textarea.tfield{resize:none;min-height:64px;}
 <div class="scrim" id="itemScrim"></div>
 <div class="sheet" id="itemSheet">
   <div class="sheet-grip"></div>
-  <div class="sheet-head"><b id="itemTitle">Produk</b><button class="sheet-x" id="itemSheetClose" type="button">&times;</button></div>
+  <button class="sheet-x" id="itemSheetClose" type="button" aria-label="Tutup">&times;</button>
   <div class="sheet-body">
-    <div class="unit-chips" id="itemUnitChips"></div>
-    <div class="field-label">Harga</div>
-    <div class="im-price-display" id="itemPriceDisplay">Rp 0</div>
-    <div class="field-label">Jumlah</div>
-    <div class="im-qty">
-      <button type="button" id="itemQtyDec">−</button>
-      <input class="im-qty-input" id="itemQtyVal" type="number" inputmode="decimal" min="0" step="any" value="1" />
-      <button type="button" id="itemQtyInc">+</button>
+    <div class="im-hero">
+      <div class="im-emoji" id="itemEmoji" aria-hidden="true"></div>
+      <h1 class="im-name" id="itemTitle">Produk</h1>
+      <span class="im-cat" id="itemCat"></span>
     </div>
-    <div class="field-label">Catatan (opsional)</div>
-    <textarea class="tfield" id="itemNote" placeholder="mis. yang matang, size L"></textarea>
+    <div class="im-price" id="itemPriceDisplay"><span class="roll" id="itemPriceVal">Rp 0</span><small id="itemPriceUnit"></small></div>
+    <div class="im-seg-wrap" id="itemSegWrap">
+      <div class="im-seg" id="itemUnitChips"></div>
+      <div class="im-seg-hint" id="itemSegHint"><span class="arr" aria-hidden="true">&rsaquo;</span> Geser untuk satuan/varian lainnya</div>
+    </div>
+    <div class="im-qty">
+      <button type="button" id="itemQtyDec" aria-label="Kurangi">&minus;</button>
+      <input class="im-qty-input" id="itemQtyVal" type="number" inputmode="decimal" min="0" step="any" value="1" />
+      <button type="button" class="p" id="itemQtyInc" aria-label="Tambah">+</button>
+    </div>
+    <div class="im-eq" id="itemEq"></div>
+    <div class="im-note">
+      <label for="itemNote">Catatan</label>
+      <textarea id="itemNote" rows="1" placeholder="mis. yang matang, ukuran besar"></textarea>
+    </div>
   </div>
   <div class="sheet-foot">
     <div class="grand"><span class="gl">Subtotal</span><span class="gv roll" id="itemSubtotal">Rp 0</span></div>
@@ -1636,6 +1676,8 @@ loadDrafts();
 function openItemModal(p, preselectUnitId){
   itemModalProduct = p;
   document.getElementById('itemTitle').textContent = p.name;
+  document.getElementById('itemEmoji').textContent = pickIcon(p.name, p.category);
+  document.getElementById('itemCat').textContent = p.category || '';
   loadUnitIntoForm(p, preselectUnitId || p.unitId);
   document.getElementById('itemScrim').classList.add('show');
   document.getElementById('itemSheet').classList.add('show');
@@ -1653,23 +1695,36 @@ function closeItemModal(){
 function renderUnitChips(p, selectedUnitId){
   var opts = unitOptionsFor(p);
   var wrap = document.getElementById('itemUnitChips');
+  var box = document.getElementById('itemSegWrap');
   wrap.innerHTML = '';
-  wrap.style.display = opts.length <= 1 ? 'none' : 'flex';
+  box.style.display = opts.length <= 1 ? 'none' : 'block';
+  var selEl = null;
   opts.forEach(function(o){
     var chip = document.createElement('button');
     chip.type = 'button';
     chip.className = 'unit-chip' + (o.unitId === selectedUnitId ? ' sel' : '');
-    chip.textContent = o.label + ' · ' + rp(o.price);
+    chip.innerHTML = esc(o.label) + '<small>' + rp(o.price) + '</small>';
     chip.addEventListener('click', function(){ loadUnitIntoForm(p, o.unitId); });
     wrap.appendChild(chip);
+    if (o.unitId === selectedUnitId) selEl = chip;
+  });
+  // Walk-through: tampil SETIAP modal dibuka selama pilihan melebihi lebar
+  // (perlu digeser); panah berdenyut lewat CSS. Pilihan terpilih digulirkan
+  // ke tengah supaya selalu terlihat.
+  var hint = document.getElementById('itemSegHint');
+  requestAnimationFrame(function(){
+    hint.classList.toggle('show', opts.length > 1 && wrap.scrollWidth > wrap.clientWidth + 2);
+    if (selEl && wrap.scrollWidth > wrap.clientWidth + 2) {
+      wrap.scrollLeft = selEl.offsetLeft - (wrap.clientWidth - selEl.offsetWidth) / 2;
+    }
   });
 }
 
 function loadUnitIntoForm(p, unitId){
   itemModalUnitId = unitId;
   renderUnitChips(p, unitId);
-  document.getElementById('itemPriceDisplay').textContent =
-      rp(byUnit[unitId].price) + ' /' + esc(byUnit[unitId].unit);
+  rollSet(document.getElementById('itemPriceVal'), rp(byUnit[unitId].price));
+  document.getElementById('itemPriceUnit').textContent = '/ ' + byUnit[unitId].unit;
   itemModalQty = cart[unitId] || 1;
   var draftNote = cartNotes[unitId] || '';
   var dr = _drafts[unitId];
@@ -1683,6 +1738,8 @@ function loadUnitIntoForm(p, unitId){
 function updateItemSubtotal(){
   var price = itemModalUnitId ? byUnit[itemModalUnitId].price : 0;
   rollSet(document.getElementById('itemSubtotal'), rp(price * itemModalQty));
+  document.getElementById('itemEq').textContent =
+      itemModalUnitId ? fmtQty(itemModalQty) + ' × ' + rp(price) : '';
 }
 
 // Field jumlah bisa diketik LANGSUNG (mis. 2.5 kg), selain lewat tombol +/-.

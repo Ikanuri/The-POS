@@ -176,4 +176,46 @@ void main() {
     // Panggilan pertama = tanpa animasi (render awal).
     expect(html, contains('if (old === undefined || ROLL_REDUCED)'));
   });
+
+  test(
+      'redesign modal (Mockup B): hero, harga raksasa, segmen satuan, stepper besar',
+      () {
+    expect(html, contains('class="im-hero"'));
+    expect(html, contains('id="itemEmoji"'));
+    expect(html, contains('id="itemCat"'));
+    expect(html, contains('class="im-price" id="itemPriceDisplay"'));
+    expect(
+        html,
+        contains(
+            '.im-price{text-align:center;margin-top:12px;font-family:var(--serif);font-size:38px;'));
+    expect(html, contains('class="im-seg" id="itemUnitChips"'));
+    expect(html, contains('.im-qty-input{width:96px;'));
+    expect(
+        html,
+        contains(
+            'font-size:54px;line-height:1;font-weight:600;font-family:var(--serif)'));
+    expect(html, contains('id="itemEq"'));
+    expect(html, contains('<label for="itemNote">Catatan</label>'));
+    // Sheet memakai permukaan kartu (otomatis ikut mode gelap).
+    expect(
+        html,
+        contains(
+            'background:var(--card);border-radius:30px 30px 0 0;z-index:21;'));
+  });
+
+  test(
+      'segmen satuan: walk-through panah berdenyut tiap modal dibuka bila perlu digeser',
+      () {
+    expect(html, contains('id="itemSegHint"'));
+    expect(html, contains('Geser untuk satuan/varian lainnya'));
+    expect(html, contains('@keyframes arr-pulse'));
+    // Dihitung SETIAP renderUnitChips (tiap modal dibuka), bukan sekali saja.
+    expect(
+        html,
+        contains(
+            "hint.classList.toggle('show', opts.length > 1 && wrap.scrollWidth > wrap.clientWidth + 2)"));
+    expect(html, isNot(contains("localStorage.setItem('posSegHint")));
+    // Harga besar ikut efek roll saat satuan berganti.
+    expect(html, contains("rollSet(document.getElementById('itemPriceVal')"));
+  });
 }
