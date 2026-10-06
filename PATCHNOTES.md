@@ -8,12 +8,6 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
-## 6 Oktober 2026 (Perbaikan Kirim WhatsApp)
-
-- **Pesanan dari katalog via WhatsApp kini bisa ditempel utuh:** kode pesanan di baris terakhir sebelumnya terpotong oleh WhatsApp sehingga "Tempel Pesanan" gagal. Perlu Publish ulang katalog.
-
----
-
 ## 6 Oktober 2026 (Katalog Pesanan)
 
 ### 🎨 Tampilan Baru Katalog

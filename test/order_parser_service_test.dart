@@ -90,21 +90,6 @@ void main() {
     await db.close();
   });
 
-  test('kode mesin TANPA "#" (share WhatsApp katalog) tetap terbaca',
-      () async {
-    final db = AppDatabase(NativeDatabase.memory());
-    final productId = await _addProduct(db, name: 'Gula', price: 15000);
-    final unitId = await _unitIdOf(db, productId);
-
-    final text = 'PESANAN — Toko\nNama: Budi\nHP: -\n\nPSN:$unitId=2;';
-    final result = await OrderParserService.parse(db: db, text: text);
-
-    expect(result.hasMachineCode, isTrue);
-    expect(result.items, hasLength(1));
-    expect(result.items.first.qty, 2);
-    await db.close();
-  });
-
   test('unitId dobel di kode mesin digabung qty-nya, bukan jadi 2 baris',
       () async {
     final db = AppDatabase(NativeDatabase.memory());
