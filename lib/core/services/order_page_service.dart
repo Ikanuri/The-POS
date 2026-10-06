@@ -504,8 +504,7 @@ body{
   display:flex;align-items:center;justify-content:center;}
 .back-btn svg{width:19px;height:19px;}
 .order-title{flex:1;min-width:0;}
-.order-body{flex:1;overflow-y:auto;padding:0 16px 150px;}
-.order-body .grand{margin-top:16px;}
+.order-body{flex:1;overflow-y:auto;padding:4px 18px 150px;}
 /* Item 79 M4 — scrim & overlay dulu instan display:none/block (pop
    tiba-tiba), sekarang fade konsisten dgn timing .sheet (.22s) yang sudah
    ada. `visibility` dipakai supaya tetap tidak menangkap klik/tab-focus
@@ -522,10 +521,67 @@ body{
   margin:10px auto 4px;flex-shrink:0;}
 .sheet-head{display:flex;align-items:center;padding:6px 56px 10px 16px;flex-shrink:0;}
 .sheet-head b{font-size:18px;}
-.clear-cart-btn{margin-left:auto;border:1px solid var(--danger);background:var(--danger-bg);
-  color:var(--danger);font-size:13px;font-weight:700;cursor:pointer;padding:8px 12px;
-  border-radius:999px;display:flex;align-items:center;gap:6px;white-space:nowrap;flex-shrink:0;}
-.clear-cart-btn svg{width:15px;height:15px;flex-shrink:0;}
+/* Halaman Pesanan (Mockup B): latar sedikit lebih gelap dari panel, header
+   transparan, daftar barang di atas KERTAS STRUK bergerigi. */
+.page-order{background:var(--canvas);}
+.order-top{background:transparent;border-bottom:none;padding:16px 16px 6px;}
+.order-title{text-align:center;}
+.order-title .tb-store{font-family:var(--font);font-size:13px;font-weight:700;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--ink-2);}
+.clear-cart-btn{width:40px;height:40px;flex-shrink:0;border:none;background:var(--card);color:var(--danger);
+  border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  box-shadow:0 1px 4px rgba(60,40,20,.12);}
+.clear-cart-btn svg{width:19px;height:19px;}
+.paper-wrap{margin-top:12px;filter:drop-shadow(0 6px 14px rgba(80,60,30,.12));}
+.paper{background:var(--card);padding:22px 20px 34px;border-radius:6px 6px 0 0;
+  -webkit-mask:linear-gradient(#000 0 0) top/100% calc(100% - 9px) no-repeat,conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/18px 9px repeat-x;
+  mask:linear-gradient(#000 0 0) top/100% calc(100% - 9px) no-repeat,conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/18px 9px repeat-x;}
+.paper-store{text-align:center;font-family:var(--serif);font-size:22px;font-weight:600;}
+.paper-sub{text-align:center;font-size:12px;color:var(--ink-3);margin-top:2px;}
+.dash{border-top:1.5px dashed rgba(130,115,90,.35);margin:14px 0;}
+.ln{margin-bottom:12px;overflow:hidden;}
+.ln.gone{transition:height .25s ease,margin .25s ease,opacity .2s ease;opacity:0;margin-bottom:0;}
+.l1{display:flex;align-items:baseline;gap:6px;font-size:15px;cursor:pointer;}
+.l1 .q{font-family:var(--serif);font-weight:700;color:var(--accent);min-width:26px;flex-shrink:0;margin-right:2px;}
+.l1 .nm{font-weight:600;}
+.l1 .dots{flex:1;border-bottom:1.5px dotted rgba(130,115,90,.4);transform:translateY(-4px);min-width:10px;}
+.l1 .s{font-family:var(--serif);font-weight:600;}
+.l2{margin-left:32px;display:flex;align-items:center;justify-content:space-between;
+  font-size:12px;color:var(--ink-3);margin-top:1px;min-height:36px;}
+.ln .nn{margin-left:32px;font-size:12px;color:var(--ink-2);font-style:italic;cursor:pointer;}
+/* "Tambah?" -> stepper: kata kecil berubah mulus jadi pil (-, angka, +) yang
+   membuka ke kiri, gerak memecah yang sama dgn tombol Tambah di daftar produk. */
+.tbx{display:flex;align-items:center;justify-content:flex-end;height:36px;}
+.tb{border:none;background:transparent;font-family:var(--font);font-size:12.5px;font-weight:700;
+  color:var(--accent);padding:8px 2px 4px;margin:0;border-bottom:1.5px dotted var(--accent);
+  cursor:pointer;max-width:90px;overflow:hidden;white-space:nowrap;
+  transition:max-width .3s cubic-bezier(.3,1.25,.45,1),opacity .16s ease,padding .3s ease,border-width .2s ease;}
+.tbx.open .tb{max-width:0;opacity:0;padding:8px 0 4px;border-bottom-width:0;pointer-events:none;}
+.stp{display:flex;align-items:center;background:var(--field);border-radius:999px;overflow:hidden;
+  max-width:0;opacity:0;padding:0;transform:scale(.7);transform-origin:right center;
+  transition:max-width .3s cubic-bezier(.3,1.25,.45,1),opacity .2s ease,padding .3s ease,transform .3s cubic-bezier(.3,1.25,.45,1);}
+.tbx.open .stp{max-width:140px;opacity:1;padding:3px;transform:scale(1);}
+.stp button{width:28px;height:28px;flex-shrink:0;border:none;border-radius:50%;background:var(--card);
+  color:var(--accent);font-size:17px;font-weight:600;cursor:pointer;display:flex;align-items:center;
+  justify-content:center;padding:0;box-shadow:0 1px 3px rgba(60,40,20,.15);}
+.stp button.p{background:var(--accent);color:#fff;}
+.stp .qn{min-width:30px;text-align:center;font-family:var(--serif);font-weight:700;font-size:15px;color:var(--ink);flex-shrink:0;}
+.paper-total{display:flex;justify-content:space-between;align-items:baseline;gap:10px;}
+.paper-total span{font-size:12px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:var(--ink-2);}
+.paper-total b{font-family:var(--serif);font-size:clamp(24px,8.2vw,32px);font-weight:600;white-space:nowrap;}
+.paper-total .roll{justify-content:flex-end;}
+.paper-hint{text-align:center;font-size:11.5px;color:var(--ink-3);margin-top:6px;}
+.ofield{margin:18px 4px 0;border-bottom:1.5px solid var(--line);padding:6px 2px 9px;}
+.ofield label{display:block;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);}
+.ofield input,.ofield textarea{width:100%;border:none;background:transparent;outline:none;resize:none;
+  font-family:var(--font);font-size:16px;color:var(--ink);padding:5px 0 0;}
+.ofield textarea{min-height:28px;}
+.ofield input::placeholder,.ofield textarea::placeholder{color:var(--ink-3);opacity:.7;}
+.copy-link{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;border:none;
+  background:transparent;color:var(--accent);font-family:var(--font);font-weight:700;font-size:14px;
+  padding:16px 0 4px;cursor:pointer;}
+.copy-link svg{width:16px;height:16px;}
+#app.order-mode .mainbtn-wrap{background:linear-gradient(to top,var(--canvas) 58%,rgba(0,0,0,0));}
 /* Tombol tutup: lingkaran merah di POJOK KANAN ATAS modal (bukan lagi di
    samping nama produk). */
 .sheet-x{position:absolute;top:10px;right:14px;width:34px;height:34px;border:none;
@@ -539,25 +595,6 @@ body{
 .sheet{touch-action:pan-y;}
 html.modal-open,html.modal-open body{overscroll-behavior-y:none;}
 .sheet-body{overflow-y:auto;padding:0 20px 12px;flex:1;}
-.citem{display:flex;flex-direction:column;gap:7px;padding:11px 0;
-  border-bottom:1px solid var(--line);}
-.ci-top{display:flex;align-items:center;gap:10px;cursor:pointer;}
-.ci-info{flex:1;min-width:0;}
-.ci-name{font-size:16px;font-weight:600;}
-.ci-price{font-size:13.5px;color:var(--ink-3);margin-top:2px;}
-.ci-note-view{font-size:13.5px;color:var(--ink-2);padding:0 0 6px;}
-.ci-controls{display:flex;align-items:center;gap:8px;flex-shrink:0;}
-.stepper{display:flex;align-items:center;gap:0;background:var(--field);
-  border-radius:999px;overflow:hidden;flex-shrink:0;}
-.stepper button{width:34px;height:34px;border:none;background:transparent;
-  color:var(--accent);font-size:19px;font-weight:700;cursor:pointer;
-  display:flex;align-items:center;justify-content:center;}
-.stepper .n{min-width:26px;text-align:center;font-weight:700;font-size:15px;}
-.ci-delete{width:32px;height:32px;border:none;background:transparent;color:var(--ink-3);
-  cursor:pointer;display:flex;align-items:center;justify-content:center;border-radius:999px;
-  flex-shrink:0;}
-.ci-delete svg{width:17px;height:17px;}
-.ci-delete:hover{background:var(--danger-bg);color:var(--danger);}
 .confirm-overlay{position:fixed;inset:0;background:rgba(20,16,10,.42);z-index:40;
   display:flex;align-items:center;justify-content:center;
   opacity:0;visibility:hidden;pointer-events:none;
@@ -691,22 +728,23 @@ textarea.tfield{resize:none;min-height:64px;}
   <section class="page page-order" id="pageOrder">
     <div class="topbar order-top">
       <button class="back-btn" id="backBtn" type="button" aria-label="Kembali ke daftar produk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
-      <div class="order-title">
-        <div class="tb-store">Pesanan Anda</div>
-        <div class="tb-sub" id="orderSub">0 barang dipilih</div>
-      </div>
-      <button class="clear-cart-btn" id="clearCartBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>Kosongkan</button>
+      <div class="order-title"><div class="tb-store">Pesanan Anda</div></div>
+      <button class="clear-cart-btn" id="clearCartBtn" type="button" aria-label="Kosongkan pesanan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></button>
     </div>
     <div class="order-body">
-      <div id="cartItems"></div>
-      <div class="grand"><span class="gl">Total</span><span class="gv roll" id="sheetTotal">Rp 0</span></div>
-      <div class="field-label">Nama</div>
-      <input class="tfield" id="custName" placeholder="Nama Anda" />
-      <div class="field-label">No. HP</div>
-      <input class="tfield" id="custPhone" type="tel" placeholder="08xxxxxxxxxx" />
-      <div class="field-label">Catatan (opsional)</div>
-      <textarea class="tfield" id="custNote" placeholder="mis. antar sore ya"></textarea>
-      <button class="copy-btn" id="copyBtn">Salin Teks Pesanan</button>
+      <div class="paper-wrap"><div class="paper">
+        <div class="paper-store" id="paperStore"></div>
+        <div class="paper-sub" id="orderSub">0 produk dipilih</div>
+        <div class="dash"></div>
+        <div id="cartItems"></div>
+        <div class="dash"></div>
+        <div class="paper-total"><span>Total</span><b class="roll" id="sheetTotal">Rp 0</b></div>
+        <div class="paper-hint">Ketuk &ldquo;Tambah?&rdquo; untuk ubah jumlah &middot; harga final di kasir</div>
+      </div></div>
+      <div class="ofield"><label for="custName">Nama</label><input id="custName" placeholder="Nama Anda" /></div>
+      <div class="ofield"><label for="custPhone">No. HP</label><input id="custPhone" type="tel" placeholder="08xxxxxxxxxx" /></div>
+      <div class="ofield"><label for="custNote">Catatan (opsional)</label><textarea id="custNote" rows="1" placeholder="mis. antar sore ya"></textarea></div>
+      <button class="copy-link" id="copyBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>Salin teks pesanan</button>
     </div>
   </section>
 
@@ -988,20 +1026,6 @@ document.getElementById('mbClear').addEventListener('click', function(){
   }, {passive: true});
 })();
 
-// Hapus SATU barang langsung (terpisah dari stepper −) — sebelumnya cuma
-// bisa dihapus dgn menekan − berulang sampai qty 0, tidak eksplisit &
-// tidak ada konfirmasi sama sekali walau barangnya banyak/mahal.
-function deleteCartItem(unitId){
-  var u = byUnit[unitId];
-  if (!u) return;
-  showConfirm(
-    'Hapus Barang?',
-    '"' + u.name + '" akan dihapus dari pesanan Anda.',
-    'Hapus',
-    function(){ setQty(unitId, 0); }
-  );
-}
-
 DATA.products.forEach(function(p, pIdx){
   // Satuan lain (mis. Dus di samping Biji) sama-sama milik produk INI —
   // dikelompokkan di keranjang/pesanan sama seperti varian (parentName
@@ -1031,6 +1055,7 @@ DATA.products.forEach(function(p, pIdx){
 });
 
 document.getElementById('storeName').textContent = DATA.store;
+document.getElementById('paperStore').textContent = DATA.store;
 document.getElementById('storeSub').textContent = 'Katalog pesanan · diperbarui ' + DATA.generatedAt;
 
 // ── Angka roll (mesin slot) utk total/subtotal. Digit yang berubah memutar
@@ -1515,17 +1540,6 @@ function syncProwControls(wrap, p, animate){
 
 // Stepper inline +/- — sekarang hanya dipakai di lembar keranjang, di mana
 // barisnya SELALU qty > 0 (barang qty 0 dihapus dari cart, bukan ditampilkan).
-function buildStepper(unitId, qty){
-  var wrap = document.createElement('div');
-  wrap.dataset.unit = unitId;
-  wrap.className = 'stepper';
-  wrap.innerHTML =
-    '<button type="button" data-act="dec" data-id="'+unitId+'">−</button>' +
-    '<span class="n">'+qty+'</span>' +
-    '<button type="button" data-act="inc" data-id="'+unitId+'">+</button>';
-  return wrap;
-}
-
 // Blueprint §5 — satu tombol aksi utama yang teks/warna/aksinya mengikuti
 // konteks (browse vs ringkasan pesanan), dan SEMBUNYI total saat belum ada
 // barang dipilih. Nominal total menyatu di dalam tombol yang sama.
@@ -1563,65 +1577,110 @@ function renderCartBar(){
       n === 0 ? 'Belum ada barang dipilih' : fmtQty(n) + ' produk dipilih';
 }
 
+// ── Halaman Pesanan (Mockup B, struk). Baris dibangun SEKALI per unit lalu
+// disinkronkan di tempat (bukan dibangun ulang tiap qty berubah) — syarat
+// agar animasi "Tambah?" -> stepper, roll subtotal, dan hapus-menutup halus.
+var cartRowEls = {};   // unitId -> elemen baris
+var openRowId = null;  // baris yang stepper-nya sedang terbuka (maks. satu)
+var openRowTimer = null;
+
+function numOnly(n){ return rp(n).replace('Rp ', ''); }
+
+function buildCartRow(id){
+  var el = document.createElement('div');
+  el.className = 'ln';
+  el.dataset.id = id;
+  el.innerHTML =
+    '<div class="l1"><span class="q"></span><span class="nm"></span><span class="dots"></span>' +
+      '<span class="s roll"></span></div>' +
+    '<div class="l2"><span class="at"></span>' +
+      '<div class="tbx"><button type="button" class="tb" data-act="open">Tambah?</button>' +
+        '<div class="stp"><button type="button" data-act="dec" aria-label="Kurangi">&minus;</button>' +
+        '<span class="qn"></span>' +
+        '<button type="button" class="p" data-act="inc" aria-label="Tambah">+</button></div></div></div>' +
+    '<div class="nn ci-note-view" style="display:none"></div>';
+  return el;
+}
+function syncCartRow(id, el){
+  var u = byUnit[id], qty = cart[id];
+  el.querySelector('.q').textContent = fmtQty(qty) + '×';
+  el.querySelector('.nm').textContent = u.name;
+  rollSet(el.querySelector('.s'), numOnly(u.price * qty));
+  el.querySelector('.at').textContent = '@ ' + rp(u.price) + ' /' + u.unit;
+  el.querySelector('.qn').textContent = fmtQty(qty);
+  var nn = el.querySelector('.nn');
+  if (cartNotes[id]) { nn.style.display = ''; nn.textContent = '↳ ' + cartNotes[id]; }
+  else { nn.style.display = 'none'; nn.textContent = ''; }
+}
+function removeCartRow(id){
+  var el = cartRowEls[id];
+  delete cartRowEls[id];
+  if (!el) return;
+  el.style.height = el.offsetHeight + 'px';
+  void el.offsetHeight;
+  el.classList.add('gone');
+  el.style.height = '0px';
+  setTimeout(function(){ if (el.parentNode) el.parentNode.removeChild(el); }, 280);
+}
+function setOpenRow(id){
+  if (openRowId && cartRowEls[openRowId]) {
+    cartRowEls[openRowId].querySelector('.tbx').classList.remove('open');
+  }
+  openRowId = id;
+  clearTimeout(openRowTimer);
+  if (id && cartRowEls[id]) {
+    cartRowEls[id].querySelector('.tbx').classList.add('open');
+    // Kembali ke "Tambah?" bila tidak disentuh beberapa detik.
+    openRowTimer = setTimeout(function(){ setOpenRow(null); }, 4000);
+  }
+}
+
 function renderCartSheet(){
   var wrap = document.getElementById('cartItems');
-  wrap.innerHTML = '';
-  var ids = Object.keys(cart);
+  var ids = Object.keys(cart).filter(function(id){ return byUnit[id]; });
   if (ids.length === 0) {
+    Object.keys(cartRowEls).forEach(function(id){ delete cartRowEls[id]; });
     wrap.innerHTML = '<div class="empty">Keranjang kosong.</div>';
+    setOpenRow(null);
+    rollSet(document.getElementById('sheetTotal'), rp(0));
+    return;
   }
+  var emptyEl = wrap.querySelector('.empty');
+  if (emptyEl) emptyEl.parentNode.removeChild(emptyEl);
+  Object.keys(cartRowEls).forEach(function(id){
+    if (!(id in cart)) { if (openRowId === id) setOpenRow(null); removeCartRow(id); }
+  });
   ids.forEach(function(id){
-    var u = byUnit[id]; if (!u) return;
-    var qty = cart[id];
-    var price = u.price;
-    var row = document.createElement('div');
-    row.className = 'citem';
-    var top = document.createElement('div');
-    top.className = 'ci-top';
-    top.innerHTML =
-      '<div class="ci-info"><div class="ci-name">'+esc(u.name)+'</div>' +
-        '<div class="ci-price">'+qty+' '+esc(u.unit)+' × '+rp(price)+
-          ' = '+rp(price*qty)+'</div></div>';
-    var controls = document.createElement('div');
-    controls.className = 'ci-controls';
-    controls.appendChild(buildStepper(id, qty));
-    var delBtn = document.createElement('button');
-    delBtn.type = 'button';
-    delBtn.className = 'ci-delete';
-    delBtn.dataset.act = 'delete';
-    delBtn.dataset.id = id;
-    delBtn.setAttribute('aria-label', 'Hapus barang');
-    delBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>';
-    controls.appendChild(delBtn);
-    top.appendChild(controls);
-    // Item 14 — tap baris (di luar tombol +/-) buka lagi modal item, utk
-    // ubah satuan/harga/catatan tanpa menghapus & menambah ulang dari nol.
-    top.addEventListener('click', function(e){
-      if (e.target.closest('button[data-act]')) return;
-      var p = findProductForUnit(id);
-      if (p) openItemModal(p, id);
-    });
-    row.appendChild(top);
-    // Item 26a — catatan per-produk kini murni tampilan (read-only) di
-    // sini; diubah lewat modal item (Item 14), bukan input di tempat ini.
-    if (cartNotes[id]) {
-      var noteEl = document.createElement('div');
-      noteEl.className = 'ci-note-view';
-      noteEl.textContent = '* ' + cartNotes[id];
-      row.appendChild(noteEl);
-    }
-    wrap.appendChild(row);
+    var el = cartRowEls[id];
+    if (!el) { el = buildCartRow(id); cartRowEls[id] = el; wrap.appendChild(el); }
+    syncCartRow(id, el);
   });
   rollSet(document.getElementById('sheetTotal'), rp(cartTotal()));
 }
 
 document.getElementById('cartItems').addEventListener('click', function(e){
+  var row = e.target.closest('.ln');
+  if (!row || row.classList.contains('gone')) return;
+  var id = row.dataset.id;
   var btn = e.target.closest('button[data-act]');
-  if (!btn) return;
-  var id = btn.dataset.id;
-  if (btn.dataset.act === 'delete') { deleteCartItem(id); return; }
-  var cur = cart[id] || 0;
-  setQty(id, btn.dataset.act === 'inc' ? cur + 1 : cur - 1);
+  if (btn) {
+    var act = btn.dataset.act;
+    if (act === 'open') { setOpenRow(id); return; }
+    var cur = cart[id] || 0;
+    // Hapus langsung saat qty 1 -> 0 (baris menutup halus); selain itu timer
+    // "kembali ke Tambah?" diulang tiap ketukan.
+    setOpenRow(act === 'dec' && cur <= 1 ? null : id);
+    setQty(id, act === 'inc' ? cur + 1 : cur - 1);
+    return;
+  }
+  if (e.target.closest('.tbx')) return;
+  // Ketuk nama/baris: buka modal produk (ubah satuan/catatan).
+  var p = findProductForUnit(id);
+  if (p) openItemModal(p, id);
+});
+// Ketuk di luar stepper -> kembali ke "Tambah?".
+document.getElementById('pageOrder').addEventListener('click', function(e){
+  if (openRowId && !e.target.closest('.tbx')) setOpenRow(null);
 });
 
 // ── Modal tap-item (Item 14) — pengganti dropdown varian lama: satu modal

@@ -218,4 +218,52 @@ void main() {
     // Harga besar ikut efek roll saat satuan berganti.
     expect(html, contains("rollSet(document.getElementById('itemPriceVal')"));
   });
+
+  test(
+      'redesign halaman Pesanan (Mockup B): kertas struk, baris titik-titik, TOTAL',
+      () {
+    expect(html, contains('class="paper-wrap"'));
+    expect(html, contains('id="paperStore"'));
+    expect(html, contains('conic-gradient(from -45deg at bottom'));
+    expect(html, contains('class="paper-total"'));
+    expect(html, contains('id="sheetTotal"'));
+    expect(
+        html,
+        contains(
+            'class="l1"><span class="q"></span><span class="nm"></span><span class="dots"></span>'));
+    expect(html,
+        contains('<div class="ofield"><label for="custName">Nama</label>'));
+    expect(html, contains('<label for="custNote">Catatan (opsional)</label>'));
+    expect(html, contains('class="copy-link" id="copyBtn"'));
+    expect(html, contains('.page-order{background:var(--canvas);}'));
+    // Struk memakai permukaan kartu -> otomatis ikut mode gelap.
+    expect(html, contains('.paper{background:var(--card);'));
+  });
+
+  test(
+      '"Tambah?" -> stepper: kata kecil berubah mulus jadi pil, satu baris terbuka',
+      () {
+    expect(html, contains('data-act="open">Tambah?</button>'));
+    expect(
+        html,
+        contains(
+            '.tbx.open .stp{max-width:140px;opacity:1;padding:3px;transform:scale(1);}'));
+    expect(html, contains('.tbx.open .tb{max-width:0;opacity:0;'));
+    expect(
+        html, contains('transition:max-width .3s cubic-bezier(.3,1.25,.45,1)'));
+    expect(html, contains('function setOpenRow(id)'));
+    expect(
+        html,
+        contains(
+            'openRowTimer = setTimeout(function(){ setOpenRow(null); }, 4000);'));
+    // Baris disinkronkan di tempat (node persisten), bukan dibangun ulang.
+    expect(html, contains('function syncCartRow(id, el)'));
+    expect(html, contains('function removeCartRow(id)'));
+    expect(html,
+        contains("rollSet(el.querySelector('.s'), numOnly(u.price * qty))"));
+    // - saat qty 1 menghapus langsung; ketuk nama membuka modal produk.
+    expect(
+        html, contains("setOpenRow(act === 'dec' && cur <= 1 ? null : id);"));
+    expect(html, contains('if (p) openItemModal(p, id);'));
+  });
 }
