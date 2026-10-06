@@ -17,8 +17,9 @@ import 'price_service.dart';
 class OrderParserService {
   OrderParserService._();
 
-  static final RegExp _machineLine =
-      RegExp('${OrderPageService.machineCodePrefix}(.+)\$', multiLine: true);
+  // Terima `#PSN:` (handoff/QR/lama) maupun `PSN:` tanpa '#' (teks share
+  // katalog — WhatsApp memotong teks mulai dari '#' di share-intent).
+  static final RegExp _machineLine = RegExp('#?PSN:(.+)\$', multiLine: true);
   static final RegExp _nameLine = RegExp(r'^Nama:\s*(.+)$', multiLine: true);
   static final RegExp _phoneLine = RegExp(r'^HP:\s*(.+)$', multiLine: true);
   static final RegExp _noteLine = RegExp(r'^Catatan:\s*(.+)$', multiLine: true);

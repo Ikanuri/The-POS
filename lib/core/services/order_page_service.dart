@@ -31,6 +31,11 @@ class OrderPageService {
   /// `<productUnitId>=<qty>:<catatan ter-encodeURIComponent>`.
   static const machineCodePrefix = '#PSN:';
 
+  /// Awalan kode mesin di teks share katalog HTML — TANPA '#': WhatsApp
+  /// memotong pesan mulai dari '#' lewat share-intent (kode tak terkirim).
+  /// Parser menerima kedua bentuk.
+  static const sharePrefix = 'PSN:';
+
   /// Generate HTML katalog dari seluruh produk aktif (induk + varian) yang
   /// punya satuan dasar & harga > 0. `productCount` = jumlah induk yang
   /// masuk katalog (belum termasuk varian) — untuk info ringkas di UI.
@@ -55,7 +60,7 @@ class OrderPageService {
       // draft dulu). Kontrol ada di POS (order_share_screen.dart), bukan
       // hardcoded.
       'waDirect': waDirect,
-      'machinePrefix': machineCodePrefix,
+      'machinePrefix': sharePrefix,
       // Toko tutup: jadwal jam (zona = zona HP owner saat Publish) & hash
       // kode akses per pelanggan. null = fitur tidak dipakai.
       'hours': await CatalogAccessService.hoursJson(db),

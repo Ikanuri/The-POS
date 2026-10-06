@@ -7,6 +7,10 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-10-06 (susulan — kode pesanan WhatsApp)
+
+- fix(katalog): baris kode mesin di teks share katalog tanpa '#' (`PSN:`), parser terima `#PSN:` dan `PSN:`; bump 2.82.1+178
+
 ## 2026-10-06 (sesi kedelapan puluh tiga lanjutan — katalog HTML, task #19-#24)
 
 - `d3fc3f6` — feat(katalog): tombol hapus pesanan pindah ke kiri (halaman awal & modal), konfirmasi hapus inline Ya/Tidak (Ya merah 1/4 kiri), ikon lebih besar & teks lebih kecil, keterangan menyusut saat scroll ke bawah; bump 2.81.0+176
