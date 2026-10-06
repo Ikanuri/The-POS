@@ -10,6 +10,13 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ## 6 Oktober 2026
 
+### ✨ Fitur Baru
+- **Pilih QRIS mana yang tampil di struk & pratinjau keranjang.** Jika toko
+  punya lebih dari satu QRIS aktif, di sheet "Bagikan" muncul pilihan nama
+  QRIS (hanya saat QR dinyalakan). Satu pilihan berlaku untuk struk bagikan,
+  struk cetak, dan pratinjau keranjang, dan diingat di perangkat. Jika hanya
+  ada satu QRIS, tampilan tidak berubah.
+
 ### 🐛 Perbaikan
 - **"Publish ke Web" tidak lagi gagal dengan pesan "manifest field was
   expected".** Sebelumnya tombol Publish ke Web di Katalog Pesanan ditolak
