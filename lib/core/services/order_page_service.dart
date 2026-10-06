@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../database/app_database.dart';
+import 'catalog_access_service.dart';
 import 'price_service.dart';
 
 /// Generate halaman HTML self-contained (tanpa server, tanpa CDN) berisi
@@ -55,6 +56,10 @@ class OrderPageService {
       // hardcoded.
       'waDirect': waDirect,
       'machinePrefix': machineCodePrefix,
+      // Toko tutup: jadwal jam (zona = zona HP owner saat Publish) & hash
+      // kode akses per pelanggan. null = fitur tidak dipakai.
+      'hours': await CatalogAccessService.hoursJson(db),
+      'access': await CatalogAccessService.accessJson(db),
       'products': catalog,
     });
 
@@ -307,6 +312,17 @@ body{
 .mb-total.roll{justify-content:flex-end;}
 #app:not(.order-mode) .mb-total.roll{justify-content:flex-start;}
 .grand .gv.roll{justify-content:flex-end;}
+/* Toko tutup: banner merah menetap (padanan toast "closed" blueprint) di atas
+   daftar yang diabu-abukan; tautan kecil utk pelanggan langganan. */
+.closed-banner{display:none;margin:0 16px 8px;padding:10px 14px;border-radius:12px;
+  background:#e64d44;color:#fff;font-size:13.5px;font-weight:600;
+  flex-direction:column;gap:3px;}
+.closed-banner.show{display:flex;}
+.closed-banner button{align-self:flex-start;border:none;background:transparent;color:#fff;
+  font-family:var(--font);font-size:12.5px;font-weight:600;text-decoration:underline;
+  padding:2px 0;cursor:pointer;}
+.code-err{min-height:18px;margin:6px 0 10px;font-size:12.5px;color:var(--danger);}
+.btn-ok{background:var(--accent);color:#fff;}
 /* Item 79 M2 — toggle List/Tile, gaya sama persis .theme-btn (lingkaran
    38px, sebelahan di topbar). */
 .layout-btn{flex-shrink:0;width:38px;height:38px;border:1px solid var(--line);
@@ -612,6 +628,10 @@ textarea.tfield{resize:none;min-height:64px;}
         <input id="q" type="text" placeholder="Cari produk…" autocomplete="off" />
       </div>
     </div>
+    <div class="closed-banner" id="closedBanner">
+      <span id="closedMsg"></span>
+      <button id="codeLink" type="button">Pelanggan langganan? Masukkan kode</button>
+    </div>
     <div class="list" id="list"></div>
   </section>
 
@@ -685,6 +705,19 @@ textarea.tfield{resize:none;min-height:64px;}
     <div class="confirm-actions">
       <button class="btn-cancel" id="confirmCancel" type="button">Batal</button>
       <button class="btn-danger" id="confirmOk" type="button">Hapus</button>
+    </div>
+  </div>
+</div>
+
+<div class="confirm-overlay" id="codeOverlay">
+  <div class="confirm-box">
+    <div class="confirm-title">Kode pelanggan</div>
+    <div class="confirm-body">Masukkan kode yang diberikan toko untuk memesan saat toko tutup.</div>
+    <input class="tfield" id="codeInput" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX" />
+    <div class="code-err" id="codeErr"></div>
+    <div class="confirm-actions">
+      <button class="btn-cancel" id="codeCancel" type="button">Batal</button>
+      <button class="btn-ok" id="codeOk" type="button">Masuk</button>
     </div>
   </div>
 </div>
@@ -1138,6 +1171,123 @@ function refreshProwControls(p){
   }
 }
 
+// ── Toko tutup (jadwal jam + kode pelanggan). SEMUA pengecekan di browser
+// (halaman statis): penghalang utk pelanggan biasa, bukan pagar mutlak.
+// Jam toko dihitung dari zona waktu HP owner saat Publish (DATA.hours.tz),
+// BUKAN jam lokal pelanggan. Harga saat tutup hanya disembunyikan di
+// TAMPILAN (data tetap ada di sumber halaman).
+var ACCESS_KEY = 'posOrderAccess';
+var shopClosed = false;      // efektif (sudah memperhitungkan kode)
+var accessGranted = false;
+var _emptyCatalog = !DATA.products || DATA.products.length === 0;
+
+function fmtHHMM(m){
+  var h = Math.floor(m / 60), mm = m % 60;
+  return (h < 10 ? '0' : '') + h + '.' + (mm < 10 ? '0' : '') + mm;
+}
+function shopMinutesNow(){
+  var d = new Date(Date.now() + DATA.hours.tz * 60000);
+  return d.getUTCHours() * 60 + d.getUTCMinutes();
+}
+// {closed, msg} menurut jadwal (tanpa memperhitungkan kode).
+function hoursState(){
+  var h = DATA.hours;
+  if (!h) return {closed: false, msg: ''};
+  if (h.forced) return {closed: true, msg: 'Toko sedang tutup sementara'};
+  if (!h.enabled) return {closed: false, msg: ''};
+  var now = shopMinutesNow(), o = h.open, c = h.close;
+  var isOpen = (o === c) ? true : (o < c ? (now >= o && now < c) : (now >= o || now < c));
+  if (isOpen) return {closed: false, msg: ''};
+  var today = (o < c) ? (now < o) : true; // jendela lewat tengah malam: buka lagi hari ini
+  return {closed: true, msg: 'Toko tutup · buka ' + (today ? 'hari ini ' : 'besok ') + fmtHHMM(o)};
+}
+function loadAccess(){
+  accessGranted = false;
+  try {
+    var raw = localStorage.getItem(ACCESS_KEY);
+    if (!raw || !DATA.access) return;
+    var saved = JSON.parse(raw);
+    if (saved && DATA.access.hashes.indexOf(saved.hash) >= 0) accessGranted = true;
+  } catch (e) {}
+}
+var _lastClosedKey = null;
+function applyOpenState(){
+  var st = hoursState();
+  var closed = st.closed && !accessGranted;
+  var app = document.getElementById('app');
+  var key = closed + '|' + st.msg;
+  shopClosed = closed;
+  if (key === _lastClosedKey) return;
+  _lastClosedKey = key;
+  app.classList.toggle('closed', closed || _emptyCatalog);
+  var banner = document.getElementById('closedBanner');
+  banner.classList.toggle('show', closed);
+  document.getElementById('closedMsg').textContent = st.msg;
+  document.getElementById('codeLink').style.display =
+      (DATA.access && DATA.access.hashes && DATA.access.hashes.length) ? '' : 'none';
+  if (closed && sheetOpen) closeSheet(false);
+  renderList();
+  renderCartBar();
+}
+
+// Kode pelanggan: PBKDF2-HMAC-SHA256 (sama dgn app) lalu cocokkan ke daftar hash.
+function normCode(s){ return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); }
+function hexOf(buf){
+  var a = new Uint8Array(buf), out = '';
+  for (var i = 0; i < a.length; i++) out += (a[i] < 16 ? '0' : '') + a[i].toString(16);
+  return out;
+}
+function hashCode(code){
+  var enc = new TextEncoder();
+  return crypto.subtle.importKey('raw', enc.encode(normCode(code)), {name: 'PBKDF2'}, false, ['deriveBits'])
+    .then(function(key){
+      return crypto.subtle.deriveBits({name: 'PBKDF2', salt: enc.encode(DATA.access.salt),
+        iterations: DATA.access.iters, hash: 'SHA-256'}, key, 256);
+    }).then(hexOf);
+}
+var _codeFails = 0, _codeLockUntil = 0;
+function openCodeDialog(){
+  document.getElementById('codeErr').textContent = '';
+  document.getElementById('codeInput').value = '';
+  document.getElementById('codeOverlay').classList.add('show');
+  setTimeout(function(){ document.getElementById('codeInput').focus(); }, 60);
+}
+function closeCodeDialog(){ document.getElementById('codeOverlay').classList.remove('show'); }
+function submitCode(){
+  var err = document.getElementById('codeErr');
+  var code = document.getElementById('codeInput').value;
+  if (!normCode(code)) { err.textContent = 'Masukkan kode dulu'; return; }
+  if (Date.now() < _codeLockUntil) { err.textContent = 'Terlalu banyak percobaan — coba lagi sebentar'; return; }
+  if (!(window.crypto && crypto.subtle)) {
+    err.textContent = 'Browser ini belum mendukung — buka lewat Chrome atau Safari';
+    return;
+  }
+  hashCode(code).then(function(h){
+    if (DATA.access.hashes.indexOf(h) >= 0) {
+      _codeFails = 0;
+      try { localStorage.setItem(ACCESS_KEY, JSON.stringify({hash: h})); } catch (e) {}
+      accessGranted = true;
+      _lastClosedKey = null;
+      closeCodeDialog();
+      applyOpenState();
+      showToast('Kode diterima — silakan memesan');
+    } else {
+      _codeFails++;
+      if (_codeFails >= 5) { _codeLockUntil = Date.now() + 30000; _codeFails = 0; }
+      err.textContent = 'Kode salah';
+    }
+  }).catch(function(){ err.textContent = 'Gagal memeriksa kode — coba lagi'; });
+}
+document.getElementById('codeLink').addEventListener('click', openCodeDialog);
+document.getElementById('codeCancel').addEventListener('click', closeCodeDialog);
+document.getElementById('codeOk').addEventListener('click', submitCode);
+document.getElementById('codeInput').addEventListener('keydown', function(e){
+  if (e.key === 'Enter') submitCode();
+});
+document.getElementById('codeOverlay').addEventListener('click', function(e){
+  if (e.target === this) closeCodeDialog();
+});
+
 function renderList(){
   var q = document.getElementById('q').value.trim().toLowerCase();
   var list = document.getElementById('list');
@@ -1158,9 +1308,9 @@ function renderList(){
     var main = document.createElement('div');
     main.className = 'prow-main';
 
-    var metaHtml = totalOptionsFor(p) > 1
+    var metaHtml = shopClosed ? '—' : (totalOptionsFor(p) > 1
       ? totalOptionsFor(p) + ' pilihan · mulai ' + rp(minPriceForProduct(p))
-      : rp(p.price) + ' /' + esc(p.unit);
+      : rp(p.price) + ' /' + esc(p.unit));
     main.innerHTML =
       '<div class="prow-icon" aria-hidden="true">'+pickIcon(p.name, p.category)+'</div>' +
       '<div class="prow-info"><div class="prow-name">'+esc(p.name)+'</div>' +
@@ -1272,7 +1422,7 @@ function buildStepper(unitId, qty){
 function renderCartBar(){
   var n = cartCount();
   var orderMode = document.getElementById('app').classList.contains('order-mode');
-  document.getElementById('mainBtnWrap').classList.toggle('hidden', n === 0);
+  document.getElementById('mainBtnWrap').classList.toggle('hidden', n === 0 || shopClosed);
   var mbBadge = document.getElementById('mbBadge');
   mbBadge.textContent = fmtQty(n);
   // Blueprint §4 — badge per-baris SELALU memantul saat qty berubah; badge di
@@ -1727,7 +1877,13 @@ if (!DATA.products || DATA.products.length === 0) {
 }
 
 loadCart();
+loadAccess();
+applyOpenState();
 render();
+// Jadwal dicek ulang berkala (halaman yang dibiarkan terbuka melewati jam
+// buka/tutup ikut berganti) dan saat kembali ke tab.
+setInterval(applyOpenState, 30000);
+document.addEventListener('visibilitychange', function(){ if (!document.hidden) applyOpenState(); });
 if (!DATA.products || DATA.products.length === 0) {
   showToast('Katalog ini sedang kosong — hubungi toko', {persist:true});
 }

@@ -880,7 +880,7 @@ void main() {
     expect(html.contains('id="mbTotal"'), isTrue,
         reason: 'nominal total harus menyatu di dalam tombol utama');
     expect(html.contains('id="mbBadge"'), isTrue);
-    expect(html.contains("classList.toggle('hidden', n === 0)"), isTrue,
+    expect(html.contains("classList.toggle('hidden', n === 0 || shopClosed)"), isTrue,
         reason: 'tombol sembunyi total saat belum ada barang dipilih');
     expect(html.contains("orderMode ? 'Kirim via WhatsApp' : 'Lihat Pesanan'"),
         isTrue);
