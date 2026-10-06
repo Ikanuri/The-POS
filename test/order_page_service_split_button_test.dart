@@ -58,4 +58,27 @@ void main() {
     expect(html, contains(" produk) akan dihapus"));
     expect(html, contains("' produk dipilih'"));
   });
+
+  test('modal produk: Tambah (3/4) + Hapus merah (1/4) satu baris, pola sama',
+      () {
+    expect(html, contains('id="itemActions"'));
+    // Hapus memakai kelas tombol merah yang SAMA dgn Kosongkan (desain persis).
+    expect(html, contains('class="mb-clear" id="itemRemoveBtn"'));
+    expect(html, contains('<span>Hapus dari pesanan</span>'));
+    // Belum ada di pesanan -> Hapus menyusut ke 0 (Tambah selebar penuh).
+    expect(
+        html,
+        contains(
+            '.im-actions.nodel .mb-clear{width:0;margin-left:0;padding:0;opacity:0;pointer-events:none;}'));
+    expect(
+        html,
+        contains(
+            "document.getElementById('itemActions').classList.toggle('nodel', !cart[unitId]);"));
+    // Hapus tetap langsung (tanpa konfirmasi) & menyimpan keranjang.
+    final start =
+        html.indexOf("getElementById('itemRemoveBtn').addEventListener");
+    final body = html.substring(start, start + 300);
+    expect(body, isNot(contains('showConfirm')));
+    expect(body, contains('saveCart();'));
+  });
 }

@@ -536,7 +536,12 @@ textarea.tfield{resize:none;min-height:64px;}
 .im-qty-input{width:70px;text-align:center;border:1px solid var(--line);
   background:var(--field);border-radius:var(--r-btn);padding:10px 4px;
   font-size:19px;font-weight:700;font-family:var(--serif);color:var(--ink);outline:none;}
-.add-cta{width:100%;border:none;background:var(--accent);color:#fff;border-radius:var(--r-btn);
+.im-actions{display:flex;align-items:stretch;}
+/* Pola SAMA dgn tombol bawah halaman awal (Lihat Pesanan + Kosongkan): aksi
+   utama ~3/4, Hapus merah ~1/4. Belum ada di pesanan -> Hapus menyusut ke
+   lebar 0 (Tambah selebar penuh), dgn animasi yang sama. */
+.im-actions.nodel .mb-clear{width:0;margin-left:0;padding:0;opacity:0;pointer-events:none;}
+.add-cta{flex:1 1 0;min-width:0;border:none;background:var(--accent);color:#fff;border-radius:999px;
   padding:15px;font-size:16.5px;font-weight:700;cursor:pointer;}
 .add-cta:disabled{opacity:.4;}
 .sheet-foot{padding:14px 16px calc(16px + env(safe-area-inset-bottom));
@@ -644,8 +649,10 @@ textarea.tfield{resize:none;min-height:64px;}
   </div>
   <div class="sheet-foot">
     <div class="grand"><span class="gl">Subtotal</span><span class="gv" id="itemSubtotal">Rp 0</span></div>
-    <button class="add-cta" id="itemAddBtn" type="button">Tambah ke Pesanan</button>
-    <button class="copy-btn" id="itemRemoveBtn" type="button" style="display:none;">Hapus dari Pesanan</button>
+    <div class="im-actions nodel" id="itemActions">
+      <button class="add-cta" id="itemAddBtn" type="button">Tambah ke Pesanan</button>
+      <button class="mb-clear" id="itemRemoveBtn" type="button" aria-label="Hapus dari pesanan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg><span>Hapus dari pesanan</span></button>
+    </div>
   </div>
 </div>
 
@@ -1316,7 +1323,7 @@ function loadUnitIntoForm(p, unitId){
   itemModalQty = cart[unitId] || 1;
   document.getElementById('itemQtyVal').value = fmtQty(itemModalQty);
   document.getElementById('itemNote').value = cartNotes[unitId] || '';
-  document.getElementById('itemRemoveBtn').style.display = cart[unitId] ? 'block' : 'none';
+  document.getElementById('itemActions').classList.toggle('nodel', !cart[unitId]);
   updateItemSubtotal();
 }
 
