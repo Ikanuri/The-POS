@@ -118,4 +118,22 @@ void main() {
         html.indexOf('function refreshProwControls'));
     expect(setQty, contains('dropDraft(unitId);'));
   });
+
+  test(
+      'angka total berputar (roll) hanya utk amount besar, bukan badge/harga daftar',
+      () {
+    expect(html, contains('function rollSet(el, text)'));
+    expect(html, contains("rollSet(document.getElementById('mbTotal')"));
+    expect(html, contains("rollSet(document.getElementById('sheetTotal')"));
+    expect(html, contains("rollSet(document.getElementById('itemSubtotal')"));
+    // Arah acak, hanya transform, hormati reduced-motion.
+    expect(html, contains('Math.random() < 0.5'));
+    expect(html, contains('prefers-reduced-motion: reduce'));
+    expect(html, contains("transition = 'transform .6s"));
+    // Elemen total memakai kelas roll; badge qty tetap animasi bounce lama.
+    expect(html, contains('class="mb-total roll" id="mbTotal"'));
+    expect(html, contains("document.getElementById('mbBadge')"));
+    // Panggilan pertama = tanpa animasi (render awal).
+    expect(html, contains('if (old === undefined || ROLL_REDUCED)'));
+  });
 }

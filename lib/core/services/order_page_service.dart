@@ -296,6 +296,17 @@ body{
   display:flex;align-items:center;justify-content:center;}
 .theme-btn svg{width:19px;height:19px;}
 .topbar-btns{display:flex;gap:8px;flex-shrink:0;}
+/* Angka amount besar berputar seperti roll mesin slot (lihat rollSet()):
+   tiap digit yang BERUBAH memutar strip digit acak lalu mendarat di nilai
+   baru; arah naik/turun acak. Hanya transform (GPU), hanya digit yang
+   berubah, ditiadakan saat prefers-reduced-motion. */
+.roll{display:flex;white-space:pre;line-height:1.15;}
+.rd{display:inline-block;height:1.15em;overflow:hidden;}
+.rs{display:block;will-change:transform;}
+.rs i{display:block;font-style:normal;height:1.15em;line-height:1.15;}
+.mb-total.roll{justify-content:flex-end;}
+#app:not(.order-mode) .mb-total.roll{justify-content:flex-start;}
+.grand .gv.roll{justify-content:flex-end;}
 /* Item 79 M2 — toggle List/Tile, gaya sama persis .theme-btn (lingkaran
    38px, sebelahan di topbar). */
 .layout-btn{flex-shrink:0;width:38px;height:38px;border:1px solid var(--line);
@@ -616,7 +627,7 @@ textarea.tfield{resize:none;min-height:64px;}
     </div>
     <div class="order-body">
       <div id="cartItems"></div>
-      <div class="grand"><span class="gl">Total</span><span class="gv" id="sheetTotal">Rp 0</span></div>
+      <div class="grand"><span class="gl">Total</span><span class="gv roll" id="sheetTotal">Rp 0</span></div>
       <div class="field-label">Nama</div>
       <input class="tfield" id="custName" placeholder="Nama Anda" />
       <div class="field-label">No. HP</div>
@@ -633,7 +644,7 @@ textarea.tfield{resize:none;min-height:64px;}
       <button class="mainbtn" id="mainBtn" type="button">
         <span class="mb-badge" id="mbBadge">0</span>
         <span class="mb-label" id="mbLabel">Lihat Pesanan</span>
-        <span class="mb-total" id="mbTotal">Rp 0</span>
+        <span class="mb-total roll" id="mbTotal">Rp 0</span>
       </button>
       <button class="mb-clear" id="mbClear" type="button" aria-label="Kosongkan pesanan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg><span>Kosongkan pesanan</span></button>
     </div>
@@ -658,7 +669,7 @@ textarea.tfield{resize:none;min-height:64px;}
     <textarea class="tfield" id="itemNote" placeholder="mis. yang matang, size L"></textarea>
   </div>
   <div class="sheet-foot">
-    <div class="grand"><span class="gl">Subtotal</span><span class="gv" id="itemSubtotal">Rp 0</span></div>
+    <div class="grand"><span class="gl">Subtotal</span><span class="gv roll" id="itemSubtotal">Rp 0</span></div>
     <div class="im-actions nodel" id="itemActions">
       <button class="add-cta" id="itemAddBtn" type="button">Tambah ke Pesanan</button>
       <button class="mb-clear" id="itemRemoveBtn" type="button" aria-label="Hapus dari pesanan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg><span>Hapus dari pesanan</span></button>
@@ -878,6 +889,67 @@ DATA.products.forEach(function(p, pIdx){
 
 document.getElementById('storeName').textContent = DATA.store;
 document.getElementById('storeSub').textContent = 'Katalog pesanan · diperbarui ' + DATA.generatedAt;
+
+// ── Angka roll (mesin slot) utk total/subtotal. Digit yang berubah memutar
+// strip [lama, acak..., baru] naik ATAU turun (acak), lalu strip diruntuhkan
+// jadi teks biasa. Perbandingan digit dari kanan (satuan), jadi "9.500" ->
+// "10.500" hanya memutar digit yang beda. Panggilan baru saat roll masih
+// berjalan langsung memulai dari nilai akhir sebelumnya (tanpa antrean).
+var ROLL_LH = 1.15; // em, sama dgn .rd/.rs i di CSS
+var ROLL_REDUCED = false;
+try { ROLL_REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+function rollSet(el, text){
+  if (!el) return;
+  var old = el._rt;
+  if (old === text) return;
+  el._rt = text;
+  clearTimeout(el._rtm);
+  if (old === undefined || ROLL_REDUCED) { el.textContent = text; return; }
+  el.setAttribute('aria-label', text);
+  el.innerHTML = '';
+  var frag = document.createDocumentFragment();
+  var pending = [];
+  var nLen = text.length, oLen = old.length;
+  for (var i = 0; i < nLen; i++) {
+    var c = text.charAt(i);
+    var oi = i - (nLen - oLen);
+    var oc = oi >= 0 ? old.charAt(oi) : '';
+    var isDigit = c >= '0' && c <= '9';
+    var cell = document.createElement('span');
+    if (!isDigit || oc === c) {
+      cell.textContent = c;
+      frag.appendChild(cell);
+      continue;
+    }
+    cell.className = 'rd';
+    var from = (oc >= '0' && oc <= '9') ? +oc : Math.floor(Math.random() * 10);
+    var k = 2 + Math.floor(Math.random() * 4);
+    var seq = [from];
+    for (var j = 0; j < k; j++) seq.push(Math.floor(Math.random() * 10));
+    seq.push(+c);
+    var up = Math.random() < 0.5;
+    var items = up ? seq : seq.slice().reverse();
+    var strip = document.createElement('span');
+    strip.className = 'rs';
+    items.forEach(function(d){
+      var it = document.createElement('i');
+      it.textContent = d;
+      strip.appendChild(it);
+    });
+    var last = items.length - 1;
+    strip.style.transform = 'translateY(' + (up ? 0 : -last * ROLL_LH) + 'em)';
+    pending.push([strip, up ? -last * ROLL_LH : 0]);
+    cell.appendChild(strip);
+    frag.appendChild(cell);
+  }
+  el.appendChild(frag);
+  void el.offsetWidth; // paksa reflow supaya transisi mulai dari posisi awal
+  pending.forEach(function(p){
+    p[0].style.transition = 'transform .6s cubic-bezier(.2,.8,.2,1)';
+    p[0].style.transform = 'translateY(' + p[1] + 'em)';
+  });
+  el._rtm = setTimeout(function(){ el.textContent = text; }, 680);
+}
 
 function rp(n){
   var s = Math.round(n).toString();
@@ -1215,7 +1287,7 @@ function renderCartBar(){
     mbBadge.classList.add(wasFirst ? 'badge-incr2' : 'badge-incr');
     _mbBadgeCount = n;
   }
-  document.getElementById('mbTotal').textContent = rp(cartTotal());
+  rollSet(document.getElementById('mbTotal'), rp(cartTotal()));
   var mainBtn = document.getElementById('mainBtn');
   if (_mbOrderMode !== null && _mbOrderMode !== orderMode) {
     // Susunan isi tombol berubah (tumpuk <-> satu baris): samarkan sesaat.
@@ -1279,7 +1351,7 @@ function renderCartSheet(){
     }
     wrap.appendChild(row);
   });
-  document.getElementById('sheetTotal').textContent = rp(cartTotal());
+  rollSet(document.getElementById('sheetTotal'), rp(cartTotal()));
 }
 
 document.getElementById('cartItems').addEventListener('click', function(e){
@@ -1389,7 +1461,7 @@ function loadUnitIntoForm(p, unitId){
 
 function updateItemSubtotal(){
   var price = itemModalUnitId ? byUnit[itemModalUnitId].price : 0;
-  document.getElementById('itemSubtotal').textContent = rp(price * itemModalQty);
+  rollSet(document.getElementById('itemSubtotal'), rp(price * itemModalQty));
 }
 
 // Field jumlah bisa diketik LANGSUNG (mis. 2.5 kg), selain lewat tombol +/-.
