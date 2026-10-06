@@ -8,6 +8,30 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 6 Oktober 2026 (Katalog Pesanan)
+
+### ✨ Fitur Baru
+- **Toko tutup di katalog.** Atur jam buka di Pengaturan → Katalog Pesanan
+  (dan tombol darurat "Tutup sekarang"). Di luar jam buka, katalog tampil
+  abu-abu dan tidak bisa dipakai, harga disembunyikan, dengan pesan merah
+  "Toko tutup · buka besok 07.00". Jadwal berjalan sendiri tiap hari — cukup
+  Publish sekali setelah mengubah jadwal.
+- **Kode katalog per pelanggan.** Di form pelanggan ada kartu "Kode katalog"
+  (buat, buat ulang, cabut, salin, bagikan). Pelanggan langganan memasukkan
+  kodenya lewat tautan "Pelanggan langganan? Masukkan kode" agar tetap bisa
+  memesan saat toko tutup. Pesanannya berjalan seperti pesanan biasa.
+- **Tombol bawah katalog dipecah:** "Lihat Pesanan" + tombol merah "Kosongkan
+  pesanan" (dengan konfirmasi). Saat masuk halaman Pesanan, tombolnya menyatu
+  dengan animasi halus. Angka di tombol kini menghitung **jumlah produk**,
+  bukan total qty.
+- **Modal produk lebih rapi:** Tambah + Hapus (merah) satu baris, tombol
+  tutup (X) lingkaran merah di pojok kanan atas, geser ke bawah untuk
+  menutup (tanpa memicu refresh browser), dan isian jumlah/catatan tidak
+  hilang walau halaman ter-refresh.
+- **Angka total berputar seperti roll mesin slot** saat berubah.
+
+> Perubahan katalog baru terlihat pelanggan setelah **Publish ulang**.
+
 ## 6 Oktober 2026
 
 ### ✨ Fitur Baru
