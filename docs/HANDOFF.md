@@ -6,6 +6,8 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
+_Update (6 Okt, susulan) — BUG NYATA dari user: Publish ke Web gagal 400 "A manifest field was expected" (`cloudflare_publish_service.dart` dulu hanya kirim berkas ke /deployments). Kini Direct Upload 4 tahap seperti Wrangler: GET upload-token (fallback POST) -> POST /pages/assets/upload (JWT, base64) -> upsert-hashes -> POST deployments dgn `manifest {"/index.html": hash}` + `branch`. Hash = BLAKE3(base64+ekstensi)[0:32]; BLAKE3 murni-Dart `core/utils/blake3.dart` (diuji vs referensi Python di 15 panjang input). TEST HANYA terhadap server lokal tiruan — BELUM terbukti terhadap Cloudflare sungguhan; kalau user masih dapat galat, baca pesannya (tahap mana yang gagal). Versi **2.78.1+173**.
+
 _Update (6 Okt) — `CartPreviewPaper` (pratinjau share keranjang) kini menampilkan `itemNote` + blok Pra-Bayar (`prabayarLines`, `changeTakenTotal`, `debtSettlementTotal`, `preorderSettlementTotal`; saldo = terkunci - kembalian diambil, dibanding total + pelunasan). Toggle `cart_preview_show_prabayar` (default ON, di bawah toggle QRIS, hanya tampil bila ada entri). QR memakai nominal SISA (`qrAmount`), disembunyikan bila sudah tertutup. Test `cart_preview_prabayar_note_test.dart`. Versi **2.78.0+172**.
 
 _Update (4 Okt, susulan) — header keranjang (`cart_sheet.dart`, `_CartCustomerLine`) menampilkan nama pelanggan (tetap=`AppTheme.accent`, ad-hoc=`onSurface`) (bold) + nama pegawai `meta.employeeName` bold di kanannya + alamat (query `customers.address`, hanya pelanggan tetap). Test `cart_sheet_customer_line_test.dart`. Versi **2.77.0+171**.

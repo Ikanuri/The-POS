@@ -10,6 +10,12 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ## 6 Oktober 2026
 
+### 🐛 Perbaikan
+- **"Publish ke Web" tidak lagi gagal dengan pesan "manifest field was
+  expected".** Sebelumnya tombol Publish ke Web di Katalog Pesanan ditolak
+  Cloudflare (error 400) sehingga link katalog tidak pernah jadi. Cara
+  unggah disesuaikan dengan aturan terbaru Cloudflare Pages.
+
 ### ✨ Fitur Baru
 - **Pratinjau keranjang kini memuat catatan item dan Pra-Bayar.** Catatan
   per barang ikut tampil di bawah nama barangnya. Jika ada Pra-Bayar,
