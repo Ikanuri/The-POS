@@ -628,7 +628,9 @@ textarea.tfield{resize:none;min-height:64px;}
 .im-price .roll{justify-content:center;}
 .im-price small{font-family:var(--font);font-size:14px;color:var(--ink-3);font-weight:500;letter-spacing:0;}
 /* Satuan/varian: segmented control yang bisa DIGESER bila banyak. */
-.im-seg-wrap{margin-top:16px;position:relative;}
+.im-seg-wrap{margin-top:14px;position:relative;}
+.im-seg-lbl{font-size:11px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;
+  color:var(--ink-3);margin:0 0 6px 6px;}
 .im-seg{display:flex;gap:4px;background:var(--field);border-radius:24px;padding:4px;
   overflow-x:auto;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
 .im-seg::-webkit-scrollbar{display:none;}
@@ -775,8 +777,14 @@ textarea.tfield{resize:none;min-height:64px;}
     </div>
     <div class="im-price" id="itemPriceDisplay"><span class="roll" id="itemPriceVal">Rp 0</span><small id="itemPriceUnit"></small></div>
     <div class="im-seg-wrap" id="itemSegWrap">
+      <div class="im-seg-lbl">Satuan</div>
       <div class="im-seg" id="itemUnitChips"></div>
-      <div class="im-seg-hint" id="itemSegHint"><span class="arr" aria-hidden="true">&rsaquo;</span> Geser untuk satuan/varian lainnya</div>
+      <div class="im-seg-hint" id="itemSegHint"><span class="arr" aria-hidden="true">&rsaquo;</span> Geser untuk satuan lainnya</div>
+    </div>
+    <div class="im-seg-wrap" id="itemVarWrap">
+      <div class="im-seg-lbl">Varian</div>
+      <div class="im-seg" id="itemVarChips"></div>
+      <div class="im-seg-hint" id="itemVarHint"><span class="arr" aria-hidden="true">&rsaquo;</span> Geser untuk varian lainnya</div>
     </div>
     <div class="im-qty">
       <button type="button" id="itemQtyDec" aria-label="Kurangi">&minus;</button>
@@ -1751,32 +1759,66 @@ function closeItemModal(){
   itemModalUnitId = null;
 }
 
-function renderUnitChips(p, selectedUnitId){
-  var opts = unitOptionsFor(p);
-  var wrap = document.getElementById('itemUnitChips');
-  var box = document.getElementById('itemSegWrap');
+// Pilihan modal dipisah: VARIAN (entri induk "Biasa" + tiap varian) dan
+// SATUAN (satuan milik entri terpilih). Satu unitId = satu pasangan (entri, satuan).
+function entriesFor(p){
+  var es = [{label:'Biasa', units:_ownUnits(p)}];
+  (p.variants||[]).forEach(function(v){ es.push({label:v.name, units:_ownUnits(v)}); });
+  return es;
+}
+function locateUnit(p, unitId){
+  var es = entriesFor(p);
+  for (var i=0;i<es.length;i++){
+    for (var k=0;k<es[i].units.length;k++){
+      if (es[i].units[k].unitId === unitId) return {entries:es, ei:i, ui:k};
+    }
+  }
+  return {entries:es, ei:0, ui:0};
+}
+// Walk-through: tampil SETIAP modal dibuka selama pilihan melebihi lebar
+// (perlu digeser); panah berdenyut lewat CSS. Pilihan terpilih digulirkan
+// ke tengah supaya selalu terlihat. Satu petunjuk per baris.
+function fillSeg(wrapId, boxId, hintId, items, selIdx, onPick){
+  var wrap = document.getElementById(wrapId);
+  var box = document.getElementById(boxId);
+  var hint = document.getElementById(hintId);
   wrap.innerHTML = '';
-  box.style.display = opts.length <= 1 ? 'none' : 'block';
+  box.style.display = items.length <= 1 ? 'none' : 'block';
   var selEl = null;
-  opts.forEach(function(o){
+  items.forEach(function(o, i){
     var chip = document.createElement('button');
     chip.type = 'button';
-    chip.className = 'unit-chip' + (o.unitId === selectedUnitId ? ' sel' : '');
+    chip.className = 'unit-chip' + (i === selIdx ? ' sel' : '');
     chip.innerHTML = esc(o.label) + '<small>' + rp(o.price) + '</small>';
-    chip.addEventListener('click', function(){ loadUnitIntoForm(p, o.unitId); });
+    chip.addEventListener('click', function(){ onPick(i); });
     wrap.appendChild(chip);
-    if (o.unitId === selectedUnitId) selEl = chip;
+    if (i === selIdx) selEl = chip;
   });
-  // Walk-through: tampil SETIAP modal dibuka selama pilihan melebihi lebar
-  // (perlu digeser); panah berdenyut lewat CSS. Pilihan terpilih digulirkan
-  // ke tengah supaya selalu terlihat.
-  var hint = document.getElementById('itemSegHint');
   requestAnimationFrame(function(){
-    hint.classList.toggle('show', opts.length > 1 && wrap.scrollWidth > wrap.clientWidth + 2);
-    if (selEl && wrap.scrollWidth > wrap.clientWidth + 2) {
-      wrap.scrollLeft = selEl.offsetLeft - (wrap.clientWidth - selEl.offsetWidth) / 2;
-    }
+    var over = wrap.scrollWidth > wrap.clientWidth + 2;
+    hint.classList.toggle('show', items.length > 1 && over);
+    if (selEl && over) wrap.scrollLeft = selEl.offsetLeft - (wrap.clientWidth - selEl.offsetWidth) / 2;
   });
+}
+function renderUnitChips(p, selectedUnitId){
+  var loc = locateUnit(p, selectedUnitId);
+  var cur = loc.entries[loc.ei];
+  var curUnit = cur.units[loc.ui].unit;
+  // Satuan: milik entri terpilih.
+  fillSeg('itemUnitChips', 'itemSegWrap', 'itemSegHint',
+    cur.units.map(function(u){ return {label:u.unit, price:u.price}; }), loc.ui,
+    function(i){ loadUnitIntoForm(p, cur.units[i].unitId); });
+  // Varian: pindah varian mempertahankan satuan yang sama bila ada.
+  fillSeg('itemVarChips', 'itemVarWrap', 'itemVarHint',
+    loc.entries.map(function(e){
+      var m = e.units.filter(function(u){ return u.unit === curUnit; })[0] || e.units[0];
+      return {label:e.label, price:m.price};
+    }), loc.ei,
+    function(i){
+      var e = loc.entries[i];
+      var m = e.units.filter(function(u){ return u.unit === curUnit; })[0] || e.units[0];
+      loadUnitIntoForm(p, m.unitId);
+    });
 }
 
 function loadUnitIntoForm(p, unitId){

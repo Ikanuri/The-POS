@@ -207,13 +207,18 @@ void main() {
       'segmen satuan: walk-through panah berdenyut tiap modal dibuka bila perlu digeser',
       () {
     expect(html, contains('id="itemSegHint"'));
-    expect(html, contains('Geser untuk satuan/varian lainnya'));
+    expect(html, contains('Geser untuk satuan lainnya'));
+    expect(html, contains('id="itemVarHint"'));
+    expect(html, contains('Geser untuk varian lainnya'));
+    // Satuan (atas) dan varian (bawah) dipisah jadi dua baris.
+    expect(html.indexOf('id="itemUnitChips"'),
+        lessThan(html.indexOf('id="itemVarChips"')));
     expect(html, contains('@keyframes arr-pulse'));
     // Dihitung SETIAP renderUnitChips (tiap modal dibuka), bukan sekali saja.
     expect(
         html,
         contains(
-            "hint.classList.toggle('show', opts.length > 1 && wrap.scrollWidth > wrap.clientWidth + 2)"));
+            "hint.classList.toggle('show', items.length > 1 && over)"));
     expect(html, isNot(contains("localStorage.setItem('posSegHint")));
     // Harga besar ikut efek roll saat satuan berganti.
     expect(html, contains("rollSet(document.getElementById('itemPriceVal')"));
