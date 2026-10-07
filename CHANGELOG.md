@@ -9,6 +9,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-10-07 (keranjang: opsi layout + struk ambil barang)
 
+- fix(keranjang): sheet Pengaturan Keranjang terbuka 3/4 layar (DraggableScrollableSheet), bisa ditarik penuh & tetap bisa di-swipe turun untuk menutup; tetap 2.85.0+180
 - fix(katalog): total di halaman Pesanan tidak lagi mengecil saat animasi roll angka (selektor `.paper-total span` kena digit roll); tetap 2.85.0+180
 - feat(keranjang): opsi layout baris (subtotal di samping harga, chip kategori di samping nama dgn teks berjalan) di Pengaturan Keranjang
 - feat(keranjang): header 2 baris, tombol Cetak Struk Ambil Barang (raster, tanpa harga, kotak centang tumpul) + Tandai Semua; bump 2.85.0+180

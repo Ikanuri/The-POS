@@ -1013,7 +1013,16 @@ class _CartSheetState extends ConsumerState<CartSheet> {
       context: ctx,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (sheetCtx) => Consumer(
+      // Terbuka 3/4 layar; bisa ditarik naik sampai penuh & TETAP bisa di-swipe
+      // turun untuk menutup (isi dibungkus DraggableScrollableSheet — dulu
+      // SingleChildScrollView biasa menelan gestur turun sehingga sheet tak
+      // bisa ditutup dengan swipe).
+      builder: (sheetCtx) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.75,
+        minChildSize: 0.4,
+        maxChildSize: 0.95,
+        builder: (_, settingsScroll) => Consumer(
         builder: (context, dialogRef, _) {
           final sheetScheme = Theme.of(sheetCtx).colorScheme;
           final current = dialogRef.watch(cartCheckboxPositionProvider);
@@ -1031,6 +1040,7 @@ class _CartSheetState extends ConsumerState<CartSheet> {
             child: SafeArea(
               top: false,
               child: SingleChildScrollView(
+                controller: settingsScroll,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1206,6 +1216,7 @@ class _CartSheetState extends ConsumerState<CartSheet> {
             ),
           );
         },
+        ),
       ),
     );
   }
