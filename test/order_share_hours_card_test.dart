@@ -22,7 +22,7 @@ void main() {
     await pumpWithFakeApp(tester,
         db: db,
         child: const OrderShareScreen(),
-        surfaceSize: const Size(360, 1800));
+        surfaceSize: const Size(360, 4800));
     await tester.pumpAndSettle();
 
     // Awal: jadwal mati -> baris jam tersembunyi.

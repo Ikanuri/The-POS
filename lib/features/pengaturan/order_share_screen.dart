@@ -5,8 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/services/catalog_access_service.dart';
+import '../../core/services/catalog_display_service.dart';
 import '../../core/services/cloudflare_publish_service.dart';
 import '../../core/services/order_page_service.dart';
 
@@ -43,7 +45,32 @@ final _waDirectProvider = FutureProvider<bool>((ref) async {
   return v == null || v == '1';
 });
 
+/// Pengaturan tampilan katalog (kategori, terlaris, pengumuman, Pesan lagi).
+final _displayProvider = FutureProvider<CatalogDisplay>((ref) async {
+  final db = ref.watch(databaseProvider);
+  return CatalogDisplayService.load(db);
+});
+
+const _idMonthsShort = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', //
+  'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des',
+];
+
+/// Tanggal pendek tanpa `DateFormat` ber-locale (app tidak pernah
+/// `initializeDateFormatting` -> `DateFormat(..., 'id_ID')` meledak).
+String _shortDate(DateTime d, {bool withYear = false}) =>
+    '${d.day} ${_idMonthsShort[d.month - 1]}${withYear ? ' ${d.year}' : ''}';
+
 class _OrderShareScreenState extends ConsumerState<OrderShareScreen> {
+  final _announceCtrl = TextEditingController();
+  bool _announceLoaded = false;
+
+  @override
+  void dispose() {
+    _announceCtrl.dispose();
+    super.dispose();
+  }
+
   bool _generating = false;
   int? _lastProductCount;
   DateTime? _lastGeneratedAt;
@@ -158,6 +185,274 @@ class _OrderShareScreenState extends ConsumerState<OrderShareScreen> {
         ),
       ],
     );
+  }
+
+  // ── Tampilan katalog (kategori, terlaris, pengumuman, Pesan lagi) ──────
+
+  Future<void> _saveDisplay(Future<void> Function(AppDatabase db) save) async {
+    await save(ref.read(databaseProvider));
+    ref.invalidate(_displayProvider);
+  }
+
+  Widget _sectionLabel(String text, {bool badge = true}) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 14, 4, 6),
+      child: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 8,
+        runSpacing: 4,
+        children: [
+          Text(text.toUpperCase(),
+              style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.9,
+                  color: scheme.onSurfaceVariant)),
+          if (badge)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2F7D4F),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: const Text('BARU',
+                  style: TextStyle(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.6,
+                      color: Colors.white)),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _pickTopRange(CatalogDisplay d) async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: today,
+      initialDateRange: d.isCustomRange
+          ? DateTimeRange(start: d.topFrom!, end: d.topTo!)
+          : DateTimeRange(
+              start: today.subtract(const Duration(days: 30)), end: today),
+      helpText: 'Periode penjualan terlaris',
+    );
+    if (picked == null) return;
+    await _saveDisplay((db) =>
+        CatalogDisplayService.setTopRange(db, picked.start, picked.end));
+  }
+
+  Widget _buildTopSellersCard(CatalogDisplay d) {
+    final scheme = Theme.of(context).colorScheme;
+    String rangeLabel() {
+      final a = d.topFrom!, b = d.topTo!;
+      return '${_shortDate(a, withYear: a.year != b.year)} - '
+          '${_shortDate(b, withYear: true)}';
+    }
+
+    return Padding(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Periode penjualan yang dihitung saat Publish:',
+              style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant)),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final days in CatalogDisplay.periodPresets)
+                ChoiceChip(
+                  key: ValueKey('top-days-$days'),
+                  label: Text('$days hari'),
+                  selected: d.topDays == days,
+                  onSelected: (_) => _saveDisplay(
+                      (db) => CatalogDisplayService.setTopPreset(db, days)),
+                ),
+              ChoiceChip(
+                key: const ValueKey('top-range'),
+                avatar: const Icon(Icons.calendar_month_outlined, size: 18),
+                label:
+                    Text(d.isCustomRange ? rangeLabel() : 'Pilih tanggal...'),
+                selected: d.isCustomRange,
+                onSelected: (_) => _pickTopRange(d),
+              ),
+            ],
+          ),
+          const Divider(height: 26),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Jumlah saran',
+                        style: TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 2),
+                    Text('Nama produk yang berganti di kolom cari',
+                        style: TextStyle(
+                            fontSize: 12.5, color: scheme.onSurfaceVariant)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              DropdownButton<int>(
+                key: const ValueKey('top-count'),
+                value: d.topCount,
+                underline: const SizedBox.shrink(),
+                items: [
+                  for (var n = CatalogDisplay.topCountMin;
+                      n <= CatalogDisplay.topCountMax;
+                      n++)
+                    DropdownMenuItem(value: n, child: Text('$n')),
+                ],
+                onChanged: (v) {
+                  if (v == null) return;
+                  _saveDisplay(
+                      (db) => CatalogDisplayService.setTopCount(db, v));
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: scheme.surfaceContainerHighest.withOpacity(0.6),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              'Nama saran diambil persis dari nama produk di katalog. Tanpa '
+              'data penjualan di periode itu, kolom cari memakai teks umum.',
+              style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAnnouncementCard(CatalogDisplay d) {
+    final scheme = Theme.of(context).colorScheme;
+    // Isi field diambil SEKALI dari DB (jangan ditimpa tiap provider
+    // refresh — kursor/ketikan user hilang).
+    if (!_announceLoaded && ref.watch(_displayProvider).hasValue) {
+      _announceLoaded = true;
+      _announceCtrl.text = d.announceText;
+    }
+    final text = CatalogDisplay.clampAnnouncement(_announceCtrl.text);
+    final secs = (CatalogDisplay.announceAutoMs(text) / 1000).round();
+    return Column(
+      children: [
+        SwitchListTile(
+          key: const ValueKey('announce-enabled'),
+          secondary: const Icon(Icons.campaign_outlined),
+          title: const Text('Tampilkan pengumuman'),
+          subtitle: const Text('Muncul otomatis sekali tiap link dibuka, lalu '
+              'bisa dibuka lewat tombol megafon. Teks kosong = tombol tidak '
+              'tampil.'),
+          value: d.announceEnabled,
+          onChanged: (v) => _saveDisplay(
+              (db) => CatalogDisplayService.setAnnounceEnabled(db, v)),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+          child: TextField(
+            key: const ValueKey('announce-text'),
+            controller: _announceCtrl,
+            maxLength: CatalogDisplay.maxAnnounceChars,
+            maxLines: 4,
+            minLines: 2,
+            buildCounter: (_,
+                    {required currentLength,
+                    required isFocused,
+                    required maxLength}) =>
+                null,
+            decoration: const InputDecoration(
+              hintText: 'mis. Besok toko tutup lebih awal pukul 15.00',
+              border: OutlineInputBorder(),
+            ),
+            onChanged: (v) {
+              setState(() {});
+              ref
+                  .read(databaseProvider)
+                  .setSetting(CatalogDisplayService.announceTextKey, v);
+            },
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: Text(
+              '${text.runes.length} / ${CatalogDisplay.maxAnnounceChars}'
+              '${text.isEmpty ? '' : ' · tampil otomatis ± $secs detik'}',
+              key: const ValueKey('announce-counter'),
+              style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Bagian "tampilan katalog": kategori, saran terlaris, pengumuman toko &
+  /// Pesan lagi — mengikuti mockup (satu kartu per bagian).
+  List<Widget> _buildDisplaySections() {
+    final d = ref.watch(_displayProvider).valueOrNull ?? const CatalogDisplay();
+    return [
+      _sectionLabel('Tampilan katalog'),
+      Card(
+        child: SwitchListTile(
+          key: const ValueKey('display-categories'),
+          secondary: const Icon(Icons.grid_view_rounded),
+          title: const Text('Tampilkan kategori'),
+          subtitle: const Text(
+              'Pelanggan memilih kategori dulu di halaman awal (chip "Semua '
+              'produk" tetap ada) dan label kategori tampil di tiap produk. '
+              'Dimatikan: langsung semua produk.'),
+          value: d.showCategories,
+          onChanged: (v) => _saveDisplay(
+              (db) => CatalogDisplayService.setShowCategories(db, v)),
+        ),
+      ),
+      _sectionLabel('Saran produk terlaris di kolom cari'),
+      Card(child: _buildTopSellersCard(d)),
+      _sectionLabel('Pengumuman toko'),
+      Card(child: _buildAnnouncementCard(d)),
+      _sectionLabel('Pesan lagi (di HP pelanggan)'),
+      Card(
+        child: SwitchListTile(
+          key: const ValueKey('display-reorder'),
+          secondary: const Icon(Icons.replay_rounded),
+          title: const Text('Tampilkan "Pesan lagi"'),
+          subtitle: const Text(
+              'Riwayat pesanan tersimpan di HP pelanggan sendiri (bukan di '
+              'server). Bila datanya terhapus, pelanggan bisa menempel pesan '
+              'lama dari WhatsApp.'),
+          value: d.reorderEnabled,
+          onChanged: (v) => _saveDisplay(
+              (db) => CatalogDisplayService.setReorderEnabled(db, v)),
+        ),
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
+        child: Text(
+            'Semua pengaturan di atas berlaku di katalog setelah '
+            'Publish/bagikan ulang.',
+            style: TextStyle(
+                fontSize: 11.5,
+                color: Theme.of(context).colorScheme.onSurfaceVariant)),
+      ),
+      _sectionLabel('Yang sudah ada', badge: false),
+    ];
   }
 
   Future<void> _openCloudflareSettings() async {
@@ -348,7 +643,7 @@ class _OrderShareScreenState extends ConsumerState<OrderShareScreen> {
               ),
             ),
           ),
-          const SizedBox(height: 8),
+          ..._buildDisplaySections(),
           Card(
             child: Builder(builder: (context) {
               final waDirect = ref.watch(_waDirectProvider).valueOrNull ?? true;
