@@ -910,7 +910,7 @@ void main() {
     expect(html.contains('.pc-add{position:relative;width:84px'), isTrue);
     expect(html.contains('.prow-controls.selected .pc-add{width:40px'), isTrue);
     expect(html.contains('.pc-minus{width:0;'), isTrue);
-    expect(html.contains('.prow-controls.selected .pc-minus{width:38px'), isTrue);
+    expect(html.contains('.prow-controls.selected .pc-minus{width:40px'), isTrue);
     expect(html.contains('transition:width .26s'), isTrue);
 
     // Mutate-in-place: refreshProwControls TIDAK boleh lagi replaceWith().

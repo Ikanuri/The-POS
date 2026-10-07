@@ -389,15 +389,134 @@ body{
   background:var(--field);color:var(--ink-2);border-radius:999px;cursor:pointer;
   display:flex;align-items:center;justify-content:center;}
 .layout-btn svg{width:18px;height:18px;}
-.search-wrap{padding:10px 16px;}
-.search{display:flex;align-items:center;gap:8px;background:var(--field);
-  border-radius:var(--r-btn);padding:11px 14px;}
-.search input{flex:1;border:none;background:transparent;font-size:16px;
-  color:var(--ink);outline:none;font-family:var(--font);}
-.search svg{flex-shrink:0;opacity:.6;}
-.list{flex:1;overflow-y:auto;padding:0 16px 100px;transition:opacity .12s ease;}
+/* ── Halaman awal (landing) + mode daftar ─────────────────────────────
+   Satu section #pageMenu, dua keadaan lewat atribut data-view:
+   "landing" (hero + kolom cari besar + chip kategori) dan "list" (header
+   kecil, kolom cari menempel, daftar produk). Seluruh isi menu ada di SATU
+   scroller (#menuScroll) supaya kolom cari bisa `position:sticky`, dan
+   input TIDAK pernah dipindah DOM-nya (fokus & kursor aman saat mengetik).
+   Transisi antar-keadaan memakai teknik FLIP (lihat applyState di JS):
+   layout berganti sekali, lalu elemen yang bergeser dianimasikan HANYA
+   dengan transform/opacity — tidak ada animasi height/top/margin. */
+:root{
+  --blob1:rgba(242,184,160,.55); --blob2:rgba(246,217,168,.5);
+  --shadow-s:0 6px 24px rgba(90,60,30,.12); --accsoft:rgba(201,100,66,.13);
+  --ease:cubic-bezier(.22,.61,.36,1);
+}
+:root[data-theme="dark"]{
+  --blob1:rgba(150,72,46,.42); --blob2:rgba(130,100,44,.30);
+  --shadow-s:0 6px 24px rgba(0,0,0,.4); --accsoft:rgba(224,133,95,.16);
+}
+:root[data-theme="light"]{
+  --blob1:rgba(242,184,160,.55); --blob2:rgba(246,217,168,.5);
+  --shadow-s:0 6px 24px rgba(90,60,30,.12); --accsoft:rgba(201,100,66,.13);
+}
+[hidden]{display:none !important;}
+.blobs{position:absolute;left:0;right:0;top:0;height:440px;pointer-events:none;z-index:0;
+  background:radial-gradient(260px 260px at 0% 0%,var(--blob1),transparent 70%),
+             radial-gradient(240px 240px at 100% 6%,var(--blob2),transparent 70%);
+  transition:opacity .3s var(--ease);}
+#pageMenu[data-view="list"] .blobs{opacity:.5;}
+.menu-top{position:relative;z-index:5;flex-shrink:0;display:flex;align-items:center;
+  justify-content:space-between;gap:8px;padding:12px 16px 6px;}
+.tb-id{display:flex;align-items:center;gap:10px;min-width:0;flex:1;border:none;background:none;
+  padding:4px 0;margin:-4px 0;text-align:left;color:inherit;font-family:inherit;cursor:default;
+  transform-origin:left center;transition:transform .28s var(--ease);}
+.tb-id.clickable{cursor:pointer;}
+#pageMenu[data-view="list"] .tb-id{transform:scale(.84);}
+.tb-logo{width:42px;height:42px;border-radius:14px;background:var(--accent);color:#fff;
+  font-family:var(--serif);font-weight:700;font-size:20px;display:flex;align-items:center;
+  justify-content:center;flex-shrink:0;box-shadow:0 4px 12px rgba(201,100,66,.35);}
+.tb-txt{min-width:0;display:block;}
+.menu-top .tb-store{display:block;font-size:22px;line-height:1.12;letter-spacing:-.3px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.tb-status{display:flex;align-items:center;gap:6px;margin-top:3px;font-size:12px;color:var(--ink-2);
+  white-space:nowrap;overflow:hidden;}
+.tb-status span{overflow:hidden;text-overflow:ellipsis;}
+.st-dot{width:7px;height:7px;border-radius:50%;background:var(--ok);flex-shrink:0;
+  box-shadow:0 0 0 3px rgba(79,123,94,.18);}
+.st-dot.closed{background:var(--danger);box-shadow:0 0 0 3px rgba(192,58,58,.16);}
+.menu-top .topbar-btns{gap:6px;}
+.menu-top .theme-btn,.menu-top .layout-btn,.menu-top .ann-btn{width:40px;height:40px;
+  background:var(--card);box-shadow:0 2px 8px rgba(0,0,0,.06);}
+.menu-scroll{position:relative;z-index:1;flex:1;overflow-y:auto;overflow-x:hidden;
+  -webkit-overflow-scrolling:touch;}
+.hero-block{display:none;text-align:center;padding:clamp(30px,13vh,120px) 20px 16px;}
+@supports (height:100dvh){ .hero-block{padding-top:clamp(30px,13dvh,120px);} }
+#pageMenu[data-view="landing"] .hero-block{display:block;}
+.hero-block h2{margin:0 0 6px;font-family:var(--serif);font-size:27px;font-weight:600;
+  line-height:1.15;letter-spacing:-.4px;}
+.hero-block p{margin:0;font-size:13.5px;color:var(--ink-2);}
+.sticky-head{position:sticky;top:0;z-index:3;}
+.sticky-head::before{content:'';position:absolute;left:0;right:0;top:0;bottom:0;
+  background:var(--panel);border-bottom:1px solid var(--line);opacity:0;pointer-events:none;
+  transition:opacity .28s var(--ease);}
+#pageMenu[data-view="list"] .sticky-head::before{opacity:1;}
+.sticky-head>*{position:relative;}
+.search-wrap{padding:8px 16px 10px;}
+.search{display:flex;align-items:center;gap:8px;height:52px;background:var(--card);
+  border:1.5px solid var(--line);border-radius:999px;padding:5px 5px 5px 16px;
+  box-shadow:var(--shadow-s);position:relative;}
+.search:focus-within{border-color:var(--accent);}
+.search svg.mag{width:19px;height:19px;flex-shrink:0;opacity:.55;}
+.q-box{position:relative;flex:1;min-width:0;height:100%;display:flex;align-items:center;}
+.search input{width:100%;height:100%;border:none;background:transparent;font-size:16px;
+  color:var(--ink);outline:none;font-family:var(--font);padding:0;min-width:0;}
+.ph{position:absolute;left:0;right:0;top:0;bottom:0;pointer-events:none;overflow:hidden;
+  font-size:16px;color:var(--ink-3);white-space:nowrap;}
+.ph.off{display:none;}
+.ph span{position:absolute;left:0;right:0;top:0;bottom:0;display:flex;align-items:center;
+  overflow:hidden;white-space:nowrap;transition:transform .32s var(--ease),opacity .28s ease;}
+.ph span i{display:block;min-width:0;font-style:normal;overflow:hidden;text-overflow:ellipsis;}
+.ph span b{color:var(--ink-2);font-weight:600;}
+.ph .cur{transform:none;opacity:1;}
+.ph .up{transform:translateY(-70%);opacity:0;}
+.ph .down{transform:translateY(70%);opacity:0;}
+.ph .noanim{transition:none;}
+.go{width:40px;height:40px;border-radius:50%;border:none;background:var(--accent);color:#fff;
+  flex-shrink:0;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;
+  box-shadow:0 4px 12px rgba(201,100,66,.4);}
+.go svg{width:19px;height:19px;}
+.go .x{display:none;}
+.search.has-text .go .arr{display:none;}
+.search.has-text .go .x{display:block;}
+.search.has-text .go{background:var(--field);color:var(--ink-2);box-shadow:none;}
+.landing-below{display:none;padding:2px 16px 150px;}
+#pageMenu[data-view="landing"] .landing-below{display:block;}
+.cats-hero{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:8px;}
+.cat-chip{min-height:40px;font-family:var(--font);font-size:13.5px;font-weight:600;border-radius:999px;
+  padding:8px 15px;background:var(--card);border:1px solid var(--line);color:var(--ink);
+  cursor:pointer;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.cat-chip:active{transform:scale(.97);}
+.cats-hero .cat-chip.all{background:var(--accent);border-color:var(--accent);color:#fff;
+  box-shadow:0 4px 12px rgba(201,100,66,.35);}
+.cat-chip.sel{background:var(--accsoft);border-color:var(--accent);color:var(--accent);}
+.cat-row{display:none;gap:8px;overflow-x:auto;padding:0 16px 8px;scrollbar-width:none;
+  -webkit-overflow-scrolling:touch;}
+.cat-row::-webkit-scrollbar{display:none;}
+.cat-row .cat-chip{flex:0 0 auto;}
+#pageMenu[data-catrow="1"] .cat-row{display:flex;}
+.extras-slot-b{display:none;padding:2px 16px 0;}
+#pageMenu[data-extras="1"] .extras-slot-b{display:block;}
+.list-info{text-align:center;font-size:12.5px;line-height:1.45;color:var(--ink-3);margin:2px 20px 8px;}
+#listWrap{display:none;}
+#pageMenu[data-view="list"] #listWrap{display:block;}
+.list{padding:0 16px 100px;transition:opacity .12s ease;}
+.ghost{position:absolute;pointer-events:none;z-index:2;margin:0;overflow:hidden;}
+.prow-cat{display:inline-block;max-width:100%;margin-top:5px;font-size:10.5px;font-weight:600;
+  border-radius:999px;padding:2px 8px;background:var(--field);color:var(--ink-2);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:top;}
+@media (prefers-reduced-motion: reduce){
+  .tb-id,.blobs,.sticky-head::before,.ph span,.ann-pop,.ann-pop.show{transition:none;}
+}
+@media (max-width:340px){
+  .menu-top{padding-left:12px;padding-right:12px;}
+  .search-wrap{padding-left:12px;padding-right:12px;}
+  .menu-top .topbar-btns{gap:4px;}
+  .hero-block h2{font-size:24px;}
+}
 .prow{background:var(--card);border:1px solid var(--line);border-radius:var(--r-card);
-  margin-bottom:9px;overflow:hidden;}
+  margin-bottom:9px;overflow:hidden;contain:layout style;}
 .prow-main{display:flex;align-items:center;gap:12px;padding:13px;cursor:pointer;}
 .prow-icon{width:40px;height:40px;flex-shrink:0;border-radius:999px;background:var(--field);
   display:flex;align-items:center;justify-content:center;font-size:19px;line-height:1;}
@@ -408,6 +527,7 @@ body{
   padding:8px 13px;font-size:13px;font-weight:700;flex-shrink:0;}
 .empty{text-align:center;color:var(--ink-3);padding:50px 20px;font-size:15px;}
 .more-bar{padding:6px 0 4px;text-align:center;}
+.more-info:empty{display:none;}
 .more-info{font-size:13.5px;line-height:1.45;color:var(--ink-2);margin:4px 4px 10px;}
 .more-btn{display:block;width:100%;min-height:48px;padding:10px 16px;box-sizing:border-box;
   border:1px solid var(--line);background:var(--card);color:var(--accent);border-radius:999px;
@@ -421,15 +541,15 @@ body{
    node-nya diganti baru tiap qty berubah, browser tidak punya nilai awal
    untuk ditransisikan dan efek "memecah"-nya hilang total. */
 .prow-controls{display:flex;align-items:center;flex-shrink:0;}
-.pc-minus{width:0;height:38px;padding:0;border:none;border-radius:999px;
+.pc-minus{width:0;height:40px;padding:0;border:none;border-radius:999px;
   background:#D64545;color:#fff;font-size:19px;font-weight:700;cursor:pointer;
   flex-shrink:0;overflow:hidden;opacity:0;transform:scale(.7);
   display:flex;align-items:center;justify-content:center;
   box-shadow:0 2px 6px rgba(0,0,0,.15);
   transition:width .26s cubic-bezier(.3,1.25,.45,1),opacity .18s ease,
              transform .26s cubic-bezier(.3,1.25,.45,1),margin-right .26s ease;}
-.prow-controls.selected .pc-minus{width:38px;opacity:1;transform:scale(1);margin-right:7px;}
-.pc-add{position:relative;width:84px;height:38px;border:none;border-radius:999px;
+.prow-controls.selected .pc-minus{width:40px;opacity:1;transform:scale(1);margin-right:7px;}
+.pc-add{position:relative;width:84px;height:40px;border:none;border-radius:999px;
   background:var(--accent);color:#fff;font-size:14.5px;font-weight:700;cursor:pointer;
   flex-shrink:0;overflow:hidden;font-family:var(--font);
   box-shadow:0 2px 6px rgba(0,0,0,.15);
@@ -756,7 +876,7 @@ textarea.tfield{resize:none;min-height:64px;}
    sebagai kegagalan oleh pelanggan. */
 .toast{position:fixed;left:50%;bottom:104px;
   transform:translateX(-50%) translateY(14px);
-  background:var(--ink);color:var(--panel);padding:11px 18px;border-radius:999px;
+  background:var(--ink);color:var(--panel);padding:11px 18px;border-radius:22px;
   font-size:14.5px;font-weight:600;z-index:30;opacity:0;pointer-events:none;
   max-width:calc(100% - 40px);text-align:center;cursor:pointer;
   box-shadow:0 6px 18px rgba(0,0,0,.22);
@@ -767,29 +887,56 @@ textarea.tfield{resize:none;min-height:64px;}
 </head>
 <body>
 <div id="app">
-  <!-- Halaman 1 — daftar produk (mode browse). -->
-  <section class="page page-menu" id="pageMenu">
-    <div class="topbar">
-      <div>
-        <div class="tb-store" id="storeName"></div>
-        <div class="tb-sub" id="storeSub"></div>
-      </div>
+  <!-- Halaman 1 — menu: landing (hero + kolom cari + kategori) atau daftar
+       produk. Semua isi ada di SATU scroller (#menuScroll); atribut
+       data-view/data-catrow/data-extras diatur JS (applyState). -->
+  <section class="page page-menu" id="pageMenu" data-view="list" data-catrow="0" data-extras="0">
+    <div class="blobs" aria-hidden="true"></div>
+    <div class="menu-top" id="menuTop">
+      <button class="tb-id" id="tbId" type="button">
+        <span class="tb-logo" id="storeLogo" aria-hidden="true"></span>
+        <span class="tb-txt">
+          <span class="tb-store" id="storeName"></span>
+          <span class="tb-status" id="storeSub"></span>
+        </span>
+      </button>
       <div class="topbar-btns">
         <button class="layout-btn" id="layoutBtn" type="button" aria-label="Ganti tampilan daftar/kotak"></button>
         <button class="theme-btn" id="themeBtn" type="button" aria-label="Ganti tampilan terang/gelap"></button>
-      </div>
-    </div>
-    <div class="search-wrap">
-      <div class="search">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-        <input id="q" type="text" placeholder="Cari produk…" autocomplete="off" />
       </div>
     </div>
     <div class="closed-banner" id="closedBanner">
       <span id="closedMsg"></span>
       <button id="codeLink" type="button">Pelanggan langganan? Masukkan kode</button>
     </div>
-    <div class="list" id="list"></div>
+    <div class="menu-scroll" id="menuScroll">
+      <div class="hero-block" id="heroBlock">
+        <h2>Mau pesan apa hari ini?</h2>
+        <p>Ketik nama barang atau pilih kategori</p>
+      </div>
+      <div class="sticky-head" id="stickyHead">
+        <div class="search-wrap" id="searchWrap">
+          <div class="search" id="searchBox">
+            <svg class="mag" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+            <div class="q-box">
+              <input id="q" type="text" placeholder="Cari barang…" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" aria-label="Cari barang" />
+              <div class="ph off" id="phLayer" aria-hidden="true"><span class="cur" id="phA"></span><span class="down" id="phB"></span></div>
+            </div>
+            <button class="go" id="goBtn" type="button" aria-label="Cari" hidden><svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg><svg class="x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+          </div>
+        </div>
+        <div class="cat-row" id="catRow" role="group" aria-label="Kategori"></div>
+      </div>
+      <div class="landing-below" id="landingBelow">
+        <div class="cats-hero" id="catsHero" role="group" aria-label="Kategori"></div>
+        <div id="extrasSlotL"></div>
+      </div>
+      <div class="extras-slot-b" id="extrasSlotB"></div>
+      <div id="listWrap">
+        <div class="list-info" id="listInfo" hidden></div>
+        <div class="list" id="list"></div>
+      </div>
+    </div>
   </section>
 
   <!-- Halaman 2 — ringkasan pesanan. Ada di DOM sejak awal (blueprint §2). -->
@@ -1083,7 +1230,7 @@ document.getElementById('mbClear').addEventListener('click', function(){
 // Scroll daftar ke bawah: keterangan tombol Kosongkan menyusut (sisa ikon);
 // scroll ke atas / di posisi paling atas: muncul lagi.
 (function(){
-  var listEl = document.getElementById('list');
+  var listEl = document.getElementById('menuScroll');
   var wrap = document.getElementById('mainBtnWrap');
   var last = 0, ticking = false;
   listEl.addEventListener('scroll', function(){
@@ -1130,7 +1277,10 @@ DATA.products.forEach(function(p, pIdx){
 
 document.getElementById('storeName').textContent = DATA.store;
 document.getElementById('paperStore').textContent = DATA.store;
-document.getElementById('storeSub').textContent = 'Katalog pesanan · diperbarui ' + DATA.generatedAt;
+// Logo = huruf awal nama toko (code point pertama, aman utk emoji).
+document.getElementById('storeLogo').textContent =
+    (Array.from(String(DATA.store || '').trim())[0] || 'T').toUpperCase();
+// Baris status header (buka/tutup + jam) — diisi renderStatus() di bawah.
 
 // ── Angka roll (mesin slot) utk total/subtotal. Digit yang berubah memutar
 // strip [lama, acak..., baru] naik ATAU turun (acak), lalu strip diruntuhkan
@@ -1421,6 +1571,7 @@ function loadAccess(){
 }
 var _lastClosedKey = null;
 function applyOpenState(){
+  renderStatus();
   var st = hoursState();
   var closed = st.closed && !accessGranted;
   var app = document.getElementById('app');
@@ -1505,7 +1656,9 @@ document.getElementById('codeOverlay').addEventListener('click', function(e){
 // scroll) atau infinite scroll.
 var PAGE_SIZE = 60;
 var shownLimit = PAGE_SIZE;   // baris maks yang dirender utk query aktif
-var _lastQ = null;            // query (trim+lowercase) render terakhir
+var _lastQ = null;            // query (trim+lowercase) render terakhir ('' = tanpa query)
+var _lastKey = null;          // kunci isi daftar render terakhir (query / kategori / semua)
+var _stale = false;           // true = render dilewati saat landing, wajib dibangun ulang
 var _matches = [];            // produk yang cocok utk _lastQ (semua, bukan hanya yang tampil)
 var _renderedCount = 0;       // berapa dari _matches yang sudah ada di DOM
 var _moreBar = null;          // elemen keterangan + tombol "Tampilkan lagi"
@@ -1540,7 +1693,9 @@ function buildProductRow(p){
   main.innerHTML =
     '<div class="prow-icon" aria-hidden="true">'+pickIcon(p.name, p.category)+'</div>' +
     '<div class="prow-info"><div class="prow-name">'+esc(p.name)+'</div>' +
-      '<div class="prow-meta">'+metaHtml+'</div></div>';
+      '<div class="prow-meta">'+metaHtml+'</div>' +
+      (CATS_ON && p.category ? '<div class="prow-cat">'+esc(p.category)+'</div>' : '') +
+      '</div>';
 
   if (p.outOfStock) {
     // Item 25a — tanda stok habis manual: badge menggantikan tombol
@@ -1561,8 +1716,32 @@ function buildProductRow(p){
   return row;
 }
 
-// Keterangan "Menampilkan X dari N" + tombol "Tampilkan lagi" di ujung
-// daftar. Elemennya dipakai ulang (fokus tombol tidak hilang saat ditekan).
+// Keterangan di ATAS daftar: "N produk di <Kategori>" (mode kategori) atau
+// "Menampilkan X dari N produk — ketik nama barang untuk mencari" (semua
+// produk tanpa query, mis. layout tanpa kategori). Mode pencarian tidak
+// memakainya (info "Menampilkan X dari N" ada di ujung daftar, di atas
+// tombol "Tampilkan lagi").
+function updateListInfo(){
+  var el = document.getElementById('listInfo');
+  var total = _matches.length, txt = '';
+  if (!_lastQ && total > 0) {
+    var catName = (CATS_ON && selCat && selCat !== '*') ? selCat : '';
+    var trunc = total > _renderedCount;
+    if (catName) {
+      txt = (trunc ? 'Menampilkan ' + fmtCount(_renderedCount) + ' dari ' + fmtCount(total) + ' produk di '
+                   : fmtCount(total) + ' produk di ') + catName;
+    } else if (trunc) {
+      txt = 'Menampilkan ' + fmtCount(_renderedCount) + ' dari ' + fmtCount(total) +
+            ' produk — ketik nama barang untuk mencari';
+    }
+  }
+  el.textContent = txt;
+  el.hidden = !txt;
+}
+
+// Tombol "Tampilkan lagi" di ujung daftar. Elemennya dipakai ulang (fokus
+// tombol tidak hilang saat ditekan). Info "Menampilkan X dari N produk"
+// di sini hanya utk hasil PENCARIAN (selain itu ada di updateListInfo).
 function updateMoreBar(list){
   var total = _matches.length;
   if (total <= _renderedCount) {
@@ -1581,60 +1760,116 @@ function updateMoreBar(list){
   }
   var remaining = total - _renderedCount;
   var step = Math.min(PAGE_SIZE, remaining);
-  var info = 'Menampilkan ' + fmtCount(_renderedCount) + ' dari ' + fmtCount(total) + ' produk';
-  if (!_lastQ) info += ' — ketik nama barang untuk mencari';
-  _moreBar.querySelector('#moreInfo').textContent = info;
+  var info = _lastQ ? 'Menampilkan ' + fmtCount(_renderedCount) + ' dari ' + fmtCount(total) + ' produk' : '';
+  var infoEl = _moreBar.querySelector('#moreInfo');
+  infoEl.textContent = info;
+  infoEl.hidden = !info;
   _moreBar.querySelector('#moreBtn').textContent = 'Tampilkan ' + fmtCount(step) + ' lagi' +
     (remaining > PAGE_SIZE ? ' (sisa ' + fmtCount(remaining) + ')' : '');
-  list.appendChild(_moreBar); // pindah ke baris paling akhir
+  if (list.lastChild !== _moreBar) list.appendChild(_moreBar); // selalu baris paling akhir
+}
+
+// Baris dibangun BERTAHAP: potongan pertama (cukup utk layar pertama) langsung,
+// sisanya sepotong per frame. Membangun 60 baris sekaligus terukur ~300 ms
+// satu frame di HP lambat (emoji + kartu berbayangan mahal di-raster) —
+// itu yang bikin transisi landing <-> daftar & mengetik tersendat. Token
+// membatalkan pengisian lama begitu render baru dimulai.
+var ROWS_FIRST = 4;
+var _fillToken = 0;
+// Ukuran potongan menyesuaikan kecepatan perangkat (AIMD): frame sebelumnya
+// cepat -> potongan digandakan (maks 20), lambat -> dibagi dua (min 2). HP
+// lambat tetap tidak melewati ~1 frame panjang; perangkat cepat selesai
+// dalam beberapa frame.
+function fillRows(list, from, to, token){
+  var i = from, size = ROWS_FIRST, last = 0;
+  function step(now){
+    if (token !== _fillToken) return;
+    if (last) {
+      var dt = now - last;
+      if (dt > 34) size = Math.max(2, size >> 1);
+      else if (dt < 21) size = Math.min(20, size * 2);
+    }
+    last = now || 0;
+    var end = Math.min(to, i + size);
+    var frag = document.createDocumentFragment();
+    for (; i < end; i++) frag.appendChild(buildProductRow(_matches[i]));
+    list.insertBefore(frag, (_moreBar && _moreBar.parentNode === list) ? _moreBar : null);
+    if (i < to) requestAnimationFrame(step);
+  }
+  step(0);
+}
+
+// Kunci isi daftar: query (PENCARIAN SELALU GLOBAL — mengabaikan kategori
+// terpilih) > kategori terpilih > semua produk.
+function listKeyFor(q){
+  if (q) return 'q:' + q;
+  if (CATS_ON && selCat && selCat !== '*') return 'c:' + selCat;
+  return 'all';
 }
 
 // force=true: bangun ulang baris yang sedang tampil walau query/limit tak
 // berubah (perlu saat qty/keranjang berubah dari tempat lain, atau
-// shopClosed berganti). Query berubah otomatis mereset limit + gulir ke atas.
+// shopClosed berganti). Query/kategori berubah otomatis mereset limit +
+// gulir ke atas. Saat LANDING daftar tidak tampil: tidak dibangun sama
+// sekali (ditandai _stale, dibangun begitu pindah ke mode daftar).
 function renderList(force){
+  if (curView === 'landing') { _stale = true; return; }
   var q = document.getElementById('q').value.trim().toLowerCase();
+  var key = listKeyFor(q);
   var list = document.getElementById('list');
-  var qChanged = (q !== _lastQ);
+  var scroller = document.getElementById('menuScroll');
+  var qChanged = (key !== _lastKey) || _stale;
+  _stale = false;
   if (!force && !qChanged && shownLimit === _renderedCount) return;
   if (!force && !qChanged && _renderedCount >= _matches.length) return;
 
   if (qChanged) {
     shownLimit = PAGE_SIZE;
     _matches = [];
+    var cat = (!q && CATS_ON && selCat && selCat !== '*') ? selCat : null;
     for (var i = 0; i < DATA.products.length; i++) {
-      if (!q || matchesQuery(i, q)) _matches.push(DATA.products[i]);
+      if (q) { if (matchesQuery(i, q)) _matches.push(DATA.products[i]); }
+      else if (cat) { if (DATA.products[i].category === cat) _matches.push(DATA.products[i]); }
+      else _matches.push(DATA.products[i]);
     }
     _lastQ = q;
+    _lastKey = key;
   }
   var target = Math.min(shownLimit, _matches.length);
 
   // Tambah baris saja (tombol "Tampilkan lagi") — tanpa bongkar ulang.
   if (!force && !qChanged && _renderedCount > 0 && target > _renderedCount) {
-    var fragA = document.createDocumentFragment();
-    for (var a = _renderedCount; a < target; a++) fragA.appendChild(buildProductRow(_matches[a]));
-    if (_moreBar && _moreBar.parentNode) _moreBar.parentNode.removeChild(_moreBar);
-    list.appendChild(fragA);
+    var from = _renderedCount;
+    // Tombol "Tampilkan lagi" TIDAK dicabut/dipindah (mencabut elemen yang
+    // sedang fokus melepas fokusnya) — baris baru disisipkan di depannya.
     _renderedCount = target;
     updateMoreBar(list);
+    updateListInfo();
+    fillRows(list, from, target, ++_fillToken);
     return;
   }
 
-  var keepScroll = list.scrollTop;
-  // Bangun semua baris di DocumentFragment dulu (di luar DOM aktif), baru
-  // ditempel sekali di akhir — mencegah reflow bertahap per baris.
-  var frag = document.createDocumentFragment();
-  for (var j = 0; j < target; j++) frag.appendChild(buildProductRow(_matches[j]));
+  var keepScroll = scroller.scrollTop;
+  var token = ++_fillToken;
   if (_moreBar && _moreBar.parentNode) _moreBar.parentNode.removeChild(_moreBar);
   list.innerHTML = '';
+  _renderedCount = target;
   if (_matches.length === 0) {
     list.innerHTML = '<div class="empty">Produk "'+esc(q)+'" tidak ditemukan.</div>';
+  } else if (qChanged) {
+    // Isi baru dari atas: bertahap (lihat fillRows).
+    updateMoreBar(list);
+    fillRows(list, 0, target, token);
   } else {
+    // Render ulang paksa (mis. qty berubah) dgn posisi gulir dipertahankan:
+    // harus utuh sekaligus supaya posisi gulir bisa dipulihkan.
+    var frag = document.createDocumentFragment();
+    for (var j = 0; j < target; j++) frag.appendChild(buildProductRow(_matches[j]));
     list.appendChild(frag);
+    updateMoreBar(list);
   }
-  _renderedCount = target;
-  updateMoreBar(list);
-  list.scrollTop = qChanged ? 0 : keepScroll;
+  updateListInfo();
+  scroller.scrollTop = qChanged ? 0 : keepScroll;
 }
 
 // "+" selalu menambah SATUAN DASAR induk, walau produk punya varian — sama
@@ -2021,8 +2256,8 @@ document.getElementById('itemScrim').addEventListener('click', closeItemModal);
 // menutup bila ditarik > 30% tinggi atau cukup cepat, selain itu kembali
 // (snap-back). touchmove non-pasif + preventDefault supaya browser TIDAK
 // ikut refresh (pull-to-refresh) / membekukan halaman.
-(function(){
-  var sheet = document.getElementById('itemSheet');
+// Dipakai bersama oleh modal produk & sheet riwayat pesanan.
+function attachSheetSwipe(sheet, onClose){
   var body = sheet.querySelector('.sheet-body');
   var startY = 0, dy = 0, startT = 0, tracking = false, dragging = false;
   sheet.addEventListener('touchstart', function(e){
@@ -2051,11 +2286,12 @@ document.getElementById('itemScrim').addEventListener('click', closeItemModal);
     sheet.style.transition = '';
     var close = dy > sheet.offsetHeight * 0.3 || vel > 0.6;
     sheet.style.transform = '';
-    if (close) closeItemModal();
+    if (close) onClose();
   }
   sheet.addEventListener('touchend', end);
   sheet.addEventListener('touchcancel', end);
-})();
+}
+attachSheetSwipe(document.getElementById('itemSheet'), function(){ closeItemModal(); });
 
 document.getElementById('itemAddBtn').addEventListener('click', function(){
   if (!itemModalProduct || !itemModalUnitId) return;
@@ -2085,13 +2321,347 @@ document.getElementById('itemRemoveBtn').addEventListener('click', function(){
 
 function render(){ renderList(true); renderCartBar(); if (sheetOpen) renderCartSheet(); }
 
+// ── Halaman awal (landing) / mode daftar ─────────────────────────────────
+// Keadaan tampilan diturunkan dari: ada query? kategori terpilih? Pencarian
+// SELALU global. Pindah keadaan = applyState(): layout berganti SEKALI
+// (atribut data-view di #pageMenu), lalu elemen yang bergeser dianimasikan
+// dgn teknik FLIP — hanya transform/opacity (tanpa animasi height/top/
+// margin, tanpa layout thrash). Input pencarian TIDAK pernah dipindah dari
+// DOM-nya, jadi fokus/kursor/keyboard HP aman saat transisi.
+var CATS = (DATA.categories || []).filter(function(c){ return typeof c === 'string' && c; });
+var CATS_ON = !!DATA.showCategories && CATS.length > 0;
+var selCat = null;   // null = belum memilih (landing); '*' = Semua produk; selain itu nama kategori
+var curView = null, curCatRow = false, curExtras = false;
+function byId(id){ return document.getElementById(id); }
+var qEl = byId('q'), pageMenu = byId('pageMenu'), menuScroll = byId('menuScroll');
+var searchWrapEl = byId('searchWrap'), searchBoxEl = byId('searchBox');
+var heroBlock = byId('heroBlock'), landingBelow = byId('landingBelow');
+var catRowEl = byId('catRow'), catsHero = byId('catsHero');
+var extrasSlotB = byId('extrasSlotB'), listWrapEl = byId('listWrap'), listEl2 = byId('list');
+var tbId = byId('tbId'), menuTopEl = byId('menuTop');
+var UI_EASE = 'cubic-bezier(.22,.61,.36,1)';
+var UI_MS = 280;
+function motionOk(){
+  try {
+    return typeof Element.prototype.animate === 'function' &&
+      !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  } catch (e) { return false; }
+}
+
+function computeState(){
+  var q = qEl.value.trim();
+  var view = (!CATS_ON || q || selCat !== null) ? 'list' : 'landing';
+  return {view: view, catRow: CATS_ON && view === 'list' && !q, extras: !CATS_ON && !q};
+}
+
+// Salinan visual elemen yang akan HILANG (ghost): ditaruh absolut di posisi
+// lamanya lalu di-fade-out, supaya elemen yang langsung di-display:none
+// tidak lenyap mendadak. id dibuang agar tidak dobel di DOM.
+function ghostOf(el, mode){
+  var pr = pageMenu.getBoundingClientRect(), r = el.getBoundingClientRect();
+  if (!r.width || !r.height) return null;
+  var g;
+  if (mode === 'list') {
+    g = document.createElement('div');
+    g.className = 'list' + (el.classList.contains('tile-mode') ? ' tile-mode' : '');
+    for (var i = 0; i < el.children.length && i < 6; i++) g.appendChild(el.children[i].cloneNode(true));
+  } else {
+    g = el.cloneNode(true);
+  }
+  g.removeAttribute('id');
+  Array.prototype.forEach.call(g.querySelectorAll('[id]'), function(n){ n.removeAttribute('id'); });
+  g.classList.add('ghost');
+  g.setAttribute('aria-hidden', 'true');
+  g.style.display = (mode === 'list') ? 'block' : getComputedStyle(el).display;
+  g.style.left = (r.left - pr.left) + 'px';
+  g.style.top = (r.top - pr.top) + 'px';
+  g.style.width = r.width + 'px';
+  g.style.height = r.height + 'px';
+  return g;
+}
+function flipY(el, oldTop){
+  var dy = oldTop - el.getBoundingClientRect().top;
+  if (Math.abs(dy) > 1) {
+    el.animate([{transform: 'translateY(' + dy + 'px)'}, {transform: 'none'}],
+      {duration: UI_MS, easing: UI_EASE});
+  }
+}
+function enterAnim(el, dy, delay){
+  el.animate([{opacity: 0, transform: 'translateY(' + dy + 'px)'}, {opacity: 1, transform: 'none'}],
+    {duration: UI_MS, delay: delay || 0, easing: UI_EASE, fill: 'backwards'});
+}
+
+function applyState(st, animate){
+  var oldView = curView, wasCatRow = curCatRow, wasExtras = curExtras;
+  if (oldView === st.view && wasCatRow === st.catRow && wasExtras === st.extras) return;
+  var anim = animate && oldView !== null && !sheetOpen && motionOk();
+  var ghosts = [], first = null;
+  if (anim) {
+    first = {search: searchWrapEl.getBoundingClientRect().top,
+             list: listWrapEl.getBoundingClientRect().top};
+    if (oldView === 'landing' && st.view === 'list') {
+      ghosts.push(ghostOf(heroBlock)); ghosts.push(ghostOf(landingBelow));
+    } else if (oldView === 'list' && st.view === 'landing') {
+      ghosts.push(ghostOf(listEl2, 'list'));
+      if (wasCatRow) ghosts.push(ghostOf(catRowEl));
+    } else if (wasCatRow && !st.catRow) {
+      ghosts.push(ghostOf(catRowEl));
+    }
+    if (wasExtras && !st.extras) ghosts.push(ghostOf(extrasSlotB));
+  }
+  pageMenu.setAttribute('data-view', st.view);
+  pageMenu.setAttribute('data-catrow', st.catRow ? '1' : '0');
+  pageMenu.setAttribute('data-extras', st.extras ? '1' : '0');
+  curView = st.view; curCatRow = st.catRow; curExtras = st.extras;
+  if (oldView !== st.view) menuScroll.scrollTop = 0;
+  // Ke landing: kosongkan baris daftar (ghost sudah menyalin yg terlihat).
+  // Baris basi yang disembunyikan akan di-layout ULANG saat mode daftar
+  // tampil lagi (ratusan objek, ~puluhan ms di HP lambat) sebelum sempat
+  // diganti isi baru.
+  if (st.view === 'landing' && oldView !== 'landing') clearListDom();
+  if (oldView !== null) renderList(); // render awal dilakukan init (render())
+  syncTbId();
+  if (oldView === 'landing' && st.view === 'list') pushListState();
+  else if (oldView === 'list' && st.view === 'landing') popListState();
+  if (!anim) return;
+
+  flipY(searchWrapEl, first.search);
+  if (oldView === 'list' && st.view === 'list') flipY(listWrapEl, first.list);
+  if (oldView === 'landing' && st.view === 'list') {
+    enterAnim(listWrapEl, 14, 40);
+    if (st.catRow) enterAnim(catRowEl, 8, 20);
+  } else if (oldView === 'list' && st.view === 'landing') {
+    enterAnim(heroBlock, 12, 40);
+    enterAnim(landingBelow, 14, 80);
+  } else {
+    if (st.catRow && !wasCatRow) enterAnim(catRowEl, 8, 0);
+    if (st.extras && !wasExtras) enterAnim(extrasSlotB, 8, 0);
+  }
+  ghosts.forEach(function(g){
+    if (!g) return;
+    pageMenu.appendChild(g);
+    var kill = function(){ if (g.parentNode) g.parentNode.removeChild(g); };
+    g.animate([{opacity: 1, transform: 'none'}, {opacity: 0, transform: 'translateY(-8px)'}],
+      {duration: 200, easing: 'ease-out', fill: 'forwards'}).onfinish = kill;
+    setTimeout(kill, 600);
+  });
+}
+
+function clearListDom(){
+  _fillToken++;
+  if (_moreBar && _moreBar.parentNode) _moreBar.parentNode.removeChild(_moreBar);
+  listEl2.innerHTML = '';
+  _renderedCount = 0;
+  _matches = [];
+  _lastKey = null;
+  _lastQ = null;
+  byId('listInfo').hidden = true;
+}
+function syncTbId(){
+  var link = CATS_ON && curView === 'list';
+  tbId.classList.toggle('clickable', link);
+  if (link) tbId.setAttribute('aria-label', 'Kembali ke halaman awal');
+  else tbId.removeAttribute('aria-label');
+}
+tbId.addEventListener('click', function(){ if (CATS_ON && curView === 'list') goLanding(); });
+
+function goLanding(){
+  if (!CATS_ON) return;
+  selCat = null;
+  setSelChips();
+  qEl.value = '';
+  clearTimeout(searchTimer);
+  syncQueryUi();
+  applyState(computeState(), true);
+}
+
+// Riwayat browser: masuk mode daftar dari landing memakai satu entri
+// history, jadi tombol Kembali HP kembali ke landing (bukan keluar dari
+// katalog). _popIgnore menelan popstate yg dipicu history.back() buatan sendiri.
+var _listPushed = false, _popIgnore = 0;
+function pushListState(){
+  if (_listPushed) return;
+  try { history.pushState({posList: 1}, ''); _listPushed = true; } catch (e) {}
+}
+function popListState(){
+  if (!_listPushed) return;
+  _listPushed = false;
+  _popIgnore++;
+  try { history.back(); } catch (e) { _popIgnore--; }
+}
+
+// ── Chip kategori. Dibangun SEKALI (dua set: di landing & di baris sticky);
+// pilihan hanya mengganti class (fokus keyboard tidak hilang).
+function buildChips(){
+  if (!CATS_ON) return;
+  function mk(label, val, cls){
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'cat-chip' + (cls ? ' ' + cls : '');
+    b.textContent = label;
+    b.dataset.cat = val;
+    b.addEventListener('click', function(){ selectCat(val); });
+    return b;
+  }
+  catsHero.appendChild(mk('Semua produk', '*', 'all'));
+  CATS.forEach(function(c){ catsHero.appendChild(mk(c, c)); });
+  catRowEl.appendChild(mk('Semua produk', '*'));
+  CATS.forEach(function(c){ catRowEl.appendChild(mk(c, c)); });
+}
+function setSelChips(){
+  Array.prototype.forEach.call(catRowEl.children, function(b){
+    var on = selCat !== null && b.dataset.cat === selCat;
+    b.classList.toggle('sel', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+}
+function centerChip(val){
+  requestAnimationFrame(function(){
+    Array.prototype.forEach.call(catRowEl.children, function(b){
+      if (b.dataset.cat === val) {
+        catRowEl.scrollLeft = b.offsetLeft - (catRowEl.clientWidth - b.offsetWidth) / 2;
+      }
+    });
+  });
+}
+function selectCat(val){
+  if (selCat === val && curView === 'list') return;
+  var wasList = curView === 'list';
+  selCat = val;
+  setSelChips();
+  clearTimeout(searchTimer);
+  applyState(computeState(), true);   // landing -> daftar: daftar dibangun di dalam
+  if (wasList) {
+    renderList();
+    if (motionOk()) listWrapEl.animate([{opacity: .3}, {opacity: 1}], {duration: 200, easing: 'ease-out'});
+  }
+  centerChip(val);
+}
+
+// ── Kolom cari: placeholder saran terlaris bergantian ("Cari <b>Nama</b>").
+// Berhenti saat field fokus/terisi/tab tersembunyi; tanpa animasi bila
+// prefers-reduced-motion (teks langsung diganti). Tombol panah mengisi kolom
+// dgn saran yang SEDANG tampil lalu mencari (pencarian global biasa).
+var SUG = (DATA.topSellers || []).filter(function(s){ return typeof s === 'string' && s.trim(); });
+var sugIdx = 0, phTimer = null;
+var phLayer = byId('phLayer'), phCur = byId('phA'), phNext = byId('phB'), goBtn = byId('goBtn');
+function setPh(el, name){
+  el.textContent = '';
+  var i = document.createElement('i');
+  i.appendChild(document.createTextNode('Cari '));
+  var b = document.createElement('b');
+  b.textContent = name;
+  i.appendChild(b);
+  el.appendChild(i);
+}
+function syncQueryUi(){
+  var has = qEl.value.length > 0;
+  searchBoxEl.classList.toggle('has-text', has);
+  phLayer.classList.toggle('off', has || !SUG.length);
+  goBtn.hidden = !has && !SUG.length;
+  goBtn.setAttribute('aria-label',
+    has ? 'Hapus pencarian' : (SUG.length ? 'Cari ' + SUG[sugIdx] : 'Cari'));
+}
+function phCanRun(){
+  return SUG.length > 1 && !document.hidden && document.activeElement !== qEl &&
+    !qEl.value && !sheetOpen;
+}
+function phStep(){
+  var next = (sugIdx + 1) % SUG.length;
+  if (!motionOk()) {
+    setPh(phCur, SUG[next]);
+  } else {
+    setPh(phNext, SUG[next]);
+    phNext.className = 'noanim down';
+    void phNext.offsetWidth;
+    phNext.className = 'cur';
+    phCur.className = 'up';
+    var t = phCur; phCur = phNext; phNext = t;
+  }
+  sugIdx = next;
+  syncQueryUi();
+}
+function phLoop(){
+  clearTimeout(phTimer);
+  phTimer = setTimeout(function(){ if (phCanRun()) phStep(); phLoop(); }, 2800);
+}
+function initPlaceholder(){
+  if (SUG.length) {
+    qEl.placeholder = '';
+    setPh(phCur, SUG[0]);
+    phLoop();
+  }
+  syncQueryUi();
+}
+function fillSuggestion(){
+  if (!SUG.length) return;
+  qEl.value = SUG[sugIdx];
+  syncQueryUi();
+  immediateSearch();
+  qEl.blur();
+}
+function immediateSearch(){
+  clearTimeout(searchTimer);
+  applyState(computeState(), true);
+  renderList();
+}
+
 // Debounce ~120ms — tiap huruf diketik memicu renderList(); tanpa debounce
 // ini kerja berulang di setiap huruf, dampaknya terbesar di HP low-end.
+// Pengecualian: huruf PERTAMA / terakhir-dihapus (keadaan tampilan berganti,
+// mis. landing <-> hasil) diproses langsung supaya transisinya responsif.
 var searchTimer = null;
-document.getElementById('q').addEventListener('input', function(){
+qEl.addEventListener('input', function(){
+  syncQueryUi();
   clearTimeout(searchTimer);
+  var st = computeState();
+  if (st.view !== curView || st.catRow !== curCatRow || st.extras !== curExtras) {
+    applyState(st, true);
+    return;
+  }
   searchTimer = setTimeout(function(){ renderList(); }, 120);
 });
+qEl.addEventListener('keydown', function(e){
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  if (!qEl.value.trim() && SUG.length) { fillSuggestion(); return; }
+  immediateSearch();
+  qEl.blur();
+});
+goBtn.addEventListener('click', function(){
+  if (qEl.value.length > 0) {
+    qEl.value = '';
+    syncQueryUi();
+    immediateSearch();
+    qEl.focus();
+  } else {
+    fillSuggestion();
+  }
+});
+
+// ── Status header (buka/tutup + jam) ──────────────────────────────────
+function renderStatus(){
+  var el = byId('storeSub'), h = DATA.hours, st = hoursState(), text, closed = false;
+  if (h && (h.forced || h.enabled)) {
+    if (st.closed && !accessGranted) { closed = true; text = st.msg; }
+    else if (st.closed) text = 'Tutup · akses pelanggan aktif';
+    else text = (h.enabled && h.open !== h.close) ? 'Buka · sampai ' + fmtHHMM(h.close) : 'Buka';
+  } else {
+    text = 'Katalog pesanan · diperbarui ' + DATA.generatedAt;
+  }
+  var key = (closed ? '1' : '0') + text;
+  if (el._k === key) return;
+  el._k = key;
+  el.textContent = '';
+  var dot = document.createElement('i');
+  dot.className = 'st-dot' + (closed ? ' closed' : '');
+  var sp = document.createElement('span');
+  sp.textContent = text;
+  el.appendChild(dot);
+  el.appendChild(sp);
+}
+
+
 
 // Blueprint §2/§6 — pindah mode, BUKAN pindah halaman: tidak ada reload,
 // tidak ada history baru, kedua section tetap hidup di DOM. `sheetOpen`
@@ -2123,12 +2693,15 @@ function closeSheet(fromPop){
   renderCartBar();
   if (_histPushed) {
     _histPushed = false;
-    if (!fromPop) { try { history.back(); } catch (e) {} }
+    if (!fromPop) { _popIgnore++; try { history.back(); } catch (e) { _popIgnore--; } }
   }
 }
 document.getElementById('backBtn').addEventListener('click', function(){ closeSheet(false); });
 window.addEventListener('popstate', function(){
-  if (sheetOpen) closeSheet(true);
+  if (_popIgnore > 0) { _popIgnore--; return; }
+  if (sheetOpen) { closeSheet(true); return; }
+  // Kembali dari mode daftar (masuk lewat landing) -> kembali ke landing.
+  if (_listPushed) { _listPushed = false; goLanding(); }
 });
 
 function esc(s){
@@ -2194,7 +2767,7 @@ function showToast(msg, opts){
   t.classList.add('show');
   clearTimeout(_toastTimer);
   if (!opts.persist) {
-    _toastTimer = setTimeout(function(){ t.classList.remove('show'); }, 2500);
+    _toastTimer = setTimeout(function(){ t.classList.remove('show'); }, opts.ms || 2500);
   }
 }
 document.getElementById('toast').addEventListener('click', function(){
@@ -2258,6 +2831,11 @@ if (!DATA.products || DATA.products.length === 0) {
 
 loadCart();
 loadAccess();
+buildChips();
+initPlaceholder();
+applyState(computeState(), false);
+setSelChips();
+syncTbId();
 applyOpenState();
 render();
 // Jadwal dicek ulang berkala (halaman yang dibiarkan terbuka melewati jam
