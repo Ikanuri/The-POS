@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
@@ -208,6 +210,114 @@ void main() {
     expect(PickListRenderer.qtyLabel(0.3333333333), '0.333x');
     expect(PickListRenderer.qtyLabel(2.5), '2.5x');
     expect(PickListRenderer.qtyLabel(2.0), '2x');
+  });
+
+  // ── Nama & alamat pelanggan di header ────────────────────────────────────
+  const oneLine = [PickLine(qty: 1, name: 'Gula', unit: 'Kg')];
+  final at = DateTime(2026, 10, 7, 14, 32);
+
+  Future<Uint8List> headerOf({
+    String name = '',
+    String address = '',
+    PrinterSettings settings = const PrinterSettings(),
+  }) async {
+    final parts = await PrinterService.buildPickListParts(
+      storeName: 'Toko Berkah',
+      at: at,
+      lines: oneLine,
+      settings: settings,
+      customerName: name,
+      customerAddress: address,
+    );
+    return parts.first;
+  }
+
+  int indexOfAscii(List<int> bytes, String needle, [int from = 0]) {
+    final n = latin1.encode(needle);
+    for (var i = from; i <= bytes.length - n.length; i++) {
+      var ok = true;
+      for (var k = 0; k < n.length; k++) {
+        if (bytes[i + k] != n[k]) {
+          ok = false;
+          break;
+        }
+      }
+      if (ok) return i;
+    }
+    return -1;
+  }
+
+  /// Apakah ESC E 1 (bold on) muncul di [from, to).
+  bool boldOnBetween(List<int> b, int from, int to) {
+    for (var i = from; i + 2 < to; i++) {
+      if (b[i] == 0x1B && b[i + 1] == 0x45 && b[i + 2] == 0x01) return true;
+    }
+    return false;
+  }
+
+  test('tanpa pelanggan: header IDENTIK byte-per-byte dgn sebelum fitur', () async {
+    final baseline = await headerOf();
+    expect(await headerOf(name: ''), baseline);
+    expect(await headerOf(name: '   \t ', address: 'Jl. Mawar 1'), baseline,
+        reason: 'nama hanya spasi = tanpa pelanggan; alamat tanpa nama diabaikan');
+    expect(await headerOf(name: '中文', address: 'Jl. X'), baseline,
+        reason: 'nama yang habis setelah sanitasi ASCII = tanpa pelanggan');
+    final withName = await headerOf(name: 'Bu Ani');
+    expect(withName.length, greaterThan(baseline.length));
+  });
+
+  test('nama pelanggan tebal, alamat biasa; keduanya setelah timestamp, '
+      'sebelum garis pemisah', () async {
+    final h = await headerOf(name: 'Bu Ani', address: 'Jl. Mawar No. 5');
+    final stampAt = indexOfAscii(h, '07/10/2026 14:32');
+    final nameAt = indexOfAscii(h, 'Bu Ani');
+    final addrAt = indexOfAscii(h, 'Jl. Mawar No. 5');
+    expect(stampAt, greaterThan(0));
+    expect(nameAt, greaterThan(stampAt));
+    expect(addrAt, greaterThan(nameAt));
+    expect(indexOfAscii(h, '--------', addrAt), greaterThan(addrAt),
+        reason: 'garis pemisah (hr) setelah alamat');
+    // Bold ON tepat sebelum nama (setelah timestamp), TIDAK ada bold ON
+    // antara akhir nama dan awal alamat.
+    expect(boldOnBetween(h, stampAt + 16, nameAt), isTrue);
+    expect(boldOnBetween(h, nameAt + 6, addrAt), isFalse,
+        reason: 'alamat tidak tebal');
+  });
+
+  test('pelanggan tetap tanpa alamat: hanya nama', () async {
+    final h = await headerOf(name: 'Toko Sumber', address: '  ');
+    expect(indexOfAscii(h, 'Toko Sumber'), greaterThan(0));
+    final h2 = await headerOf(name: 'Toko Sumber');
+    expect(h, h2);
+  });
+
+  test('edge: non-ASCII disanitasi, newline alamat jadi baris terpisah, '
+      'nama & alamat panjang dipecah per kata sesuai lebar kertas', () async {
+    final h = await headerOf(
+      name: 'Bu Siti — Café Sumber Rejeki Makmur Sentosa Abadi',
+      address: 'Jl. Raya Panjang Sekali No. 123\nRT 01/RW 02 • Kel. Baru',
+    );
+    // Em-dash & bullet dipetakan ke ASCII ('-' / '*'), bukan dibuang/dikirim.
+    // Nama 32 kol: dipecah di batas kata.
+    expect(indexOfAscii(h, 'Bu Siti - Cafe Sumber Rejeki'), greaterThan(0));
+    expect(indexOfAscii(h, 'Makmur Sentosa Abadi'), greaterThan(0));
+    // Newline alamat -> dua baris sendiri-sendiri.
+    expect(indexOfAscii(h, 'Jl. Raya Panjang Sekali No. 123'), greaterThan(0));
+    expect(indexOfAscii(h, 'RT 01/RW 02 * Kel. Baru'), greaterThan(0));
+    // Kata tunggal sangat panjang dipotong paksa, tidak melempar.
+    final long = await headerOf(name: 'A' * 70);
+    expect(indexOfAscii(long, 'A' * 32), greaterThan(0));
+    expect(indexOfAscii(long, 'A' * 33), -1);
+  });
+
+  test('kertas 80mm: baris pelanggan selebar 42 kolom', () async {
+    final h = await headerOf(
+      name: '${'B' * 40} ${'C' * 10}',
+      settings: const PrinterSettings(paperSize: '80'),
+    );
+    expect(indexOfAscii(h, 'B' * 40), greaterThan(0));
+    expect(indexOfAscii(h, '${'B' * 40} C'), -1,
+        reason: '40+1+10 > 42 -> pindah baris');
   });
 
   test('daftar kosong -> tidak ada gambar', () {

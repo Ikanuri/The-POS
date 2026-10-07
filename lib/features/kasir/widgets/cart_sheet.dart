@@ -986,8 +986,26 @@ class _CartSheetState extends ConsumerState<CartSheet> {
       }
       final db = ref.read(databaseProvider);
       final storeName = await db.getSetting('store_name') ?? '';
+      // Pelanggan keranjang: ad-hoc = nama saja; pelanggan tetap (punya
+      // customerId) + alamat dari DB. Dibaca & di-await di sini (bukan
+      // mengandalkan nilai widget yang mungkin belum termuat).
+      final meta = ref.read(cartMetaProvider(widget.cartId));
+      final custName = meta.hasCustomer ? meta.customerName! : '';
+      var custAddress = '';
+      final cid = meta.customerId;
+      if (custName.trim().isNotEmpty && cid != null && cid.isNotEmpty) {
+        try {
+          custAddress = await ref.read(_cartCustomerAddressProvider(cid).future);
+        } catch (_) {
+          custAddress = ''; // alamat gagal dimuat -> cetak nama saja
+        }
+      }
       final ok = await PrinterService.printPickList(
-          storeName: storeName, at: DateTime.now(), lines: lines);
+          storeName: storeName,
+          at: DateTime.now(),
+          lines: lines,
+          customerName: custName,
+          customerAddress: custAddress);
       snack(ok ? 'Struk ambil barang tercetak' : 'Gagal mencetak struk',
           error: !ok);
     } finally {

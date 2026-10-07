@@ -548,11 +548,14 @@ class PrinterService {
   /// Cetak daftar pengambilan barang dari keranjang (sebelum checkout) —
   /// tanpa harga, qty & nama besar, kotak centang persegi tumpul di kanan
   /// tiap baris (digambar sbg raster, lihat [PickListRenderer]). Header
-  /// hanya nama toko + waktu cetak.
+  /// hanya nama toko + waktu cetak, plus nama (tebal) & alamat pelanggan
+  /// bila keranjang punya pelanggan.
   static Future<bool> printPickList({
     required String storeName,
     required DateTime at,
     required List<PickLine> lines,
+    String customerName = '',
+    String customerAddress = '',
   }) async {
     final mac = await getSavedMac();
     if (mac == null || mac.isEmpty) return false;
@@ -562,7 +565,12 @@ class PrinterService {
 
     final settings = await loadSettings();
     final parts = await buildPickListParts(
-        storeName: storeName, at: at, lines: lines, settings: settings);
+        storeName: storeName,
+        at: at,
+        lines: lines,
+        settings: settings,
+        customerName: customerName,
+        customerAddress: customerAddress);
     // Dikirim BERTAHAP (header, tiap strip raster, penutup) dgn jeda singkat:
     // printer thermal murah punya buffer kecil — satu tulis puluhan KB raster
     // membuatnya kehilangan sinkron & mencetak sisa data mentah sbg teks
@@ -596,9 +604,16 @@ class PrinterService {
     required DateTime at,
     required List<PickLine> lines,
     required PrinterSettings settings,
+    String customerName = '',
+    String customerAddress = '',
   }) async {
     final parts = await buildPickListParts(
-        storeName: storeName, at: at, lines: lines, settings: settings);
+        storeName: storeName,
+        at: at,
+        lines: lines,
+        settings: settings,
+        customerName: customerName,
+        customerAddress: customerAddress);
     return Uint8List.fromList([for (final p in parts) ...p]);
   }
 
@@ -610,6 +625,8 @@ class PrinterService {
     required DateTime at,
     required List<PickLine> lines,
     required PrinterSettings settings,
+    String customerName = '',
+    String customerAddress = '',
   }) async {
     final profile = await CapabilityProfile.load();
     final paperSize =
@@ -635,6 +652,21 @@ class PrinterService {
         styles: const PosStyles(bold: true, align: PosAlign.center)));
     head.addAll(
         gen.text(stamp, styles: const PosStyles(align: PosAlign.center)));
+    // Pelanggan (opsional): nama TEBAL, alamat (hanya pelanggan tetap) biasa.
+    // Tanpa nama (kosong/spasi/non-ASCII semua) -> tidak ada baris sama
+    // sekali, header identik dgn sebelum fitur ini. Alamat tanpa nama
+    // diabaikan. Dipecah per kata ke lebar kertas supaya tidak terpotong.
+    final custLines = _wrapAscii(customerName, settings.charWidth);
+    if (custLines.isNotEmpty) {
+      for (final l in custLines) {
+        head.addAll(gen.text(l,
+            styles: const PosStyles(bold: true, align: PosAlign.center)));
+      }
+      for (final l in _wrapAscii(customerAddress, settings.charWidth)) {
+        head.addAll(
+            gen.text(l, styles: const PosStyles(align: PosAlign.center)));
+      }
+    }
     head.addAll(gen.hr());
     parts.add(Uint8List.fromList(head));
 
@@ -1662,6 +1694,40 @@ class PrinterService {
   }
 
   // ── ASCII sanitizer ──────────────────────────────────────────────────────
+
+  /// Pecah teks (boleh multi-baris) jadi baris ASCII selebar <= [width]
+  /// karakter, per kata; kata yang lebih panjang dari [width] dipotong
+  /// paksa. Baris kosong dibuang. Newline diproses SEBELUM [_toAscii]
+  /// (yang membuang karakter kontrol).
+  static List<String> _wrapAscii(String text, int width) {
+    final out = <String>[];
+    for (final raw in text.split(RegExp(r'\r\n|\r|\n'))) {
+      final line = _toAscii(raw).replaceAll(RegExp(r'\s+'), ' ').trim();
+      if (line.isEmpty) continue;
+      var cur = '';
+      for (var word in line.split(' ')) {
+        while (word.length > width) {
+          if (cur.isNotEmpty) {
+            out.add(cur);
+            cur = '';
+          }
+          out.add(word.substring(0, width));
+          word = word.substring(width);
+        }
+        if (word.isEmpty) continue;
+        if (cur.isEmpty) {
+          cur = word;
+        } else if (cur.length + 1 + word.length <= width) {
+          cur = '$cur $word';
+        } else {
+          out.add(cur);
+          cur = word;
+        }
+      }
+      if (cur.isNotEmpty) out.add(cur);
+    }
+    return out;
+  }
 
   static String _toAscii(String s) {
     const map = {
