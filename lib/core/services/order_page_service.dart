@@ -513,6 +513,7 @@ body{
   font-family:var(--serif);font-weight:700;font-size:20px;display:flex;align-items:center;
   justify-content:center;flex-shrink:0;box-shadow:0 4px 12px rgba(201,100,66,.35);
   transition:width .28s var(--ease),height .28s var(--ease),font-size .28s var(--ease),border-radius .28s var(--ease);}
+.tb-logo svg{width:72%;height:72%;display:block;}
 .tb-txt{min-width:0;display:block;}
 /* Nama toko boleh membungkus maks. 2 baris (bukan satu baris + "..."),
    status di bawahnya juga boleh membungkus: semua info header terbaca utuh
@@ -1088,7 +1089,7 @@ textarea.tfield{resize:none;min-height:64px;}
     <div class="blobs" aria-hidden="true"></div>
     <div class="menu-top" id="menuTop">
       <button class="tb-id" id="tbId" type="button">
-        <span class="tb-logo" id="storeLogo" aria-hidden="true"></span>
+        <span class="tb-logo" id="storeLogo" aria-hidden="true"><svg viewBox="0 0 512 512" fill="none" stroke="currentColor" stroke-width="22" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M120.0 79.0 C107.2 84.2 93.0 92.5 82.0 100.0 C71.0 107.5 61.8 115.7 54.0 124.0 C46.2 132.3 40.3 140.3 35.0 150.0 C29.7 159.7 25.2 171.3 22.0 182.0 C18.8 192.7 17.0 201.5 16.0 214.0 C15.0 226.5 14.8 243.3 16.0 257.0 C17.2 270.7 19.5 283.3 23.0 296.0 C26.5 308.7 30.3 320.3 37.0 333.0 C43.7 345.7 53.2 359.8 63.0 372.0 C72.8 384.2 84.8 395.8 96.0 406.0 C107.2 416.2 117.7 424.3 130.0 433.0 C142.3 441.7 156.2 450.5 170.0 458.0 C183.8 465.5 199.0 472.5 213.0 478.0 C227.0 483.5 244.2 489.2 254.0 491.0 C263.8 492.8 264.0 491.2 272.0 489.0 C280.0 486.8 289.3 484.0 302.0 478.0 C314.7 472.0 332.2 463.0 348.0 453.0 C363.8 443.0 382.3 429.8 397.0 418.0 C411.7 406.2 424.7 394.5 436.0 382.0 C447.3 369.5 456.8 357.2 465.0 343.0 C473.2 328.8 480.2 312.0 485.0 297.0 C489.8 282.0 492.5 267.7 494.0 253.0 C495.5 238.3 496.2 224.3 494.0 209.0 C491.8 193.7 486.3 174.3 481.0 161.0 C475.7 147.7 470.0 139.2 462.0 129.0 C454.0 118.8 442.2 107.5 433.0 100.0 C423.8 92.5 416.7 88.5 407.0 84.0 C397.3 79.5 384.5 75.2 375.0 73.0 C365.5 70.8 358.5 70.8 350.0 71.0 C341.5 71.2 331.5 72.5 324.0 74.0 C316.5 75.5 313.3 76.0 305.0 80.0 C296.7 84.0 284.8 98.0 274.0 98.0 C263.2 98.0 252.7 84.8 240.0 80.0 C227.3 75.2 211.5 70.8 198.0 69.0 C184.5 67.2 172.0 67.3 159.0 69.0 C146.0 70.7 132.8 73.8 120.0 79.0Z"/><path d="M466.0 28.0 C466.0 25.2 464.8 25.0 463.0 24.0 C461.2 23.0 464.3 22.5 455.0 22.0 C445.7 21.5 421.7 20.7 407.0 21.0 C392.3 21.3 378.7 22.5 367.0 24.0 C355.3 25.5 345.8 27.5 337.0 30.0 C328.2 32.5 320.2 36.0 314.0 39.0 C307.8 42.0 305.2 43.7 300.0 48.0 C294.8 52.3 288.3 58.3 283.0 65.0 C277.7 71.7 273.7 87.8 268.0 88.0 C262.3 88.2 254.8 71.8 249.0 66.0 C243.2 60.2 240.7 57.8 233.0 53.0 C225.3 48.2 212.3 41.0 203.0 37.0 C193.7 33.0 189.0 31.3 177.0 29.0 C165.0 26.7 146.2 24.0 131.0 23.0 C115.8 22.0 97.3 22.2 86.0 23.0 C74.7 23.8 66.8 25.7 63.0 28.0 C59.2 30.3 60.2 31.2 63.0 37.0 C65.8 42.8 72.8 55.2 80.0 63.0 C87.2 70.8 95.7 82.7 106.0 84.0 C116.3 85.3 128.3 73.8 142.0 71.0 C155.7 68.2 176.0 67.0 188.0 67.0 C200.0 67.0 205.3 69.0 214.0 71.0 C222.7 73.0 230.7 74.7 240.0 79.0 C249.3 83.3 264.3 94.0 270.0 97.0 C275.7 100.0 267.3 100.3 274.0 97.0 C280.7 93.7 297.3 81.5 310.0 77.0 C322.7 72.5 337.2 70.3 350.0 70.0 C362.8 69.7 375.7 72.0 387.0 75.0 C398.3 78.0 406.7 91.5 418.0 88.0 C429.3 84.5 447.5 61.8 455.0 54.0 C462.5 46.2 461.2 45.3 463.0 41.0 C464.8 36.7 466.0 30.8 466.0 28.0Z"/><path d="M281 101 C352 128 392 214 376 306 C363 386 322 446 266 486"/><path d="M92 146 C104 120 128 104 154 98"/></svg></span>
         <span class="tb-txt">
           <span class="tb-store" id="storeName"></span>
           <span class="tb-status" id="storeSub"></span>
@@ -1514,9 +1515,7 @@ DATA.products.forEach(function(p, pIdx){
 
 document.getElementById('storeName').textContent = DATA.store;
 document.getElementById('paperStore').textContent = DATA.store;
-// Logo = huruf awal nama toko (code point pertama, aman utk emoji).
-document.getElementById('storeLogo').textContent =
-    (Array.from(String(DATA.store || '').trim())[0] || 'T').toUpperCase();
+// Logo header = persik The POS (garis putih di kotak aksen), disematkan di HTML.
 // Baris status header (buka/tutup + jam) — diisi renderStatus() di bawah.
 
 // ── Angka roll (mesin slot) utk total/subtotal. Digit yang berubah memutar

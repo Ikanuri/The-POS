@@ -8,6 +8,12 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 7 Oktober 2026 (Logo Katalog)
+
+- **Logo di header katalog kini persik The POS** (garis putih di kotak oranye), bukan lagi huruf awal nama toko. Perlu Publish ulang katalog.
+
+---
+
 ## 7 Oktober 2026 (Katalog Pesanan: Kirim ke Telegram + Perapian Tampilan)
 
 > **Perlu Publish ulang katalog** (tekan "Publish ke Web" atau "Buat & Bagikan") agar semua perubahan di bawah muncul di HP pelanggan.

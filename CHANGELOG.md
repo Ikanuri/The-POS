@@ -7,6 +7,10 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-10-07 (logo header katalog)
+
+- feat(katalog-html): logo header diganti persik The POS (garis putih di kotak aksen), menggantikan huruf awal toko; bump 2.90.0+186
+
 ## 2026-10-07 (katalog: tombol kirim WhatsApp + Telegram, perbaikan header & roll angka)
 
 - fix(katalog-html): header mode daftar mengecil lewat ukuran nyata (bukan transform scale) - nama toko tidak lagi terpotong 3 baris & keterangan status tetap 12px di 320px
