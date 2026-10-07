@@ -8,6 +8,15 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 7 Oktober 2026 (Keranjang Lebih Fleksibel)
+
+- **Dua opsi tata letak baris keranjang** (Pengaturan Keranjang): total per produk bisa ditaruh **di samping harga**, dan chip kategori harga bisa ditaruh **di samping nama produk** (digeser ke samping bila banyak; nama panjang jadi teks berjalan). Tidak menimpa centang atau stepper, apa pun letak centangnya.
+- **Cetak Struk Ambil Barang:** satu tombol di header keranjang mencetak daftar barang (tanpa harga) ke printer thermal Bluetooth, dengan tulisan lebih besar dan kotak centang di kanan tiap barang, supaya pegawai bisa mengambilkan barang sebelum pembeli bayar. Barang yang sudah dicentang di keranjang ikut tercentang di cetakan.
+- **Tombol Tandai Semua** di header keranjang (centang/hapus centang semua barang sekaligus).
+- Header keranjang kini dua baris: judul + Kosongkan di atas, tombol aksi lainnya di bawah.
+
+---
+
 ## 6 Oktober 2026 (Revolver Qty)
 
 - **Input jumlah cepat dengan geser:** geser tombol **+** ke **kiri** (di daftar produk kasir maupun keranjang) dan muncul pita bertanda seperti tuner radio. Geser pelan = naik satu-satu, geser cepat = meloncat lebih jauh; geser balik ke kanan untuk menurunkan. Angka besar tampil di kiri sehingga tidak tertutup jari. Tap biasa pada + tetap menambah 1.

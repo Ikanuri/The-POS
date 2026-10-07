@@ -20,7 +20,9 @@ import '../../../core/providers/device_provider.dart';
 import '../../../core/providers/laci_meja_provider.dart';
 import '../../../core/providers/theme_provider.dart';
 import '../../../core/services/order_parser_service.dart';
+import '../../../core/services/pick_list_renderer.dart';
 import '../../../core/services/price_service.dart';
+import '../../../core/services/printer_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/item_count_badge.dart';
 import '../../../core/widgets/marquee_text.dart';
@@ -928,6 +930,75 @@ class _CartSheetState extends ConsumerState<CartSheet> {
     }
   }
 
+  bool _isPrintingPickList = false;
+
+  /// Cetak "struk ambil barang" (lihat tombol di header). Hanya baris dengan
+  /// qty efektif > 0 (induk placeholder yang qty-nya habis dipakai varian
+  /// dilewati; variannya sendiri tetap tercetak).
+  Future<void> _printPickList(BuildContext ctx, WidgetRef ref) async {
+    if (_isPrintingPickList) return;
+    setState(() => _isPrintingPickList = true);
+    final messenger = ScaffoldMessenger.of(ctx);
+    void snack(String msg, {bool error = false, bool settings = false}) {
+      if (!mounted) return;
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+          content: Text(msg),
+          backgroundColor: error ? Theme.of(ctx).colorScheme.error : null,
+          action: settings
+              ? SnackBarAction(
+                  label: 'Pengaturan',
+                  onPressed: () => ctx.push('/pengaturan/printer'),
+                )
+              : null,
+        ));
+    }
+
+    try {
+      final notifier = ref.read(cartProvider(widget.cartId).notifier);
+      final lines = <PickLine>[];
+      for (final item in notifier.current) {
+        final q = notifier.effectiveQtyFor(item);
+        if (q <= 0) continue;
+        lines.add(PickLine(
+          qty: q,
+          name: item.productName,
+          unit: item.unitName,
+          note: item.itemNote,
+          checked: item.checked,
+          isVariant: item.isVariant,
+        ));
+      }
+      if (lines.isEmpty) {
+        snack('Tidak ada barang untuk dicetak');
+        return;
+      }
+      final mac = await PrinterService.getSavedMac();
+      if (mac == null || mac.isEmpty) {
+        snack('Printer belum dikonfigurasi', settings: true);
+        return;
+      }
+      final granted = await PrinterService.ensurePermissions();
+      if (!granted) {
+        snack('Izin Bluetooth ditolak', settings: true);
+        return;
+      }
+      final db = ref.read(databaseProvider);
+      final storeName = await db.getSetting('store_name') ?? '';
+      final ok = await PrinterService.printPickList(
+          storeName: storeName, at: DateTime.now(), lines: lines);
+      snack(ok ? 'Struk ambil barang tercetak' : 'Gagal mencetak struk',
+          error: !ok);
+    } finally {
+      if (mounted) {
+        setState(() => _isPrintingPickList = false);
+      } else {
+        _isPrintingPickList = false;
+      }
+    }
+  }
+
   /// Susulan (permintaan user): sheet "Pengaturan Keranjang" — posisi
   /// checkbox verifikasi (`CartCheckboxPosition`), toggle konfirmasi tombol
   /// minus stepper (`cartMinusConfirmProvider`, mencegah missclick qty
@@ -1292,7 +1363,15 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                     minimumSize: const Size(36, 36),
                   ),
                 ),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Baris 1 (tetap, tidak ikut scroll): judul + nomor +
+                    // Kosongkan. Baris 2: ikon aksi lain (scroll horizontal
+                    // bila tak muat) — header jadi 2 baris krn ikon bertambah
+                    // (cetak ambil barang, tandai semua) di samping nama
+                    // pelanggan/alamat yang juga memakai tinggi header.
+                    Row(
                   children: [
                     Text('Keranjang',
                         style: Theme.of(context).textTheme.titleMedium),
@@ -1304,11 +1383,17 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                               fontWeight: FontWeight.w700,
                               color: scheme.onSurfaceVariant)),
                     ],
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: SingleChildScrollView(
+                    const Spacer(),
+                    IconButton(
+                      tooltip: 'Kosongkan',
+                      onPressed:
+                          cart.isEmpty ? null : () => _confirmClear(ctx, ref),
+                      icon: Icon(Icons.delete_outline, color: scheme.error),
+                    ),
+                  ],
+                ),
+                      SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
-                        reverse: true,
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -1376,6 +1461,37 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                     // (lihat `CartCheckboxPosition`), tapi dibuat generik
                     // ("Pengaturan Keranjang") supaya opsi lain bisa ditambah
                     // ke dialog yang sama nanti tanpa tombol baru lagi.
+                    // Struk ambil barang: cetak daftar pengambilan (TANPA harga)
+                    // ke printer thermal Bluetooth supaya pegawai bisa
+                    // menyiapkan barang sebelum pembeli checkout. Kotak
+                    // centang di kanan tiap baris; yang sudah dicentang di
+                    // keranjang ikut tercentang di cetakan.
+                    if (widget.cartId != kCatalogCartId)
+                      IconButton(
+                        tooltip: 'Cetak Struk Ambil Barang',
+                        onPressed: (cart.isEmpty || _isPrintingPickList)
+                            ? null
+                            : () => _printPickList(ctx, ref),
+                        icon: const Icon(Icons.print_outlined),
+                      ),
+                    // Tandai / hapus tanda SEMUA baris (sama dgn tombol di
+                    // struk in-app). Aktif bila ada baris; ikon berganti
+                    // sesuai keadaan.
+                    IconButton(
+                      tooltip: cart.isNotEmpty && cart.every((c) => c.checked)
+                          ? 'Hapus Tanda'
+                          : 'Tandai Semua',
+                      onPressed: cart.isEmpty
+                          ? null
+                          : () => notifier.setAllChecked(
+                              !cart.every((c) => c.checked)),
+                      icon: Icon(
+                        cart.isNotEmpty && cart.every((c) => c.checked)
+                            ? Icons.remove_done
+                            : Icons.done_all,
+                        color: AppTheme.payGreen,
+                      ),
+                    ),
                     IconButton(
                       tooltip: 'Pengaturan Keranjang',
                       onPressed: () => _showCartSettingsDialog(ctx),
@@ -1389,16 +1505,9 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                             : () => _showHandoffQr(ctx, ref, cart),
                         icon: const _QrTransferIcon(),
                       ),
-                    IconButton(
-                      tooltip: 'Kosongkan',
-                      onPressed:
-                          cart.isEmpty ? null : () => _confirmClear(ctx, ref),
-                      icon: Icon(Icons.delete_outline, color: scheme.error),
-                    ),
                           ],
                         ),
                       ),
-                    ),
                   ],
                 ),
               ),

@@ -7,6 +7,11 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-10-07 (keranjang: opsi layout + struk ambil barang)
+
+- feat(keranjang): opsi layout baris (subtotal di samping harga, chip kategori di samping nama dgn teks berjalan) di Pengaturan Keranjang
+- feat(keranjang): header 2 baris, tombol Cetak Struk Ambil Barang (raster, tanpa harga, kotak centang tumpul) + Tandai Semua; bump 2.85.0+180
+
 ## 2026-10-06 (susulan — revolver qty)
 
 - feat(kasir): revolver qty — geser tombol "+" ke kiri memunculkan pita bertanda (tuner) untuk input qty cepat, kecepatan adaptif; di grid/list kasir, baris varian, dan keranjang; bump 2.84.0+179

@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../database/app_database.dart';
 import '../utils/change_display.dart';
 import '../utils/preorder_calc.dart';
+import 'pick_list_renderer.dart';
 
 /// Nomor urut nota saja, tanpa kode kasir & tanggal. localId berformat
 /// "KASIR-YYYYMMDD-NNNN" → "5". Defensif untuk data lama tanpa format.
@@ -540,6 +541,82 @@ class PrinterService {
     );
 
     return _writeBytes(bytes, settings);
+  }
+
+  // ── Struk ambil barang (daftar pengambilan, TANPA harga) ─────────────────
+
+  /// Cetak daftar pengambilan barang dari keranjang (sebelum checkout) —
+  /// tanpa harga, qty & nama besar, kotak centang persegi tumpul di kanan
+  /// tiap baris (digambar sbg raster, lihat [PickListRenderer]). Header
+  /// hanya nama toko + waktu cetak.
+  static Future<bool> printPickList({
+    required String storeName,
+    required DateTime at,
+    required List<PickLine> lines,
+  }) async {
+    final mac = await getSavedMac();
+    if (mac == null || mac.isEmpty) return false;
+
+    final connected = await connect(mac);
+    if (!connected) return false;
+
+    final settings = await loadSettings();
+    final bytes = await buildPickListBytes(
+        storeName: storeName, at: at, lines: lines, settings: settings);
+    return _writeBytes(bytes, settings);
+  }
+
+  /// Test-only seam ke pembangun byte struk ambil barang (tanpa hardware).
+  @visibleForTesting
+  static Future<Uint8List> buildPickListBytes({
+    required String storeName,
+    required DateTime at,
+    required List<PickLine> lines,
+    required PrinterSettings settings,
+  }) async {
+    final profile = await CapabilityProfile.load();
+    final paperSize =
+        settings.paperSize == '80' ? PaperSize.mm80 : PaperSize.mm58;
+    final gen = Generator(paperSize, profile);
+    final paperDots = paperSize == PaperSize.mm80 ? 576 : 384;
+    final out = <int>[];
+
+    String two(int n) => n.toString().padLeft(2, '0');
+    final stamp = '${two(at.day)}/${two(at.month)}/${at.year} '
+        '${two(at.hour)}:${two(at.minute)}';
+
+    if (storeName.isNotEmpty) {
+      out.addAll(gen.text(_toAscii(storeName),
+          styles: const PosStyles(
+              bold: true,
+              align: PosAlign.center,
+              height: PosTextSize.size2,
+              width: PosTextSize.size2)));
+    }
+    out.addAll(gen.text('AMBIL BARANG',
+        styles: const PosStyles(bold: true, align: PosAlign.center)));
+    out.addAll(
+        gen.text(stamp, styles: const PosStyles(align: PosAlign.center)));
+    out.addAll(gen.hr());
+
+    final safe = [
+      for (final l in lines)
+        PickLine(
+          qty: l.qty,
+          name: _toAscii(l.name),
+          unit: _toAscii(l.unit),
+          note: l.note == null ? null : _toAscii(l.note!),
+          checked: l.checked,
+          isVariant: l.isVariant,
+        ),
+    ];
+    for (final chunk in PickListRenderer.render(safe, paperDots)) {
+      out.addAll(gen.imageRaster(chunk, align: PosAlign.center));
+    }
+
+    out.addAll(gen.feed(2));
+    out.addAll(gen.cut());
+    return Uint8List.fromList(out);
   }
 
   // ── Item ordering helpers ────────────────────────────────────────────────
