@@ -561,14 +561,51 @@ class PrinterService {
     if (!connected) return false;
 
     final settings = await loadSettings();
-    final bytes = await buildPickListBytes(
+    final parts = await buildPickListParts(
         storeName: storeName, at: at, lines: lines, settings: settings);
-    return _writeBytes(bytes, settings);
+    // Dikirim BERTAHAP (header, tiap strip raster, penutup) dgn jeda singkat:
+    // printer thermal murah punya buffer kecil — satu tulis puluhan KB raster
+    // membuatnya kehilangan sinkron & mencetak sisa data mentah sbg teks
+    // sampah (laporan user, struk ambil barang dgn banyak item).
+    var ok = true;
+    for (final part in parts) {
+      try {
+        final res = await _channel.invokeMapMethod<String, dynamic>(
+          'write',
+          {'bytes': part},
+        ).timeout(const Duration(seconds: 10), onTimeout: () => null);
+        ok = res?['ok'] as bool? ?? false;
+      } catch (_) {
+        ok = false;
+      }
+      if (!ok) break;
+      await Future<void>.delayed(const Duration(milliseconds: 40));
+    }
+    if (settings.autoDisconnectAfterPrint) await disconnect();
+    return ok;
   }
 
-  /// Test-only seam ke pembangun byte struk ambil barang (tanpa hardware).
+  /// Tinggi maks. satu perintah raster (dot). Sengaja kecil — lihat
+  /// [printPickList]. 96 dot x 48 byte = ~4,6 KB per perintah (kertas 58mm).
+  static const int pickListStripRows = 96;
+
+  /// Test-only seam: seluruh byte struk ambil barang jadi satu buffer.
   @visibleForTesting
   static Future<Uint8List> buildPickListBytes({
+    required String storeName,
+    required DateTime at,
+    required List<PickLine> lines,
+    required PrinterSettings settings,
+  }) async {
+    final parts = await buildPickListParts(
+        storeName: storeName, at: at, lines: lines, settings: settings);
+    return Uint8List.fromList([for (final p in parts) ...p]);
+  }
+
+  /// Struk ambil barang dipecah jadi bagian-bagian kecil yang dikirim
+  /// berurutan: [header, strip raster..., penutup].
+  @visibleForTesting
+  static Future<List<Uint8List>> buildPickListParts({
     required String storeName,
     required DateTime at,
     required List<PickLine> lines,
@@ -579,25 +616,27 @@ class PrinterService {
         settings.paperSize == '80' ? PaperSize.mm80 : PaperSize.mm58;
     final gen = Generator(paperSize, profile);
     final paperDots = paperSize == PaperSize.mm80 ? 576 : 384;
-    final out = <int>[];
+    final parts = <Uint8List>[];
 
     String two(int n) => n.toString().padLeft(2, '0');
     final stamp = '${two(at.day)}/${two(at.month)}/${at.year} '
         '${two(at.hour)}:${two(at.minute)}';
 
+    final head = <int>[];
     if (storeName.isNotEmpty) {
-      out.addAll(gen.text(_toAscii(storeName),
+      head.addAll(gen.text(_toAscii(storeName),
           styles: const PosStyles(
               bold: true,
               align: PosAlign.center,
               height: PosTextSize.size2,
               width: PosTextSize.size2)));
     }
-    out.addAll(gen.text('AMBIL BARANG',
+    head.addAll(gen.text('AMBIL BARANG',
         styles: const PosStyles(bold: true, align: PosAlign.center)));
-    out.addAll(
+    head.addAll(
         gen.text(stamp, styles: const PosStyles(align: PosAlign.center)));
-    out.addAll(gen.hr());
+    head.addAll(gen.hr());
+    parts.add(Uint8List.fromList(head));
 
     final safe = [
       for (final l in lines)
@@ -611,12 +650,20 @@ class PrinterService {
         ),
     ];
     for (final chunk in PickListRenderer.render(safe, paperDots)) {
-      out.addAll(gen.imageRaster(chunk, align: PosAlign.center));
+      // Potong jadi strip <= pickListStripRows baris per perintah raster.
+      for (var y = 0; y < chunk.height; y += pickListStripRows) {
+        final h = (chunk.height - y) < pickListStripRows
+            ? chunk.height - y
+            : pickListStripRows;
+        final strip =
+            img.copyCrop(chunk, x: 0, y: y, width: chunk.width, height: h);
+        parts.add(Uint8List.fromList(
+            gen.imageRaster(strip, align: PosAlign.center)));
+      }
     }
 
-    out.addAll(gen.feed(2));
-    out.addAll(gen.cut());
-    return Uint8List.fromList(out);
+    parts.add(Uint8List.fromList([...gen.feed(2), ...gen.cut()]));
+    return parts;
   }
 
   // ── Item ordering helpers ────────────────────────────────────────────────

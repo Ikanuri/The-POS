@@ -7,6 +7,10 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-10-07 (fix cetak struk ambil barang)
+
+- fix(printer): struk ambil barang dikirim bertahap (strip raster <= 96 baris/perintah, jeda 40 ms) — satu blok raster besar membuat printer kehilangan sinkron & mencetak data mentah sbg teks sampah; qty pecahan dibulatkan maks 3 desimal; bump 2.86.1+182
+
 ## 2026-10-07 (riwayat pre-order)
 
 - feat(laci-meja): riwayat pre-order — filter Semua/Terbuka/Pemenuhan/Dibatalkan, ringkasan (ditambahkan & dipenuhi, per pelanggan/produk), pencatat & pemenuh (nama perangkat + role); registri perangkat `known_devices` (dipelajari host dari payload sync, ikut sync ke klien); bump 2.86.0+181

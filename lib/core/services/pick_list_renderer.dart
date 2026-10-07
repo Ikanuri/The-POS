@@ -97,8 +97,14 @@ class PickListRenderer {
     return lines;
   }
 
-  static String qtyLabel(double q) =>
-      '${q % 1 == 0 ? q.toInt().toString() : q.toString()}x';
+  /// Qty tanpa ekor panjang (mis. 0.3333333 -> 0.333): maks. 3 desimal,
+  /// nol di belakang dibuang. Mencegah label melebar menimpa kolom nama.
+  static String qtyLabel(double q) {
+    if (q % 1 == 0) return '${q.toInt()}x';
+    var t = q.toStringAsFixed(3);
+    t = t.replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '');
+    return '${t}x';
+  }
 
   /// Render semua baris; hasilnya daftar gambar (tiap gambar = kumpulan baris,
   /// tinggi dibatasi [chunkMax] supaya perintah raster tidak terlalu besar).

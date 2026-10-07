@@ -8,6 +8,12 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 7 Oktober 2026 (Perbaikan Cetak Struk Ambil Barang)
+
+- **Cetak Struk Ambil Barang tidak lagi mengeluarkan huruf acak:** pada keranjang dengan banyak barang, struk sempat tercetak sebagian lalu berubah jadi deretan simbol tak terbaca. Kini data dikirim ke printer sedikit demi sedikit.
+
+---
+
 ## 7 Oktober 2026 (Riwayat Pre-order)
 
 - **Riwayat Pre-order punya filter:** Semua, Terbuka, Pemenuhan, dan Dibatalkan.
