@@ -567,7 +567,7 @@ body{
 .stp button.p{background:var(--accent);color:#fff;}
 .stp .qn{min-width:30px;text-align:center;font-family:var(--serif);font-weight:700;font-size:15px;color:var(--ink);flex-shrink:0;}
 .paper-total{display:flex;justify-content:space-between;align-items:baseline;gap:10px;}
-.paper-total span{font-size:12px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:var(--ink-2);}
+.paper-total > span{font-size:12px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:var(--ink-2);}
 .paper-total b{font-family:var(--serif);font-size:clamp(24px,8.2vw,32px);font-weight:600;white-space:nowrap;}
 .paper-total .roll{justify-content:flex-end;}
 .paper-hint{text-align:center;font-size:11.5px;color:var(--ink-3);margin-top:6px;}
