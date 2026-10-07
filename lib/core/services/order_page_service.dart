@@ -81,6 +81,8 @@ class OrderPageService {
           ? {'text': disp.effectiveAnnouncement, 'enabled': true}
           : null,
       'reorder': disp.reorderEnabled,
+      // Game labirin di bawah halaman awal / toko tutup (bawaan nyala).
+      'game': disp.gameEnabled,
       'products': catalog,
     });
 
@@ -1139,6 +1141,33 @@ textarea.tfield{resize:none;min-height:64px;}
   transition:transform .14s ease,background-color .24s ease;}
 .sent-btn:active{transform:scale(.97);}
 @media (prefers-reduced-motion:reduce){ #app.sent-mode .page-sent{animation:none;} }
+/* ── Game labirin (DATA.game): di bawah halaman awal & halaman toko tutup. */
+.game-slot{padding:0 0 8px;}
+.closed-page .game-slot{margin-top:18px;}
+.maze-card{margin:26px auto 0;max-width:380px;background:var(--card);border:1px solid var(--line);border-radius:22px;padding:14px 14px 12px;box-shadow:0 6px 22px rgba(60,40,20,.08);text-align:left}
+:root[data-theme="dark"] .maze-card{box-shadow:0 6px 22px rgba(0,0,0,.35)}
+.mz-head{display:flex;align-items:center;gap:10px}
+.mz-title{flex:1;min-width:0}
+.mz-title b{display:block;font-family:var(--serif);font-size:18px;font-weight:600;letter-spacing:-.2px}
+.mz-title small{display:block;font-size:12px;color:var(--ink-2);margin-top:1px}
+.mz-ibtn{width:40px;height:40px;border-radius:50%;border:1px solid var(--line);background:var(--field);color:var(--ink-2);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;flex-shrink:0;transition:background-color .2s ease,color .2s ease,border-color .2s ease,transform .12s ease}
+.mz-ibtn:active{transform:scale(.92)}
+.mz-ibtn svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.mz-ibtn[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.mz-seg{display:flex;gap:4px;background:var(--field);border-radius:999px;padding:4px;margin:12px 0 10px}
+.mz-seg button{flex:1;border:none;background:transparent;color:var(--ink-2);font:700 13px var(--font);border-radius:999px;padding:9px 0;min-height:36px;cursor:pointer;transition:background-color .2s ease,color .2s ease,box-shadow .2s ease}
+.mz-seg button[aria-selected="true"]{background:var(--card);color:var(--ink);box-shadow:0 2px 8px rgba(60,40,20,.16)}
+:root[data-theme="dark"] .mz-seg button[aria-selected="true"]{box-shadow:0 2px 8px rgba(0,0,0,.4)}
+.mz-stage{position:relative;width:100%;aspect-ratio:1/1;border-radius:18px;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;background:var(--field);outline:none}
+.mz-stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+.mz-win{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;background:rgba(20,15,10,.38);color:#fff;text-align:center;opacity:0;pointer-events:none;transition:opacity .28s ease;backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px)}
+.mz-win.show{opacity:1;pointer-events:auto}
+.mz-win b{font-family:var(--serif);font-size:26px;font-weight:600}
+.mz-win span{font-size:14px;font-weight:600}
+.mz-win em{font-style:normal;font-size:12px;font-weight:700;background:var(--accent);border-radius:999px;padding:3px 10px;margin-top:4px}
+.mz-foot{display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-size:13px;color:var(--ink-2)}
+.mz-foot b{font-family:var(--serif);font-size:17px;color:var(--ink);font-weight:600}
+.mz-hint{margin:6px 0 0;font-size:11.5px;color:var(--ink-3);text-align:center}
 </style>
 </head>
 <body>
@@ -1196,6 +1225,30 @@ textarea.tfield{resize:none;min-height:64px;}
       <div class="landing-below" id="landingBelow">
         <div class="cats-hero" id="catsHero" role="group" aria-label="Kategori"></div>
         <div id="extrasSlotL"></div>
+        <div class="game-slot" id="gameSlot">
+<section class="maze-card" id="mazeCard" aria-label="Permainan labirin bola">
+  <div class="mz-head">
+    <div class="mz-title"><b>Lagi bosan? Main dulu</b><small id="mzSub">🎱 Bawa bola ke lubang tujuan</small></div>
+    <button class="mz-ibtn" id="mzGyro" type="button" aria-pressed="false" aria-label="Kontrol dengan memiringkan HP (gyro)" title="Gyro">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2.5"/><path d="M11 18h2"/><path d="M3.5 9a9 9 0 000 6M20.5 9a9 9 0 010 6"/></svg>
+    </button>
+    <button class="mz-ibtn" id="mzNew" type="button" aria-label="Labirin baru" title="Labirin baru">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 11-2.6-5.9"/><path d="M20 4v5h-5"/></svg>
+    </button>
+  </div>
+  <div class="mz-seg" id="mzSeg" role="tablist" aria-label="Tingkat kesulitan">
+    <button type="button" role="tab" data-lv="mudah" aria-selected="true">Mudah</button>
+    <button type="button" role="tab" data-lv="sedang" aria-selected="false">Sedang</button>
+    <button type="button" role="tab" data-lv="sulit" aria-selected="false">Sulit</button>
+  </div>
+  <div class="mz-stage" id="mzStage" tabindex="0" aria-label="Papan labirin. Geser untuk menggerakkan bola, atau gunakan tombol panah.">
+    <canvas id="mzCanvas"></canvas>
+    <div class="mz-win" id="mzWin" aria-live="polite"><b id="mzWinT">Selesai!</b><span id="mzWinS"></span><em id="mzWinR" hidden>Rekor baru!</em></div>
+  </div>
+  <div class="mz-foot"><span>Waktu <b id="mzTime">0,0</b> dtk</span><span id="mzBest">Rekor —</span></div>
+  <p class="mz-hint" id="mzHint">Geser jari di papan untuk menggerakkan bola</p>
+</section>
+        </div>
       </div>
       <div class="extras-slot-b" id="extrasSlotB"></div>
       <div id="listWrap">
@@ -1910,6 +1963,13 @@ function loadAccess(){
     if (saved && DATA.access.hashes.indexOf(saved.hash) >= 0) accessGranted = true;
   } catch (e) {}
 }
+// Game: halaman awal (bawah) atau, saat toko tutup, bawah halaman tutup.
+function placeGame(closed){
+  var g = document.getElementById('gameSlot');
+  if (!g) return;
+  var host = closed ? document.getElementById('closedPage') : document.querySelector('.landing-below');
+  if (host && g.parentNode !== host) host.appendChild(g);
+}
 var _lastClosedKey = null;
 function applyOpenState(){
   renderStatus();
@@ -1928,6 +1988,7 @@ function applyOpenState(){
   cpAnn.hidden = !(closed && ANN);
   if (ANN) cpAnn.textContent = ANN;
   if (closed) closeAnn();
+  placeGame(closed);
   document.getElementById('codeLink').style.display =
       (DATA.access && DATA.access.hashes && DATA.access.hashes.length) ? '' : 'none';
   if (closed && sheetOpen) closeSheet(false);
@@ -3655,6 +3716,363 @@ document.getElementById('copyBtn').addEventListener('click', function(){
 if (!DATA.products || DATA.products.length === 0) {
   document.getElementById('app').classList.add('closed');
 }
+
+// ── Game labirin
+(function(){
+  var card = document.getElementById('mazeCard'); if (!card) return;
+  // Dimatikan owner (Pengaturan > Katalog): buang kartu sama sekali.
+  if (!DATA.game) { var gs = document.getElementById('gameSlot'); if (gs && gs.parentNode) gs.parentNode.removeChild(gs); return; }
+  var stage = document.getElementById('mzStage'), cv = document.getElementById('mzCanvas');
+  var ctx = cv.getContext('2d'); if (!ctx) { card.style.display = 'none'; return; }
+  var elTime = document.getElementById('mzTime'), elBest = document.getElementById('mzBest');
+  var elWin = document.getElementById('mzWin'), elWinS = document.getElementById('mzWinS'), elWinR = document.getElementById('mzWinR');
+  var elHint = document.getElementById('mzHint'), elGyro = document.getElementById('mzGyro');
+  var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // Tingkat kesulitan: ukuran petak, jumlah "lorong tembus" (makin sedikit = makin sulit).
+  var LEVELS = {
+    mudah:  {n: 6,  loops: 6},
+    sedang: {n: 9,  loops: 3},
+    sulit:  {n: 13, loops: 0}
+  };
+  var level = 'mudah';
+  try { var sv = localStorage.getItem('posMazeLevel'); if (sv && LEVELS[sv]) level = sv; } catch (e) {}
+
+  var W = 320, DPR = 1, pad = 6, cs = 40, t = 5, r = 10;
+  var maze = null, rects = [], stat = null; // stat = kanvas statis (labirin)
+  var bx = 0, by = 0, vx = 0, vy = 0, sx = 0, sy = 0, gx = 0, gy = 0, holeR = 12;
+  var state = 'play';              // play | sink | win
+  var sinkT = 0, winTimer = 0;
+  var started = false, tStart = 0, elapsed = 0;
+  var trail = [], parts = [];
+  var touch = null, keys = {}, gyroVec = {x: 0, y: 0}, override = null;
+  var gyroOn = false, gBase = null;
+
+  function rnd(n) { return Math.floor(Math.random() * n); }
+  function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+  function fmt(s) { return s.toFixed(1).replace('.', ','); }
+
+  // ── Labirin (recursive backtracker) ──
+  function genMaze(n, loops) {
+    var h = [], v = [], vis = [], y, x;
+    for (y = 0; y <= n; y++) { h[y] = []; for (x = 0; x < n; x++) h[y][x] = true; }
+    for (y = 0; y < n; y++) { v[y] = []; for (x = 0; x <= n; x++) v[y][x] = true; vis[y] = []; for (x = 0; x < n; x++) vis[y][x] = false; }
+    var stack = [[0, 0]]; vis[0][0] = true;
+    while (stack.length) {
+      var c = stack[stack.length - 1], cx = c[0], cy = c[1], nb = [];
+      if (cy > 0 && !vis[cy - 1][cx]) nb.push([cx, cy - 1, 'u']);
+      if (cy < n - 1 && !vis[cy + 1][cx]) nb.push([cx, cy + 1, 'd']);
+      if (cx > 0 && !vis[cy][cx - 1]) nb.push([cx - 1, cy, 'l']);
+      if (cx < n - 1 && !vis[cy][cx + 1]) nb.push([cx + 1, cy, 'r']);
+      if (!nb.length) { stack.pop(); continue; }
+      var p = nb[rnd(nb.length)];
+      if (p[2] === 'u') h[cy][cx] = false; else if (p[2] === 'd') h[cy + 1][cx] = false;
+      else if (p[2] === 'l') v[cy][cx] = false; else v[cy][cx + 1] = false;
+      vis[p[1]][p[0]] = true; stack.push([p[0], p[1]]);
+    }
+    for (var k = 0; k < loops; k++) { // buka beberapa dinding dalam: jalan pintas (level mudah)
+      if (rnd(2)) { var yy = 1 + rnd(n - 1), xx = rnd(n); h[yy][xx] = false; }
+      else { var y2 = rnd(n), x2 = 1 + rnd(n - 1); v[y2][x2] = false; }
+    }
+    return {n: n, h: h, v: v};
+  }
+  function solve(m) { // BFS: daftar petak dari start ke tujuan (untuk uji)
+    var n = m.n, prev = {}, q = [[0, 0]], seen = {'0,0': 1};
+    while (q.length) {
+      var c = q.shift(), x = c[0], y = c[1];
+      if (x === n - 1 && y === n - 1) break;
+      var cand = [];
+      if (y > 0 && !m.h[y][x]) cand.push([x, y - 1]);
+      if (y < n - 1 && !m.h[y + 1][x]) cand.push([x, y + 1]);
+      if (x > 0 && !m.v[y][x]) cand.push([x - 1, y]);
+      if (x < n - 1 && !m.v[y][x + 1]) cand.push([x + 1, y]);
+      for (var i = 0; i < cand.length; i++) {
+        var key = cand[i][0] + ',' + cand[i][1];
+        if (!seen[key]) { seen[key] = 1; prev[key] = x + ',' + y; q.push(cand[i]); }
+      }
+    }
+    var path = [], cur = (n - 1) + ',' + (n - 1);
+    while (cur) { var s = cur.split(','); path.unshift([+s[0], +s[1]]); cur = prev[cur]; }
+    return path;
+  }
+  function cellCenter(cx, cy) { return [pad + (cx + 0.5) * cs, pad + (cy + 0.5) * cs]; }
+
+  function buildRects() {
+    rects = []; var n = maze.n, x, y;
+    for (y = 0; y <= n; y++) for (x = 0; x < n; x++) if (maze.h[y][x]) {
+      var yy = pad + y * cs; rects.push([pad + x * cs - t / 2, yy - t / 2, pad + (x + 1) * cs + t / 2, yy + t / 2]);
+    }
+    for (y = 0; y < n; y++) for (x = 0; x <= n; x++) if (maze.v[y][x]) {
+      var xx = pad + x * cs; rects.push([xx - t / 2, pad + y * cs - t / 2, xx + t / 2, pad + (y + 1) * cs + t / 2]);
+    }
+  }
+
+  // ── Ukuran & lapisan statis ──
+  function cssVar(name, fb) { var v = getComputedStyle(document.documentElement).getPropertyValue(name).trim(); return v || fb; }
+  function drawStatic() {
+    if (!maze) return;
+    stat = document.createElement('canvas'); stat.width = cv.width; stat.height = cv.height;
+    var c = stat.getContext('2d'); c.scale(DPR, DPR);
+    var field = cssVar('--field', '#f1eee7'), wall = cssVar('--ink-2', '#6c685f'), acc = cssVar('--accent', '#c96442'), line = cssVar('--line', '#e7e2d7');
+    // lantai
+    c.fillStyle = field; c.fillRect(0, 0, W, W);
+    var g = c.createLinearGradient(0, 0, W, W); g.addColorStop(0, 'rgba(255,255,255,.10)'); g.addColorStop(1, 'rgba(0,0,0,.06)');
+    c.fillStyle = g; c.fillRect(0, 0, W, W);
+    // tanda start
+    var s = cellCenter(0, 0);
+    c.fillStyle = acc; c.globalAlpha = .16; c.beginPath(); c.arc(s[0], s[1], r * 1.5, 0, 6.2832); c.fill(); c.globalAlpha = 1;
+    // lubang tujuan
+    var gl = cellCenter(maze.n - 1, maze.n - 1); gx = gl[0]; gy = gl[1]; holeR = r * 1.2;
+    var hg = c.createRadialGradient(gx, gy, holeR * .15, gx, gy, holeR * 1.25);
+    hg.addColorStop(0, 'rgba(0,0,0,.92)'); hg.addColorStop(.72, 'rgba(0,0,0,.7)'); hg.addColorStop(1, 'rgba(0,0,0,0)');
+    c.fillStyle = hg; c.beginPath(); c.arc(gx, gy, holeR * 1.25, 0, 6.2832); c.fill();
+    c.strokeStyle = acc; c.lineWidth = Math.max(2, r * .22); c.beginPath(); c.arc(gx, gy, holeR, 0, 6.2832); c.stroke();
+    // dinding (bayangan lalu isi)
+    c.fillStyle = 'rgba(0,0,0,.18)';
+    rects.forEach(function(q){ rr(c, q[0] + 1.2, q[1] + 1.8, q[2] - q[0], q[3] - q[1], Math.min(t / 2, 3)); });
+    c.fillStyle = wall;
+    rects.forEach(function(q){ rr(c, q[0], q[1], q[2] - q[0], q[3] - q[1], Math.min(t / 2, 3)); });
+    c.fillStyle = 'rgba(255,255,255,.18)';
+    rects.forEach(function(q){ var hgt = Math.min(1.2, (q[3] - q[1]) / 3); c.fillRect(q[0] + 1, q[1], Math.max(0, q[2] - q[0] - 2), hgt); });
+    c.strokeStyle = line; c.lineWidth = 1; c.strokeRect(.5, .5, W - 1, W - 1);
+  }
+  function rr(c, x, y, w, h, rad) { c.beginPath(); c.moveTo(x + rad, y); c.arcTo(x + w, y, x + w, y + h, rad); c.arcTo(x + w, y + h, x, y + h, rad); c.arcTo(x, y + h, x, y, rad); c.arcTo(x, y, x + w, y, rad); c.closePath(); c.fill(); }
+
+  function resize() {
+    var w = Math.round(stage.clientWidth) || 320;
+    if (w === W && cv.width) return;
+    W = w; DPR = Math.min(window.devicePixelRatio || 1, 2);
+    cv.width = Math.round(W * DPR); cv.height = Math.round(W * DPR);
+    layout(); drawStatic(); draw();
+  }
+  function layout() {
+    var n = LEVELS[level].n; pad = Math.max(5, Math.round(W * .018)); cs = (W - 2 * pad) / n;
+    t = Math.max(3.5, cs * .13); r = Math.max(6, cs * .28);
+  }
+
+  // ── Mulai labirin baru ──
+  function newMaze(keepWin) {
+    clearTimeout(winTimer); var cfg = LEVELS[level];
+    maze = genMaze(cfg.n, cfg.loops); layout(); buildRects();
+    var s = cellCenter(0, 0); bx = s[0]; by = s[1]; vx = vy = 0; sx = sy = 0;
+    state = 'play'; started = false; elapsed = 0; trail = []; parts = [];
+    elTime.textContent = '0,0'; elWin.classList.remove('show');
+    drawStatic(); showBest(); draw(); kick();
+  }
+  function showBest() {
+    var b = getBest(); elBest.textContent = b ? 'Rekor ' + fmt(b) + ' dtk' : 'Rekor —';
+  }
+  function getBest() { try { var o = JSON.parse(localStorage.getItem('posMazeBest') || '{}'); return o[level] || 0; } catch (e) { return 0; } }
+  function setBest(sec) {
+    try { var o = JSON.parse(localStorage.getItem('posMazeBest') || '{}'); o[level] = sec; localStorage.setItem('posMazeBest', JSON.stringify(o)); } catch (e) {}
+  }
+
+  // ── Input ──
+  function inputVec() {
+    if (override) return {x: override[0], y: override[1]};
+    var x = 0, y = 0;
+    if (touch) { x += touch.x; y += touch.y; }
+    if (keys.ArrowLeft || keys.a) x -= 1; if (keys.ArrowRight || keys.d) x += 1;
+    if (keys.ArrowUp || keys.w) y -= 1; if (keys.ArrowDown || keys.s) y += 1;
+    if (gyroOn) { x += gyroVec.x; y += gyroVec.y; }
+    var m = Math.sqrt(x * x + y * y); if (m > 1) { x /= m; y /= m; }
+    return {x: x, y: y};
+  }
+  stage.addEventListener('pointerdown', function(e){
+    if (state === 'win' && elWin.classList.contains('show')) { clearTimeout(winTimer); newMaze(); return; }
+    var b = stage.getBoundingClientRect();
+    touch = {ox: e.clientX - b.left, oy: e.clientY - b.top, x: 0, y: 0, cx: e.clientX - b.left, cy: e.clientY - b.top};
+    try { stage.setPointerCapture(e.pointerId); } catch (er) {}
+    kick(); e.preventDefault();
+  });
+  stage.addEventListener('pointermove', function(e){
+    if (!touch) return;
+    var b = stage.getBoundingClientRect(), px = e.clientX - b.left, py = e.clientY - b.top, R = W * .2;
+    touch.cx = px; touch.cy = py;
+    var dx = (px - touch.ox) / R, dy = (py - touch.oy) / R, m = Math.sqrt(dx * dx + dy * dy);
+    if (m > 1) { dx /= m; dy /= m; m = 1; }
+    // kurva halus: gerakan kecil = pelan, gerakan penuh = kencang
+    var k = m * m * (3 - 2 * m) / (m || 1); touch.x = dx * k; touch.y = dy * k;
+    kick();
+  });
+  function endTouch() { touch = null; kick(); }
+  stage.addEventListener('pointerup', endTouch);
+  stage.addEventListener('pointercancel', endTouch);
+  stage.addEventListener('lostpointercapture', endTouch);
+  window.addEventListener('keydown', function(e){
+    if (!visible) return;
+    var tg = e.target && e.target.tagName; if (tg === 'INPUT' || tg === 'TEXTAREA') return;
+    var k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'a', 'd', 'w', 's'].indexOf(k) < 0) return;
+    if (k.length > 1) e.preventDefault();
+    keys[k] = true; kick();
+  });
+  window.addEventListener('keyup', function(e){ var k = e.key.length === 1 ? e.key.toLowerCase() : e.key; delete keys[k]; });
+
+  // ── Gyro ──
+  function onOrient(e) {
+    if (e.gamma == null || e.beta == null) return;
+    if (!gBase) gBase = {g: e.gamma, b: e.beta};
+    var a = (screen.orientation && screen.orientation.angle) || window.orientation || 0;
+    var g = e.gamma - gBase.g, b = e.beta - gBase.b, x, y;
+    if (a === 90) { x = b; y = -g; } else if (a === 180) { x = -g; y = -b; } else if (a === 270 || a === -90) { x = -b; y = g; } else { x = g; y = b; }
+    gyroVec.x = clamp(x / 22, -1, 1); gyroVec.y = clamp(y / 22, -1, 1);
+    if (Math.abs(gyroVec.x) + Math.abs(gyroVec.y) > .04) kick();
+  }
+  function setGyro(on) {
+    gyroOn = on; gBase = null; gyroVec.x = gyroVec.y = 0;
+    elGyro.setAttribute('aria-pressed', on ? 'true' : 'false');
+    elHint.textContent = on ? 'Miringkan HP untuk menggulirkan bola (ketuk ikon lagi untuk mengkalibrasi ulang)' : 'Geser jari di papan untuk menggerakkan bola';
+    try { localStorage.setItem('posMazeGyro', on ? '1' : '0'); } catch (e) {}
+    window.removeEventListener('deviceorientation', onOrient);
+    if (on) window.addEventListener('deviceorientation', onOrient);
+  }
+  elGyro.addEventListener('click', function(){
+    if (gyroOn) { setGyro(false); return; }
+    var DOE = window.DeviceOrientationEvent;
+    if (!DOE) { elHint.textContent = 'Perangkat ini tidak mendukung gyro'; return; }
+    if (typeof DOE.requestPermission === 'function') { // iOS: izin harus dari ketukan pengguna
+      DOE.requestPermission().then(function(s){
+        if (s === 'granted') setGyro(true); else elHint.textContent = 'Izin gyro ditolak — kontrol sentuh tetap bisa dipakai';
+      }).catch(function(){ elHint.textContent = 'Gyro tidak bisa diaktifkan'; });
+    } else { setGyro(true); }
+  });
+  try { // Android/Chrome: pulihkan pilihan gyro tanpa izin tambahan
+    if (localStorage.getItem('posMazeGyro') === '1' && window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission !== 'function') setGyro(true);
+  } catch (e) {}
+
+  // ── Fisika ──
+  var ACC = 3.1, VMAX = 1.7, DAMP = 2.0, REST = .42, STEP = 1 / 180;
+  function physics(h) {
+    var inp = inputVec(), a = ACC * W;
+    vx += inp.x * a * h; vy += inp.y * a * h;
+    var d = Math.exp(-DAMP * h); vx *= d; vy *= d;
+    var sp = Math.sqrt(vx * vx + vy * vy), mx = VMAX * W; if (sp > mx) { vx *= mx / sp; vy *= mx / sp; }
+    bx += vx * h; by += vy * h;
+    var hit = 0;
+    for (var i = 0; i < rects.length; i++) {
+      var q = rects[i];
+      if (bx + r < q[0] || bx - r > q[2] || by + r < q[1] || by - r > q[3]) continue;
+      var cx = clamp(bx, q[0], q[2]), cy = clamp(by, q[1], q[3]), dx = bx - cx, dy = by - cy, dd = dx * dx + dy * dy;
+      if (dd >= r * r) continue;
+      var nx, ny, pen;
+      if (dd > 1e-6) { var dl = Math.sqrt(dd); nx = dx / dl; ny = dy / dl; pen = r - dl; }
+      else { var l = bx - q[0], rr2 = q[2] - bx, tp = by - q[1], bt = q[3] - by, mn = Math.min(l, rr2, tp, bt);
+        if (mn === l) { nx = -1; ny = 0; pen = r + l; } else if (mn === rr2) { nx = 1; ny = 0; pen = r + rr2; } else if (mn === tp) { nx = 0; ny = -1; pen = r + tp; } else { nx = 0; ny = 1; pen = r + bt; } }
+      bx += nx * pen; by += ny * pen;
+      var vn = vx * nx + vy * ny;
+      if (vn < 0) { vx -= (1 + REST) * vn * nx; vy -= (1 + REST) * vn * ny; if (-vn > hit) hit = -vn; }
+    }
+    if (hit > W * .45 && navigator.vibrate && !reduce) { try { navigator.vibrate(8); } catch (e) {} }
+    // tarikan lubang tujuan
+    var gdx = gx - bx, gdy = gy - by, gd = Math.sqrt(gdx * gdx + gdy * gdy);
+    if (gd < holeR * 1.6) { var pull = (1 - gd / (holeR * 1.6)) * W * 1.3; vx += gdx / (gd || 1) * pull * h; vy += gdy / (gd || 1) * pull * h; }
+    if (gd < holeR * .55) { state = 'sink'; sinkT = 0; sx = bx; sy = by; finish(); }
+  }
+  function finish() {
+    var sec = elapsed || (started ? (performance.now() - tStart) / 1000 : 0);
+    var best = getBest(), rec = !best || sec < best;
+    if (rec && sec > 0) setBest(sec);
+    elTime.textContent = fmt(sec);
+    elWinS.textContent = 'Waktu ' + fmt(sec) + ' dtk';
+    elWinR.hidden = !rec; showBest();
+    for (var i = 0; i < (reduce ? 0 : 36); i++) {
+      var an = Math.random() * 6.2832, sp = (.25 + Math.random() * .7) * W;
+      parts.push({x: gx, y: gy, vx: Math.cos(an) * sp, vy: Math.sin(an) * sp - W * .25, life: 1, c: i % 3});
+    }
+    winTimer = setTimeout(function(){ newMaze(); }, 3200);
+  }
+
+  // ── Gambar ──
+  function draw() {
+    if (!stat) return;
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(stat, 0, 0);
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    var acc = cssVar('--accent', '#c96442');
+    if (!reduce) for (var i = 0; i < trail.length; i++) {
+      var p = trail[i], f = (i + 1) / trail.length;
+      ctx.globalAlpha = f * .18; ctx.fillStyle = acc; ctx.beginPath(); ctx.arc(p[0], p[1], r * (.45 + f * .4), 0, 6.2832); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    var scale = 1, x = bx, y = by;
+    if (state === 'sink' || state === 'win') { var k = clamp(sinkT / .35, 0, 1); x = sx + (gx - sx) * k; y = sy + (gy - sy) * k; scale = 1 - .8 * k; }
+    var rad = r * scale;
+    // bayangan
+    var sh = ctx.createRadialGradient(x + rad * .25, y + rad * .4, rad * .2, x + rad * .25, y + rad * .4, rad * 1.25);
+    sh.addColorStop(0, 'rgba(0,0,0,.34)'); sh.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = sh; ctx.beginPath(); ctx.arc(x + rad * .25, y + rad * .4, rad * 1.25, 0, 6.2832); ctx.fill();
+    // bola logam
+    var bg = ctx.createRadialGradient(x - rad * .38, y - rad * .42, rad * .08, x, y, rad);
+    bg.addColorStop(0, '#ffffff'); bg.addColorStop(.28, '#d9dde2'); bg.addColorStop(.7, '#8a9098'); bg.addColorStop(1, '#4a4f56');
+    ctx.fillStyle = bg; ctx.beginPath(); ctx.arc(x, y, rad, 0, 6.2832); ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = 1; ctx.stroke();
+    // serpihan konfeti
+    for (var j = 0; j < parts.length; j++) {
+      var q = parts[j]; ctx.globalAlpha = clamp(q.life, 0, 1);
+      ctx.fillStyle = q.c === 0 ? acc : (q.c === 1 ? '#f2b84b' : '#6fa380');
+      ctx.fillRect(q.x - 2, q.y - 2, 4, 4);
+    }
+    ctx.globalAlpha = 1;
+    // penunjuk geser (joystick halus)
+    if (touch) {
+      ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(touch.ox, touch.oy, W * .2, 0, 6.2832); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.beginPath(); ctx.arc(touch.cx, touch.cy, W * .035, 0, 6.2832); ctx.fill();
+    }
+  }
+
+  // ── Loop (berhenti saat diam / tak terlihat) ──
+  var running = false, last = 0, acc = 0, visible = false, lastLabel = 0;
+  function kick() {
+    if (running || !visible || document.hidden) return;
+    running = true; last = performance.now(); requestAnimationFrame(frame);
+  }
+  function frame(now) {
+    var dt = Math.min(.05, (now - last) / 1000); last = now;
+    if (state === 'play') {
+      acc += dt;
+      var inp = inputVec();
+      if (!started && (Math.abs(inp.x) + Math.abs(inp.y) > .05)) { started = true; tStart = now; }
+      while (acc >= STEP) { physics(STEP); acc -= STEP; if (state !== 'play') break; }
+      if (started && state === 'play') elapsed = (now - tStart) / 1000;
+      if (!reduce) { trail.push([bx, by]); if (trail.length > 10) trail.shift(); }
+    } else { acc = 0; sinkT += dt; if (sinkT > .35 && state === 'sink') state = 'win'; if (state === 'win' && !elWin.classList.contains('show')) elWin.classList.add('show'); }
+    for (var i = parts.length - 1; i >= 0; i--) { var p = parts[i]; p.vy += W * 1.6 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt * .7; if (p.life <= 0) parts.splice(i, 1); }
+    if (now - lastLabel > 100) { lastLabel = now; if (started && state === 'play') elTime.textContent = fmt(elapsed); }
+    draw();
+    var sp = vx * vx + vy * vy, inp2 = inputVec();
+    var idle = state === 'play' && sp < 4 && Math.abs(inp2.x) + Math.abs(inp2.y) < .02 && !touch && !parts.length;
+    if (idle || (state === 'win' && !parts.length)) { running = false; return; }
+    requestAnimationFrame(frame);
+  }
+  if ('IntersectionObserver' in window) {
+    new IntersectionObserver(function(es){ visible = es[es.length - 1].isIntersecting; if (visible) { resize(); kick(); } }, {threshold: .2}).observe(card);
+  } else { visible = true; }
+  document.addEventListener('visibilitychange', function(){ if (!document.hidden) kick(); });
+  if ('ResizeObserver' in window) new ResizeObserver(function(){ resize(); }).observe(stage); else window.addEventListener('resize', resize);
+  // Ganti tema (terang/gelap) -> gambar ulang lapisan statis.
+  new MutationObserver(function(){ drawStatic(); draw(); }).observe(document.documentElement, {attributes: true, attributeFilter: ['data-theme']});
+
+  // Tingkat kesulitan.
+  var seg = document.getElementById('mzSeg');
+  function setLevel(lv) {
+    level = lv; try { localStorage.setItem('posMazeLevel', lv); } catch (e) {}
+    [].forEach.call(seg.querySelectorAll('button'), function(b){ b.setAttribute('aria-selected', b.getAttribute('data-lv') === lv ? 'true' : 'false'); });
+    newMaze();
+  }
+  seg.addEventListener('click', function(e){ var b = e.target.closest('button'); if (b) setLevel(b.getAttribute('data-lv')); });
+  document.getElementById('mzNew').addEventListener('click', function(){ newMaze(); });
+  [].forEach.call(seg.querySelectorAll('button'), function(b){ b.setAttribute('aria-selected', b.getAttribute('data-lv') === level ? 'true' : 'false'); });
+
+  // Pengait uji (tidak dipakai UI).
+  window.__maze = {
+    state: function(){ return {state: state, level: level, n: maze.n, bx: bx, by: by, vx: vx, vy: vy, r: r, cs: cs, gx: gx, gy: gy, started: started, elapsed: elapsed, running: running, W: W}; },
+    solve: function(){ return solve(maze).map(function(c){ return cellCenter(c[0], c[1]); }); },
+    drive: function(x, y){ override = (x == null) ? null : [x, y]; kick(); },
+    newMaze: newMaze, setLevel: setLevel
+  };
+
+  resize(); newMaze();
+})();
 
 Array.prototype.forEach.call(document.querySelectorAll('.stk'), stkMount);
 loadCart();

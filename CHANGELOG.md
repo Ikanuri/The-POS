@@ -7,6 +7,10 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-10-07 (katalog: game labirin)
+
+- feat(katalog-html): game labirin (3 tingkat, gyro, rekor di HP pelanggan) di bawah halaman awal & halaman toko tutup, bawaan NYALA; saklar "Tampilkan game labirin" di Katalog Pesanan (`katalog_game_enabled`, ikut sync, `DATA.game`); kartu dibuang total bila mati; fix IntersectionObserver game memakai entri terbaru; bump 2.92.0+188
+
 ## 2026-10-07 (katalog: stiker animasi, halaman toko tutup & pesanan terkirim)
 
 - feat(katalog-html): stiker animasi Lottie (.tgs) di 4 tempat - halaman awal, produk tidak ditemukan (teks saja + stiker), toko tutup, pesanan dikirim; 4 stiker bawaan di assets/stickers + unggahan owner (validasi gzip/JSON/tanpa expression, 64 KB/200 KB) via kartu "Stiker animasi" di Katalog Pesanan; pustaka lottie_light tersemat HANYA bila ada stiker; key katalog_sticker_* ikut sync

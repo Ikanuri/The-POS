@@ -8,6 +8,14 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 7 Oktober 2026 (Katalog Pesanan: Game Labirin)
+
+> **Perlu Publish ulang katalog** agar game muncul di HP pelanggan.
+
+- **Game labirin di katalog.** Di bawah halaman awal (dan di halaman "Toko sedang tutup") pelanggan bisa main bola-di-labirin sambil menunggu: 3 tingkat (Mudah/Sedang/Sulit), digeser dengan jari atau dengan memiringkan HP, lengkap dengan waktu dan rekor pribadi. Bawaannya nyala; bisa dimatikan lewat saklar "Tampilkan game labirin" di Katalog Pesanan.
+
+---
+
 ## 7 Oktober 2026 (Katalog Pesanan: Stiker Animasi, Halaman Toko Tutup & Pesanan Terkirim)
 
 > **Perlu Publish ulang katalog** agar perubahan di bawah muncul di HP pelanggan.

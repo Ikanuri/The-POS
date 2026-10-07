@@ -528,6 +528,21 @@ class _OrderShareScreenState extends ConsumerState<OrderShareScreen> {
               (db) => CatalogDisplayService.setReorderEnabled(db, v)),
         ),
       ),
+      _sectionLabel('Game di katalog'),
+      Card(
+        child: SwitchListTile(
+          key: const ValueKey('display-game'),
+          secondary: const Icon(Icons.sports_esports_outlined),
+          title: const Text('Tampilkan game labirin'),
+          subtitle: const Text(
+              'Game bola di labirin (3 tingkat, bisa dengan memiringkan HP) '
+              'di bawah halaman awal dan halaman toko tutup — hiburan '
+              'sambil menunggu. Dimatikan: tidak tampil sama sekali.'),
+          value: d.gameEnabled,
+          onChanged: (v) => _saveDisplay(
+              (db) => CatalogDisplayService.setGameEnabled(db, v)),
+        ),
+      ),
       _sectionLabel('Stiker animasi'),
       Card(child: _buildStickersCard()),
       Padding(

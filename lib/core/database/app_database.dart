@@ -388,6 +388,7 @@ class AppDatabase extends _$AppDatabase {
     'katalog_announce_enabled',
     'katalog_announce_text',
     'katalog_reorder_enabled',
+    'katalog_game_enabled',
     // Stiker animasi katalog HTML (.tgs unggahan owner, base64) — daftar yang
     // sama dgn `CatalogStickerService.allKeys`.
     'katalog_sticker_home',

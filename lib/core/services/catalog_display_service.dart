@@ -17,6 +17,7 @@ class CatalogDisplay {
     this.announceEnabled = false,
     this.announceText = '',
     this.reorderEnabled = true,
+    this.gameEnabled = true,
   });
 
   /// Maks karakter teks pengumuman (kotak popup kecil di HP pelanggan).
@@ -38,6 +39,9 @@ class CatalogDisplay {
   final bool announceEnabled;
   final String announceText;
   final bool reorderEnabled;
+
+  /// Game labirin di bawah halaman awal & halaman toko tutup (bawaan nyala).
+  final bool gameEnabled;
 
   bool get isCustomRange => topDays == 0 && topFrom != null && topTo != null;
 
@@ -90,6 +94,7 @@ class CatalogDisplay {
     bool? announceEnabled,
     String? announceText,
     bool? reorderEnabled,
+    bool? gameEnabled,
   }) =>
       CatalogDisplay(
         showCategories: showCategories ?? this.showCategories,
@@ -100,6 +105,7 @@ class CatalogDisplay {
         announceEnabled: announceEnabled ?? this.announceEnabled,
         announceText: announceText ?? this.announceText,
         reorderEnabled: reorderEnabled ?? this.reorderEnabled,
+        gameEnabled: gameEnabled ?? this.gameEnabled,
       );
 }
 
@@ -114,6 +120,7 @@ class CatalogDisplayService {
   static const announceEnabledKey = 'katalog_announce_enabled';
   static const announceTextKey = 'katalog_announce_text';
   static const reorderKey = 'katalog_reorder_enabled';
+  static const gameKey = 'katalog_game_enabled';
 
   /// Semua key — didaftarkan ke `AppDatabase.syncableSettingKeys`.
   static const allKeys = [
@@ -125,6 +132,7 @@ class CatalogDisplayService {
     announceEnabledKey,
     announceTextKey,
     reorderKey,
+    gameKey,
   ];
 
   static String _ymd(DateTime d) =>
@@ -149,6 +157,7 @@ class CatalogDisplayService {
     final annEn = await db.getSetting(announceEnabledKey);
     final annText = await db.getSetting(announceTextKey) ?? '';
     final reorder = await db.getSetting(reorderKey);
+    final game = await db.getSetting(gameKey);
 
     var days = 30;
     if (daysRaw == 'range') {
@@ -168,6 +177,7 @@ class CatalogDisplayService {
       announceEnabled: annEn == '1',
       announceText: annText,
       reorderEnabled: reorder == null || reorder == '1',
+      gameEnabled: game == null || game == '1',
     );
   }
 
@@ -196,4 +206,7 @@ class CatalogDisplayService {
 
   static Future<void> setReorderEnabled(AppDatabase db, bool v) =>
       db.setSetting(reorderKey, v ? '1' : '0');
+
+  static Future<void> setGameEnabled(AppDatabase db, bool v) =>
+      db.setSetting(gameKey, v ? '1' : '0');
 }
