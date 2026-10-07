@@ -84,6 +84,7 @@ class _OrderShareScreenState extends ConsumerState<OrderShareScreen> {
     final device = ref.read(deviceProvider);
     final storeName = (await db.getSetting('store_name'))?.trim();
     final storeWhatsapp = (await db.getSetting('store_whatsapp'))?.trim() ?? '';
+    final storeTelegram = (await db.getSetting('store_telegram'))?.trim() ?? '';
     final name =
         (storeName == null || storeName.isEmpty) ? device.storeName : storeName;
     final waDirect = ref.read(_waDirectProvider).valueOrNull ?? true;
@@ -91,6 +92,7 @@ class _OrderShareScreenState extends ConsumerState<OrderShareScreen> {
       db: db,
       storeName: name,
       storeWhatsapp: storeWhatsapp,
+      storeTelegram: storeTelegram,
       waDirect: waDirect,
     );
     if (mounted) {
@@ -647,20 +649,37 @@ class _OrderShareScreenState extends ConsumerState<OrderShareScreen> {
           Card(
             child: Builder(builder: (context) {
               final waDirect = ref.watch(_waDirectProvider).valueOrNull ?? true;
-              return SwitchListTile(
-                secondary: const Icon(Icons.chat_outlined),
-                title: const Text('Kirim Langsung ke Nomor WA Toko'),
-                subtitle: Text(waDirect
-                    ? 'Tombol "Kirim via WhatsApp" di katalog langsung buka '
-                        'chat ke nomor WA toko'
-                    : 'Tombol "Kirim via WhatsApp" biarkan pelanggan pilih '
-                        'sendiri kontak tujuan (share biasa)'),
-                value: waDirect,
-                onChanged: (v) async {
-                  final db = ref.read(databaseProvider);
-                  await db.setSetting('katalog_wa_direct', v ? '1' : '0');
-                  ref.invalidate(_waDirectProvider);
-                },
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SwitchListTile(
+                    secondary: const Icon(Icons.chat_outlined),
+                    title: const Text('Kirim Langsung ke Nomor WA Toko'),
+                    subtitle: Text(waDirect
+                        ? 'Tombol "Kirim via WhatsApp" di katalog langsung buka '
+                            'chat ke nomor WA toko'
+                        : 'Tombol "Kirim via WhatsApp" biarkan pelanggan pilih '
+                            'sendiri kontak tujuan (share biasa)'),
+                    value: waDirect,
+                    onChanged: (v) async {
+                      final db = ref.read(databaseProvider);
+                      await db.setSetting('katalog_wa_direct', v ? '1' : '0');
+                      ref.invalidate(_waDirectProvider);
+                    },
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(72, 0, 16, 12),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Tombol "Kirim ke Telegram" muncul di halaman Pesanan '
+                        'bila kolom Telegram di Informasi Toko diisi.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).colorScheme.outline),
+                      ),
+                    ),
+                  ),
+                ],
               );
             }),
           ),
