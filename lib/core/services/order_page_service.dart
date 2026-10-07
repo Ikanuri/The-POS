@@ -439,6 +439,12 @@ body{
 .menu-top .topbar-btns{gap:6px;}
 .menu-top .theme-btn,.menu-top .layout-btn,.menu-top .ann-btn{width:40px;height:40px;
   background:var(--card);box-shadow:0 2px 8px rgba(0,0,0,.06);}
+.ann-btn{position:relative;flex-shrink:0;border:1px solid var(--line);color:var(--ink-2);
+  border-radius:999px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;}
+.ann-btn svg{width:19px;height:19px;}
+.ann-dot{position:absolute;top:8px;right:9px;width:9px;height:9px;border-radius:50%;
+  background:var(--accent);border:2px solid var(--card);}
+.ann-btn.seen .ann-dot{display:none;}
 .menu-scroll{position:relative;z-index:1;flex:1;overflow-y:auto;overflow-x:hidden;
   -webkit-overflow-scrolling:touch;}
 .hero-block{display:none;text-align:center;padding:clamp(30px,13vh,120px) 20px 16px;}
@@ -506,6 +512,29 @@ body{
 .prow-cat{display:inline-block;max-width:100%;margin-top:5px;font-size:10.5px;font-weight:600;
   border-radius:999px;padding:2px 8px;background:var(--field);color:var(--ink-2);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:top;}
+/* Pengumuman: popup kecil di bawah tombol megafon. Ada DI DALAM #pageMenu
+   (konteks susun sendiri) sehingga otomatis di BAWAH scrim/modal/toast. */
+.ann-pop{position:absolute;right:12px;top:64px;width:min(300px,calc(100% - 24px));z-index:6;
+  background:var(--card);border:1px solid var(--line);border-radius:20px;padding:14px 16px 22px;
+  box-shadow:0 14px 40px rgba(60,40,20,.28);text-align:left;
+  opacity:0;visibility:hidden;transform:scale(.5);transform-origin:var(--ax,90%) 0;
+  transition:opacity .22s ease,transform .26s var(--ease),visibility 0s linear .26s;}
+.ann-pop.show{opacity:1;visibility:visible;transform:scale(1);
+  transition:opacity .22s ease,transform .26s var(--ease),visibility 0s;}
+.ann-pop::before{content:'';position:absolute;top:-7px;left:calc(var(--ax,90%) - 7px);width:14px;height:14px;
+  background:var(--card);border-left:1px solid var(--line);border-top:1px solid var(--line);
+  transform:rotate(45deg);}
+.ann-pop h4{margin:0 0 6px;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);
+  display:flex;align-items:center;gap:6px;}
+.ann-pop h4 svg{width:15px;height:15px;}
+.ann-pop p{margin:0;font-size:14px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere;
+  max-height:40vh;overflow-y:auto;}
+.ann-prog{position:absolute;left:16px;right:16px;bottom:8px;height:3px;border-radius:3px;
+  background:var(--field);overflow:hidden;}
+.ann-prog i{display:block;height:100%;background:var(--accent);transform-origin:left center;
+  transform:scaleX(1);}
+.ann-pop.manual{padding-bottom:16px;}
+.ann-pop.manual .ann-prog{display:none;}
 @media (prefers-reduced-motion: reduce){
   .tb-id,.blobs,.sticky-head::before,.ph span,.ann-pop,.ann-pop.show{transition:none;}
 }
@@ -901,6 +930,7 @@ textarea.tfield{resize:none;min-height:64px;}
         </span>
       </button>
       <div class="topbar-btns">
+        <button class="ann-btn" id="annBtn" type="button" hidden aria-label="Pengumuman toko" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3a1 1 0 00-1 1v4a1 1 0 001 1h3l5 4V5z"/><path d="M15.5 8.5a5 5 0 010 7"/><path d="M18.5 5.5a9 9 0 010 13"/></svg><i class="ann-dot" id="annDot"></i></button>
         <button class="layout-btn" id="layoutBtn" type="button" aria-label="Ganti tampilan daftar/kotak"></button>
         <button class="theme-btn" id="themeBtn" type="button" aria-label="Ganti tampilan terang/gelap"></button>
       </div>
@@ -908,6 +938,11 @@ textarea.tfield{resize:none;min-height:64px;}
     <div class="closed-banner" id="closedBanner">
       <span id="closedMsg"></span>
       <button id="codeLink" type="button">Pelanggan langganan? Masukkan kode</button>
+    </div>
+    <div class="ann-pop" id="annPop" role="dialog" aria-label="Pengumuman toko">
+      <h4><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5L6 9H3a1 1 0 00-1 1v4a1 1 0 001 1h3l5 4V5z"/><path d="M15.5 8.5a5 5 0 010 7"/></svg>Pengumuman</h4>
+      <p id="annText"></p>
+      <div class="ann-prog" aria-hidden="true"><i id="annProg"></i></div>
     </div>
     <div class="menu-scroll" id="menuScroll">
       <div class="hero-block" id="heroBlock">
@@ -2661,6 +2696,76 @@ function renderStatus(){
   el.appendChild(sp);
 }
 
+// ── Pengumuman toko (teks dari owner => SELALU textContent, bukan innerHTML).
+// Otomatis muncul SEKALI tiap halaman dibuka (lama = clamp(3000 + 60ms x
+// huruf, 3000, 12000)), menciut ke tombol bila discroll / ketuk di luar;
+// diketuk manual = tanpa batas waktu sampai scroll/ketuk di luar/ketuk lagi.
+var ANN = (function(){
+  var a = DATA.announcement;
+  if (!a || a.enabled === false || typeof a.text !== 'string') return null;
+  var t = a.text.trim();
+  return t ? t : null;
+})();
+var annBtn = byId('annBtn'), annPop = byId('annPop'), annProg = byId('annProg');
+var annOpen = false, annTimer = null, annAutoShown = false, annScrollBase = 0;
+function annAutoMs(){ return Math.min(12000, Math.max(3000, 3000 + 60 * ANN.length)); }
+function openAnn(auto){
+  if (!ANN || annOpen) return;
+  annPop.style.top = (menuTopEl.offsetTop + menuTopEl.offsetHeight + 6) + 'px';
+  var br = annBtn.getBoundingClientRect(), pr = pageMenu.getBoundingClientRect();
+  var ax = (br.left + br.width / 2) - pr.left - annPop.offsetLeft;
+  ax = Math.max(18, Math.min(annPop.offsetWidth - 18, ax));
+  annPop.style.setProperty('--ax', ax + 'px');
+  annPop.classList.toggle('manual', !auto);
+  annOpen = true;
+  annScrollBase = menuScroll.scrollTop;
+  annBtn.setAttribute('aria-expanded', 'true');
+  annBtn.classList.add('seen');
+  clearTimeout(annTimer);
+  if (auto) {
+    var ms = annAutoMs();
+    annProg.style.transition = 'none';
+    annProg.style.transform = 'scaleX(1)';
+    void annProg.offsetWidth;
+    annProg.style.transition = 'transform ' + ms + 'ms linear';
+    annProg.style.transform = 'scaleX(0)';
+    annTimer = setTimeout(closeAnn, ms);
+  }
+  annPop.classList.add('show');
+}
+function closeAnn(){
+  clearTimeout(annTimer);
+  annTimer = null;
+  if (!annOpen) return;
+  annOpen = false;
+  annPop.classList.remove('show');
+  annBtn.setAttribute('aria-expanded', 'false');
+}
+function initAnn(){
+  if (!ANN) { annBtn.hidden = true; return; }
+  annBtn.hidden = false;
+  byId('annText').textContent = ANN;
+  annBtn.addEventListener('click', function(){ if (annOpen) closeAnn(); else openAnn(false); });
+  menuScroll.addEventListener('scroll', function(){
+    if (annOpen && Math.abs(menuScroll.scrollTop - annScrollBase) > 8) closeAnn();
+  }, {passive: true});
+  var ty = 0;
+  pageMenu.addEventListener('touchstart', function(e){ if (e.touches.length) ty = e.touches[0].clientY; }, {passive: true});
+  pageMenu.addEventListener('touchmove', function(e){
+    if (annOpen && e.touches.length && Math.abs(e.touches[0].clientY - ty) > 12) closeAnn();
+  }, {passive: true});
+  pageMenu.addEventListener('wheel', function(e){ if (annOpen && Math.abs(e.deltaY) > 4) closeAnn(); }, {passive: true});
+  document.addEventListener('pointerdown', function(e){
+    if (annOpen && !annPop.contains(e.target) && !annBtn.contains(e.target)) closeAnn();
+  }, true);
+  // Sekali per halaman dibuka — bukan tiap perubahan keadaan.
+  setTimeout(function(){
+    if (annAutoShown || sheetOpen) return;
+    annAutoShown = true;
+    openAnn(true);
+  }, 450);
+}
+
 
 
 // Blueprint §2/§6 — pindah mode, BUKAN pindah halaman: tidak ada reload,
@@ -2833,6 +2938,7 @@ loadCart();
 loadAccess();
 buildChips();
 initPlaceholder();
+initAnn();
 applyState(computeState(), false);
 setSelChips();
 syncTbId();

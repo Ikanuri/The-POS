@@ -96,4 +96,24 @@ void main() {
     });
   });
 
+  group('pengumuman', () {
+    test('teks selalu textContent, bukan innerHTML', () {
+      expect(html, contains("byId('annText').textContent = ANN;"));
+      final init = fn('function initAnn(){', '\n}\n');
+      expect(init.contains('innerHTML'), isFalse);
+    });
+
+    test('lama tampil = clamp(3000 + 60 ms x huruf, 3000, 12000)', () {
+      expect(html,
+          contains('Math.min(12000, Math.max(3000, 3000 + 60 * ANN.length))'));
+    });
+
+    test('sekali per halaman, menutup saat scroll / ketuk di luar', () {
+      final init = fn('function initAnn(){', '\n}\n');
+      expect(init, contains('annAutoShown'));
+      expect(init, contains("'scroll'"));
+      expect(init, contains("'pointerdown'"));
+    });
+  });
+
 }
