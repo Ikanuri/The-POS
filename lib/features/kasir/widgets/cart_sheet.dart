@@ -1506,11 +1506,16 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                           ? null
                           : () => notifier.setAllChecked(
                               !cart.every((c) => c.checked)),
+                      // Hijau = aksi "tandai semua"; merah (warna error tema,
+                      // sama dgn Kosongkan) = aksi "hapus tanda" — aksi yang
+                      // membuang centang harus terlihat beda dari yang menambah.
                       icon: Icon(
                         cart.isNotEmpty && cart.every((c) => c.checked)
                             ? Icons.remove_done
                             : Icons.done_all,
-                        color: AppTheme.payGreen,
+                        color: cart.isNotEmpty && cart.every((c) => c.checked)
+                            ? Theme.of(ctx).colorScheme.error
+                            : AppTheme.payGreen,
                       ),
                     ),
                     IconButton(

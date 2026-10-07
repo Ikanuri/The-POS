@@ -151,6 +151,32 @@ void main() {
   });
 
   testWidgets(
+      'warna ikon: Tandai Semua hijau, Hapus Tanda merah (warna error tema)',
+      (tester) async {
+    final n = container.read(cartProvider(kMainCartId).notifier);
+    n.addItem(item('a', 'Produk A'));
+    n.addItem(item('b', 'Produk B'));
+    await pumpCartSheet(tester);
+
+    Color? iconColor(String tooltip) => tester
+        .widget<Icon>(find.descendant(
+            of: tip(tooltip), matching: find.byType(Icon)))
+        .color;
+
+    expect(iconColor('Tandai Semua'), AppTheme.payGreen);
+
+    await tester.tap(tip('Tandai Semua'));
+    await tester.pumpAndSettle();
+    expect(iconColor('Hapus Tanda'), AppTheme.light().colorScheme.error);
+    expect(iconColor('Hapus Tanda'), isNot(AppTheme.payGreen));
+
+    await tester.tap(tip('Hapus Tanda'));
+    await tester.pumpAndSettle();
+    expect(iconColor('Tandai Semua'), AppTheme.payGreen);
+    await drain(tester);
+  });
+
+  testWidgets(
       'cetak dinonaktifkan saat keranjang kosong; tanpa printer '
       'tersimpan -> pesan "belum dikonfigurasi"', (tester) async {
     await pumpCartSheet(tester);
