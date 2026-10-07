@@ -127,7 +127,7 @@ void main() {
     });
 
     test('riwayat disimpan saat kirim (submitOrder), anti dobel-ketuk', () {
-      expect(fn('function submitOrder(){', '// Blueprint §5'),
+      expect(fn('function submitOrder(channel){', '// Blueprint §5'),
           contains('recordOrder()'));
       expect(html, contains('DUP_WINDOW_MS = 120000'));
     });

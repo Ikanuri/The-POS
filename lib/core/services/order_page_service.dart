@@ -39,6 +39,7 @@ class OrderPageService {
     required AppDatabase db,
     required String storeName,
     String storeWhatsapp = '',
+    String storeTelegram = '',
     bool waDirect = true,
     CatalogDisplay? display,
     DateTime? now,
@@ -54,6 +55,9 @@ class OrderPageService {
       'store': nameOrDefault,
       'generatedAt': generatedAt,
       'waNumber': waDigits,
+      // Tautan Telegram toko (sudah dinormalisasi, lihat [normalizeTelegramUrl]);
+      // kosong = tombol "Kirim ke Telegram" tidak muncul.
+      'telegramUrl': normalizeTelegramUrl(storeTelegram),
       // Item 12 — toggle dari Pengaturan: true = deep-link langsung ke nomor
       // WA toko (`wa.me/<nomor>`); false = share WA generik (pelanggan
       // pilih sendiri kontak tujuan, mis. lupa nomor toko atau mau simpan
@@ -92,6 +96,79 @@ class OrderPageService {
             '__DATA_JSON__',
             dataJson.replaceAll('</', r'<\/').replaceAll('<!--', r'<\u0021--'));
     return (html: html, productCount: catalog.length);
+  }
+
+  /// Normalisasi isian kolom Telegram (Informasi Toko) jadi tautan `https://t.me/...`
+  /// yang bisa dibuka langsung. Terima: `@Barokah3?direct`, `Barokah3`,
+  /// `t.me/Barokah3`, `https://t.me/Barokah3?direct`, `telegram.me/...`,
+  /// `telegram.dog/...`, `tg://resolve?domain=Barokah3`, tautan undangan
+  /// `t.me/+kode` / `t.me/joinchat/kode`, dengan/ tanpa spasi. '@' dibuang,
+  /// skema https ditambahkan, query string (mis. `?direct`) DIPERTAHANKAN apa
+  /// adanya (tidak ditambahkan bila tak diisi), segmen path setelah username
+  /// dibuang. Username hanya `[A-Za-z0-9_]` 5-32 karakter. Tak valid /
+  /// kosong => '' (dianggap tidak diisi).
+  static String normalizeTelegramUrl(String raw) {
+    var s = raw.replaceAll(RegExp(r'\s+'), '');
+    if (s.isEmpty) return '';
+    final hash = s.indexOf('#');
+    if (hash >= 0) s = s.substring(0, hash);
+
+    String path;
+    var query = '';
+    final tg = RegExp(r'^tg://resolve\?(?:.*&)?domain=([^&]+)',
+            caseSensitive: false)
+        .firstMatch(s);
+    if (tg != null) {
+      path = tg.group(1)!;
+    } else {
+      s = s.replaceFirst(RegExp(r'^https?://', caseSensitive: false), '');
+      final q = s.indexOf('?');
+      if (q >= 0) {
+        query = s.substring(q);
+        s = s.substring(0, q);
+      }
+      final hostMatch = RegExp(
+              r'^(?:www\.)?(?:t\.me|telegram\.me|telegram\.dog)(?:/|$)',
+              caseSensitive: false)
+          .firstMatch(s);
+      if (hostMatch != null) {
+        s = s.substring(hostMatch.end);
+      } else if (s.contains('.') || s.contains(':')) {
+        // Tampak seperti domain lain (bukan Telegram) => tidak valid.
+        return '';
+      }
+      path = s;
+    }
+
+    path = path.replaceFirst(RegExp(r'^/+'), '');
+    final segments = path.split('/').where((e) => e.isNotEmpty).toList();
+    if (segments.isEmpty) return '';
+
+    String target;
+    final first = segments.first;
+    if (first.startsWith('+')) {
+      final code = first.substring(1);
+      if (!RegExp(r'^[A-Za-z0-9_-]{5,}$').hasMatch(code)) return '';
+      target = '+$code';
+    } else if (first.toLowerCase() == 'joinchat') {
+      if (segments.length < 2 ||
+          !RegExp(r'^[A-Za-z0-9_-]{5,}$').hasMatch(segments[1])) {
+        return '';
+      }
+      target = 'joinchat/${segments[1]}';
+    } else {
+      final user = first.startsWith('@') ? first.substring(1) : first;
+      if (!RegExp(r'^[A-Za-z0-9_]{5,32}$').hasMatch(user)) return '';
+      target = user;
+    }
+
+    // Query dipertahankan hanya bila aman (huruf/angka/_ - . = & % + ~).
+    if (query == '?' ||
+        (query.isNotEmpty &&
+            !RegExp(r'^\?[A-Za-z0-9_\-.=&%+~]*$').hasMatch(query))) {
+      query = '';
+    }
+    return 'https://t.me/$target$query';
   }
 
   /// Daftar kategori yang punya produk di katalog, URUT: jumlah produk
@@ -762,6 +839,32 @@ body{
   /* "Kirim via WhatsApp" dulu terpotong "..." di 320px */
   #app.order-mode .mb-label{font-size:13px;} }
 .mainbtn.wa{background:#25D366;}
+.mb-ic{display:none;width:20px;height:20px;flex-shrink:0;}
+/* Tombol Telegram (khas biru Telegram). Tersembunyi/mengecil di luar halaman
+   Pesanan; di halaman Pesanan melebar jadi 50% dan tombol WhatsApp menyusut
+   ke 50% (gerak sama dgn tombol Kosongkan). Teks tetap putih di mode gelap. */
+.mainbtn-tg{flex:0 1 0px;margin-left:0;opacity:0;visibility:hidden;pointer-events:none;
+  background:#26A5E4;color:#fff;overflow:hidden;
+  transition:flex-grow .32s cubic-bezier(.3,1.25,.45,1),margin-left .32s cubic-bezier(.3,1.25,.45,1),
+             padding .32s ease,opacity .2s ease,visibility 0s linear .32s,
+             background-color .24s ease,transform .14s ease;}
+#app .mainbtn.mainbtn-tg{padding-left:0;padding-right:0;}
+#app.order-mode .mainbtn.mainbtn-tg{flex:1 1 0px;margin-left:8px;opacity:1;visibility:visible;
+  pointer-events:auto;padding-left:8px;padding-right:8px;
+  transition-delay:0s,0s,0s,0s,0s,0s,0s;}
+@media (hover:hover){ .mainbtn-tg:hover{background:#1d90c8;} }
+#mainBtnWrap.mb-confirm .mainbtn-tg{display:none;}
+/* Dua tombol (WhatsApp + Telegram) di halaman Pesanan: tiap tombol 2 baris —
+   baris 1 logo + teks, baris 2 total (roll, rata tengah). */
+#app.order-mode.has-tg .mainbtn{grid-template-columns:auto auto;justify-content:center;
+  align-content:center;column-gap:6px;row-gap:1px;padding:7px 8px;font-size:13px;text-align:center;}
+#app.order-mode.has-tg .mb-badge{display:none;}
+#app.order-mode.has-tg .mb-ic{display:block;grid-row:1;grid-column:1;}
+#app.order-mode.has-tg .mb-label{grid-row:1;grid-column:2;font-size:13px;font-weight:700;
+  overflow:visible;text-overflow:clip;opacity:1;}
+#app.order-mode.has-tg .mb-total{grid-column:1 / -1;grid-row:2;font-size:16px;text-align:center;line-height:1.15;}
+#app.order-mode.has-tg .mb-total.roll{justify-content:center;}
+#app.order-mode.has-tg .mb-total.tt{font-size:14px;}
 .mainbtn:disabled{opacity:.6;cursor:default;}
 .mb-badge{min-width:26px;height:26px;padding:0 8px;border-radius:999px;
   background:rgba(255,255,255,.24);display:flex;align-items:center;
@@ -1063,8 +1166,16 @@ textarea.tfield{resize:none;min-height:64px;}
         <span class="mb-q">Kosongkan pesanan?</span>
         <span class="mb-no">Tidak</span>
         <span class="mb-badge" id="mbBadge">0</span>
+        <svg class="mb-ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
         <span class="mb-label" id="mbLabel">Lihat Pesanan</span>
         <span class="mb-total roll" id="mbTotal">Rp 0</span>
+      </button>
+      <!-- Tombol Telegram: hanya bila toko mengisi kolom Telegram (DATA.telegramUrl);
+           muncul di halaman Pesanan, berdampingan 50/50 dgn tombol WhatsApp. -->
+      <button class="mainbtn mainbtn-tg" id="mainBtnTg" type="button" hidden aria-label="Kirim pesanan ke Telegram">
+        <svg class="mb-ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
+        <span class="mb-label" id="mbLabelTg">Kirim ke Telegram</span>
+        <span class="mb-total roll" id="mbTotalTg">Rp 0</span>
       </button>
     </div>
   </div>
@@ -2084,6 +2195,60 @@ function syncProwControls(wrap, p, animate){
 
 // Stepper inline +/- — sekarang hanya dipakai di lembar keranjang, di mana
 // barisnya SELALU qty > 0 (barang qty 0 dihapus dari cart, bukan ditampilkan).
+// ── Tombol kirim WhatsApp + Telegram. HAS_TG = toko mengisi kolom Telegram
+// (DATA.telegramUrl, sudah dinormalisasi di sisi app). Tanpa Telegram: satu
+// tombol WhatsApp seperti biasa. Dengan Telegram: halaman Pesanan menampilkan
+// dua tombol 50/50, tiap tombol 2 baris (logo + teks / total).
+var HAS_TG = !!(DATA.telegramUrl && typeof DATA.telegramUrl === 'string');
+var _sendLabelShort = false;
+if (HAS_TG) {
+  document.getElementById('app').classList.add('has-tg');
+  document.getElementById('mainBtnTg').hidden = false;
+}
+// Teks tombol: tunggal = "Kirim via WhatsApp" (seperti dulu); berdua = "Kirim ke
+// WhatsApp"/"Kirim ke Telegram", dipendekkan jadi nama saja bila tak muat.
+function setSendLabels(){
+  var orderMode = document.getElementById('app').classList.contains('order-mode');
+  var wa = document.getElementById('mbLabel');
+  if (!orderMode) { wa.textContent = 'Lihat Pesanan'; return; }
+  if (!HAS_TG) { wa.textContent = 'Kirim via WhatsApp'; return; }
+  wa.textContent = _sendLabelShort ? 'WhatsApp' : 'Kirim ke WhatsApp';
+  document.getElementById('mbLabelTg').textContent =
+      _sendLabelShort ? 'Telegram' : 'Kirim ke Telegram';
+}
+var _measureCtx = null;
+function textWidth(el, str){
+  try {
+    if (!_measureCtx) _measureCtx = document.createElement('canvas').getContext('2d');
+    var cs = getComputedStyle(el);
+    _measureCtx.font = cs.fontStyle + ' ' + cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily;
+    return _measureCtx.measureText(str).width;
+  } catch (e) { return 0; }
+}
+// Lebar tombol saat animasi melebar belum selesai tidak bisa diukur — hitung
+// lebar TARGET (separuh baris) lalu cek apakah "logo + teks penuh" muat.
+function fitSendLabels(){
+  if (!HAS_TG) return;
+  var app = document.getElementById('app');
+  if (!app.classList.contains('order-mode')) return;
+  var row = document.getElementById('mbRow');
+  var btnW = (row.clientWidth - 8) / 2, avail = btnW - 16;
+  if (!(avail > 0)) return;
+  _sendLabelShort = false;
+  setSendLabels();
+  var full = Math.max(
+      textWidth(document.getElementById('mbLabel'), 'Kirim ke WhatsApp'),
+      textWidth(document.getElementById('mbLabelTg'), 'Kirim ke Telegram'));
+  if (20 + 6 + full + 1 > avail) { _sendLabelShort = true; setSendLabels(); }
+  var tot = rp(cartTotal());
+  var tw = textWidth(document.getElementById('mbTotal'), tot);
+  ['mbTotal', 'mbTotalTg'].forEach(function(id){
+    document.getElementById(id).classList.toggle('tt', tw + 1 > avail);
+  });
+}
+window.addEventListener('resize', fitSendLabels);
+try { document.fonts.ready.then(fitSendLabels); } catch (e) {}
+
 // Blueprint §5 — satu tombol aksi utama yang teks/warna/aksinya mengikuti
 // konteks (browse vs ringkasan pesanan), dan SEMBUNYI total saat belum ada
 // barang dipilih. Nominal total menyatu di dalam tombol yang sama.
@@ -2107,16 +2272,27 @@ function renderCartBar(){
     _mbBadgeCount = n;
   }
   rollSet(document.getElementById('mbTotal'), rp(cartTotal()));
+  if (HAS_TG) rollSet(document.getElementById('mbTotalTg'), rp(cartTotal()));
   var mainBtn = document.getElementById('mainBtn');
   if (_mbOrderMode !== null && _mbOrderMode !== orderMode) {
     // Susunan isi tombol berubah (tumpuk <-> satu baris): samarkan sesaat.
     mainBtn.classList.add('swapping');
-    setTimeout(function(){ mainBtn.classList.remove('swapping'); }, 60);
+    if (HAS_TG) document.getElementById('mainBtnTg').classList.add('swapping');
+    setTimeout(function(){
+      mainBtn.classList.remove('swapping');
+      if (HAS_TG) document.getElementById('mainBtnTg').classList.remove('swapping');
+    }, 60);
   }
   _mbOrderMode = orderMode;
-  document.getElementById('mbLabel').textContent =
-      orderMode ? 'Kirim via WhatsApp' : 'Lihat Pesanan';
+  _sendLabelShort = false;
+  setSendLabels();
   document.getElementById('mainBtn').classList.toggle('wa', orderMode);
+  if (orderMode && HAS_TG) {
+    mainBtn.setAttribute('aria-label', 'Kirim pesanan ke WhatsApp');
+    fitSendLabels();
+  } else {
+    mainBtn.removeAttribute('aria-label');
+  }
   document.getElementById('orderSub').textContent =
       n === 0 ? 'Belum ada barang dipilih' : fmtQty(n) + ' produk dipilih';
 }
@@ -3232,10 +3408,25 @@ function copyText(text){
   return ok;
 }
 
-function submitOrder(){
+// channel: 'wa' (WhatsApp, bawaan) atau 'tg' (Telegram). Dua jalur berbagi
+// teks pesanan (termasuk kode mesin #PSN: — SAMA PERSIS), salin ke clipboard,
+// dan simpan riwayat "Pesan lagi" (recordOrder sudah menolak dobel-ketuk
+// isi identik < 2 menit). copyText + window.open SINKRON di handler klik agar
+// lolos kebijakan browser.
+function submitOrder(channel){
   if (cartCount() === 0) return;
   var text = buildOrderText();
-  copyText(text);
+  var copied = copyText(text);
+  if (channel === 'tg') {
+    // Telegram TIDAK mendukung mengisi teks otomatis ke chat pengguna
+    // tertentu lewat tautan: salin dulu, pelanggan tempel sendiri.
+    if (!DATA.telegramUrl) return;
+    showToast(copied ? 'Pesanan disalin — tempel di chat Telegram'
+                     : 'Gagal menyalin — salin manual dari halaman Pesanan');
+    try { recordOrder(); } catch (e) {}
+    window.open(DATA.telegramUrl, '_blank');
+    return;
+  }
   var num = (DATA.waNumber || '').replace(/[^0-9]/g, '');
   // Item 12 — direct: deep-link ke nomor WA toko. Non-direct: share WA
   // generik (tanpa nomor tujuan), pelanggan pilih sendiri kontaknya.
@@ -3248,15 +3439,19 @@ function submitOrder(){
 }
 
 // Blueprint §5 — satu tombol, dua aksi tergantung mode: dari daftar produk
-// membuka ringkasan, dari ringkasan mengirim pesanan.
+// membuka ringkasan, dari ringkasan mengirim pesanan (WhatsApp).
 document.getElementById('mainBtn').addEventListener('click', function(){
   if (clearConfirm) { setClearConfirm(false); return; } // tombol "Tidak"
   if (cartCount() === 0) return;
   if (document.getElementById('app').classList.contains('order-mode')) {
-    submitOrder();
+    submitOrder('wa');
   } else {
     openSheet();
   }
+});
+document.getElementById('mainBtnTg').addEventListener('click', function(){
+  if (cartCount() === 0) return;
+  if (document.getElementById('app').classList.contains('order-mode')) submitOrder('tg');
 });
 
 document.getElementById('copyBtn').addEventListener('click', function(){
