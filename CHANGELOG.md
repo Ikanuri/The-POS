@@ -9,6 +9,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-10-07 (katalog: game labirin)
 
+- test(katalog): surface test tombol Publish diperbesar (layar Katalog Pesanan lebih panjang)
 - feat(katalog-html): game labirin (3 tingkat, gyro, rekor di HP pelanggan) di bawah halaman awal & halaman toko tutup, bawaan NYALA; saklar "Tampilkan game labirin" di Katalog Pesanan (`katalog_game_enabled`, ikut sync, `DATA.game`); kartu dibuang total bila mati; fix IntersectionObserver game memakai entri terbaru; bump 2.92.0+188
 
 ## 2026-10-07 (katalog: stiker animasi, halaman toko tutup & pesanan terkirim)
