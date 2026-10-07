@@ -254,3 +254,36 @@ final riwayatCustomerNamesProvider = FutureProvider<Map<String, String>>((ref) a
   }.toList();
   return ref.watch(databaseProvider).getCustomerNamesForTransactions(ids);
 });
+
+// ── Riwayat pre-order: pemenuhan & "siapa" ──
+
+/// Semua kejadian pre-order (penuhi/batal) — sumber daftar "Pemenuhan".
+final riwayatPreorderEventsProvider = StreamProvider<List<LaciMejaEvent>>((ref) {
+  return ref.watch(databaseProvider).watchPreorderEvents();
+});
+
+/// Pencatat nota per pre-order (kode perangkat kasir) — "dicatat oleh".
+final riwayatTxActorsProvider = FutureProvider<
+    Map<String, ({String? employeeName, String? kasirId})>>((ref) async {
+  final items = ref.watch(riwayatPreorderAllProvider).valueOrNull ?? [];
+  final ids = items.map((e) => e.transactionId).whereType<String>().toSet();
+  return ref.watch(databaseProvider).getTransactionActors(ids.toList());
+});
+
+/// Registri kode perangkat -> nama + role. Perangkat INI selalu dimasukkan
+/// (dari identitasnya sendiri); di perangkat owner identitas itu juga
+/// disimpan ke registri supaya ikut sync ke klien.
+final knownDevicesProvider =
+    FutureProvider<Map<String, ({String name, String role})>>((ref) async {
+  final db = ref.watch(databaseProvider);
+  final me = ref.watch(deviceProvider);
+  final known = await db.getKnownDevices();
+  if (me.deviceCode.isNotEmpty) {
+    if (me.deviceRole == 'owner') {
+      await db.rememberKnownDevice(
+          code: me.deviceCode, name: me.deviceName, role: me.deviceRole);
+    }
+    known[me.deviceCode] = (name: me.deviceName, role: me.deviceRole);
+  }
+  return known;
+});

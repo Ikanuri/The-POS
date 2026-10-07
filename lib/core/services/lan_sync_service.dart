@@ -947,6 +947,16 @@ class LanSyncService {
       // menimpa antrian satu sama lain kalau kuncinya masih `ip`. Null utk
       // klien versi lama yang belum kirim `deviceCode` di payload sync.
       final rawDeviceCode = payload['deviceCode'] as String?;
+      // Catat nama+role perangkat pengirim di registri (best-effort).
+      if (rawDeviceCode != null && rawDeviceCode.isNotEmpty) {
+        try {
+          await _db!.rememberKnownDevice(
+            code: rawDeviceCode,
+            name: (payload['deviceName'] as String?) ?? '',
+            role: (payload['deviceRole'] as String?) ?? '',
+          );
+        } catch (_) {}
+      }
 
       // B-4: Queue incoming tables for owner approval instead of auto-merging.
       final rawTables = payload['tables'] as Map<String, dynamic>? ?? {};
@@ -1272,6 +1282,11 @@ class LanSyncService {
     // tidak memaksa update semua caller/test sekaligus — null berarti host
     // fallback ke IP (perilaku lama).
     String? deviceCode,
+    // Nama & role perangkat pengirim — host mencatatnya di registri perangkat
+    // (riwayat Laci Meja: "oleh <nama> (<role>)"). Opsional (klien lama
+    // tidak mengirim).
+    String? deviceName,
+    String? deviceRole,
     DateTime? since,
     // Dapat dipersingkat di test (mis. simulasi host yang tidak pernah
     // membalas) tanpa memperlambat suite dgn menunggu timeout produksi.
@@ -1336,6 +1351,8 @@ class LanSyncService {
       'customerProposals': customerProposals,
       if (deviceCode != null && deviceCode.isNotEmpty)
         'deviceCode': deviceCode,
+      if (deviceName != null && deviceName.isNotEmpty) 'deviceName': deviceName,
+      if (deviceRole != null && deviceRole.isNotEmpty) 'deviceRole': deviceRole,
     };
     final payloadJson = jsonEncode(payload);
     final encrypted =

@@ -8,6 +8,14 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 7 Oktober 2026 (Riwayat Pre-order)
+
+- **Riwayat Pre-order punya filter:** Semua, Terbuka, Pemenuhan, dan Dibatalkan.
+- **Ringkasan di atas daftar** (mengikuti filter tanggal/produk/pencarian): berapa pre-order ditambahkan dan berapa qty-nya, berapa pemenuhan dan berapa qty-nya, plus rincian **per pelanggan** dan **per produk**.
+- **Siapa yang mencatat dan memenuhi:** tiap pre-order menampilkan perangkat pencatatnya, dan tab Pemenuhan menampilkan setiap kejadian pemenuhan (tanggal, pelanggan, produk, jumlah, dan perangkat yang memenuhi, lengkap dengan role). Nama perangkat lain muncul setelah perangkat itu pernah sinkron.
+
+---
+
 ## 7 Oktober 2026 (Keranjang Lebih Fleksibel)
 
 - **Total di halaman Pesanan katalog tetap besar** saat angkanya berputar (dulu sempat mengecil sebentar). Perlu Publish ulang katalog.

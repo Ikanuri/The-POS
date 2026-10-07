@@ -7,6 +7,10 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-10-07 (riwayat pre-order)
+
+- feat(laci-meja): riwayat pre-order — filter Semua/Terbuka/Pemenuhan/Dibatalkan, ringkasan (ditambahkan & dipenuhi, per pelanggan/produk), pencatat & pemenuh (nama perangkat + role); registri perangkat `known_devices` (dipelajari host dari payload sync, ikut sync ke klien); bump 2.86.0+181
+
 ## 2026-10-07 (keranjang: opsi layout + struk ambil barang)
 
 - feat(keranjang): baris ikon header kanan-ke-kiri (Tahan Pesanan paling kanan); struk ambil barang: qty kecil, nama tebal, kotak centang menempel setelah nama; tetap 2.85.0+180

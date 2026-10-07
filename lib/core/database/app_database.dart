@@ -389,7 +389,14 @@ class AppDatabase extends _$AppDatabase {
     kPurchaseTaxTreatmentKey,
     kPurchaseTaxRateKey,
     kPurchaseCostWarnPctKey,
+    // Registri perangkat (kode -> nama + role) — dipelajari host dari
+    // payload sync tiap klien; ikut turun ke klien supaya riwayat Laci Meja
+    // bisa menampilkan "oleh <nama perangkat> (<role>)" di semua device.
+    knownDevicesKey,
   };
+
+  /// Key setting registri perangkat (JSON `{kode: {name, role}}`).
+  static const knownDevicesKey = 'known_devices';
 
   /// Indeks performa — dipakai filter laporan, riwayat, JOIN produk, dan audit
   /// stok. Idempotent (IF NOT EXISTS) agar aman dijalankan di onCreate maupun
@@ -9709,6 +9716,71 @@ class AppDatabase extends _$AppDatabase {
     return {
       for (final r in rows)
         r.read(laciMejaEvents.entryId)!: r.read(laciMejaEvents.qty.sum()) ?? 0,
+    };
+  }
+
+  // ── Registri perangkat & riwayat pre-order ────────────────────────────────
+
+  /// Kode perangkat -> nama + role (lihat [knownDevicesKey]). Kosong bila belum
+  /// ada yang tercatat.
+  Future<Map<String, ({String name, String role})>> getKnownDevices() async {
+    final raw = await getSetting(knownDevicesKey);
+    if (raw == null || raw.isEmpty) return {};
+    try {
+      final m = jsonDecode(raw) as Map<String, dynamic>;
+      return {
+        for (final e in m.entries)
+          e.key: (
+            name: ((e.value as Map)['name'] as String?) ?? '',
+            role: ((e.value as Map)['role'] as String?) ?? '',
+          ),
+      };
+    } catch (_) {
+      return {};
+    }
+  }
+
+  /// Catat/perbarui identitas satu perangkat. Hanya menulis (dan men-stamp
+  /// `updated_at`, supaya ikut sync) bila isinya benar-benar berubah.
+  Future<void> rememberKnownDevice({
+    required String code,
+    required String name,
+    required String role,
+  }) async {
+    final c = code.trim();
+    if (c.isEmpty || (name.trim().isEmpty && role.trim().isEmpty)) return;
+    final cur = await getKnownDevices();
+    final prev = cur[c];
+    if (prev != null && prev.name == name.trim() && prev.role == role.trim()) {
+      return;
+    }
+    cur[c] = (name: name.trim(), role: role.trim());
+    await setSetting(
+      knownDevicesKey,
+      jsonEncode({
+        for (final e in cur.entries)
+          e.key: {'name': e.value.name, 'role': e.value.role},
+      }),
+    );
+  }
+
+  /// Semua kejadian pre-order (penuhi/batal), terbaru dulu — sumber tampilan
+  /// "Pemenuhan" di Riwayat Laci Meja.
+  Stream<List<LaciMejaEvent>> watchPreorderEvents() => (select(laciMejaEvents)
+        ..where((t) => t.entityType.equals('preorder'))
+        ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
+      .watch();
+
+  /// Pencatat nota: nama pegawai + kode perangkat kasir per nota (satu query
+  /// IN, bukan N+1) — dipakai riwayat pre-order utk "dicatat oleh".
+  Future<Map<String, ({String? employeeName, String? kasirId})>>
+      getTransactionActors(List<String> txIds) async {
+    if (txIds.isEmpty) return {};
+    final rows = await (select(transactions)
+          ..where((t) => t.id.isIn(txIds)))
+        .get();
+    return {
+      for (final r in rows) r.id: (employeeName: r.employeeName, kasirId: r.kasirId),
     };
   }
 

@@ -325,6 +325,45 @@ class _RiwayatLaciMejaScreenState extends ConsumerState<RiwayatLaciMejaScreen>
 
   // ── Pre-order ──
 
+  /// Filter status tab Pre-order: semua | terbuka | pemenuhan | batal.
+  String _poStatus = 'semua';
+
+  static String _deviceLabel(String? code,
+      Map<String, ({String name, String role})> known) {
+    if (code == null || code.isEmpty) return 'perangkat tidak diketahui';
+    final k = known[code];
+    if (k == null || (k.name.isEmpty && k.role.isEmpty)) return code;
+    final role = k.role.isEmpty ? '' : ' (${k.role})';
+    return '${k.name.isEmpty ? code : k.name}$role';
+  }
+
+  Widget _statusFilterRow() {
+    const options = [
+      ('semua', 'Semua'),
+      ('terbuka', 'Terbuka'),
+      ('pemenuhan', 'Pemenuhan'),
+      ('batal', 'Dibatalkan'),
+    ];
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      child: Row(
+        children: [
+          for (final o in options) ...[
+            ChoiceChip(
+              key: ValueKey('po-status-${o.$1}'),
+              label: Text(o.$2, style: const TextStyle(fontSize: 12.5)),
+              selected: _poStatus == o.$1,
+              visualDensity: VisualDensity.compact,
+              onSelected: (_) => setState(() => _poStatus = o.$1),
+            ),
+            const SizedBox(width: 6),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _buildPreorderTab(bool isDark, ColorScheme scheme) {
     final itemsAsync = ref.watch(riwayatPreorderAllProvider);
     return itemsAsync.when(
@@ -336,92 +375,188 @@ class _RiwayatLaciMejaScreenState extends ConsumerState<RiwayatLaciMejaScreen>
         final taken = ref.watch(riwayatTakenQtyProvider).valueOrNull ?? {};
         final labels =
             ref.watch(riwayatPreorderProductUnitLabelsProvider).valueOrNull ?? {};
+        final events = ref.watch(riwayatPreorderEventsProvider).valueOrNull ??
+            const <LaciMejaEvent>[];
+        final actors = ref.watch(riwayatTxActorsProvider).valueOrNull ?? {};
+        final known = ref.watch(knownDevicesProvider).valueOrNull ?? {};
 
         String productNameOf(PreorderEntry e) =>
             labels[e.productUnitId]?.productName ?? e.productId;
+        String customerOf(PreorderEntry e) => _customerLabel(
+            txId: e.transactionId,
+            liveNames: liveNames,
+            fallback: e.customerName);
 
-        // Daftar produk (utk chip filter) dihitung dari SELURUH riwayat
-        // (bukan hasil tersaring) — supaya chipnya stabil begitu user
-        // mengetik kata kunci pencarian.
+        // Daftar produk (utk filter) dari SELURUH riwayat, stabil saat
+        // user mengetik kata kunci.
         final productNames = <String, String>{};
         for (final e in items) {
           productNames[e.productId] = productNameOf(e);
         }
-        // Dipakai chip filter produk yg dirender di atas TabBarView.
         _lastProductNames = productNames;
 
+        final byId = {for (final e in items) e.id: e};
         final query = _query.trim().toLowerCase();
-        final filtered = items.where((e) {
+        bool matches(PreorderEntry e) {
           if (_productFilter != null && e.productId != _productFilter) {
             return false;
           }
-          if (!_inRange(e.createdAt)) return false;
           if (query.isEmpty) return true;
-          final name = _customerLabel(
-              txId: e.transactionId, liveNames: liveNames, fallback: e.customerName);
-          return name.toLowerCase().contains(query) ||
+          return customerOf(e).toLowerCase().contains(query) ||
               productNameOf(e).toLowerCase().contains(query) ||
               (e.note ?? '').toLowerCase().contains(query);
+        }
+
+        // Pre-order yang DITAMBAHKAN dalam rentang (filter tanggal = tanggal
+        // dibuat) & lolos pencarian/produk.
+        final added = items
+            .where((e) => matches(e) && _inRange(e.createdAt))
+            .toList();
+        // Kejadian PEMENUHAN dalam rentang (tanggal kejadian) utk entri yang
+        // lolos pencarian/produk.
+        final fulfilledEvents = events.where((ev) {
+          if (ev.aksi != 'penuhi') return false;
+          final e = byId[ev.entryId];
+          return e != null && matches(e) && _inRange(ev.createdAt);
         }).toList();
 
-        // Chip filter produk TIDAK lagi dirender di sini — sudah pindah jadi
-        // dropdown (`ProductPickerDropdown`) sejajar dgn field cari & filter
-        // tanggal di atas `TabBarView` (lihat `build`), supaya baris tab ini
-        // tidak dobel dgn baris filter di atasnya.
+        // ── Ringkasan ──
+        double sumOrdered = 0, sumFulfilled = 0;
+        for (final e in added) {
+          sumOrdered += e.qtyOrdered;
+        }
+        for (final ev in fulfilledEvents) {
+          sumFulfilled += ev.qty;
+        }
+        final byCustomer = <String, _PoAgg>{};
+        final byProduct = <String, _PoAgg>{};
+        for (final e in added) {
+          (byCustomer[customerOf(e)] ??= _PoAgg())
+            ..count += 1
+            ..ordered += e.qtyOrdered;
+          (byProduct[productNameOf(e)] ??= _PoAgg())
+            ..count += 1
+            ..ordered += e.qtyOrdered;
+        }
+        for (final ev in fulfilledEvents) {
+          final e = byId[ev.entryId]!;
+          (byCustomer[customerOf(e)] ??= _PoAgg()).fulfilled += ev.qty;
+          (byProduct[productNameOf(e)] ??= _PoAgg()).fulfilled += ev.qty;
+        }
+
+        // ── Daftar ──
+        final children = <Widget>[];
+        if (_poStatus == 'pemenuhan') {
+          for (final ev in fulfilledEvents) {
+            final e = byId[ev.entryId]!;
+            children.add(_RiwayatCard(
+              key: ValueKey('po-ev-${ev.id}'),
+              onTap: e.transactionId == null
+                  ? null
+                  : () => context.push('/kasir/struk/${e.transactionId}'),
+              title: customerOf(e),
+              subtitle: '${_n(ev.qty)} ${productNameOf(e)}',
+              statusText: 'Dipenuhi ${_n(ev.qty)}',
+              statusColor: AppTheme.changeFg(isDark),
+              metaLeading: 'Pemenuhan',
+              createdAt: ev.createdAt,
+              extraLines: [
+                'Oleh ${_deviceLabel(ev.deviceCode, known)}',
+                'Dipesan ${_n(e.qtyOrdered)} · ${_fmtDateTime(e.createdAt)}',
+              ],
+              isDark: isDark,
+            ));
+          }
+        } else {
+          for (final e in added) {
+            final isCancelled = e.cancelledAt != null;
+            final isDone = e.fulfilledAt != null;
+            final isOpen = !isCancelled && !isDone;
+            if (_poStatus == 'terbuka' && !isOpen) continue;
+            if (_poStatus == 'batal' && !isCancelled) continue;
+            final takenQty = taken[e.id] ?? 0;
+            String statusText;
+            Color statusColor;
+            if (isCancelled) {
+              statusText = 'Dibatalkan ${_fmtDateTime(e.cancelledAt!)}';
+              statusColor = AppTheme.debtFg(isDark);
+            } else if (isDone) {
+              statusText = 'Dipenuhi ${_fmtDateTime(e.fulfilledAt!)}';
+              statusColor = AppTheme.changeFg(isDark);
+            } else {
+              statusText = e.paid ? 'Terbuka · Lunas' : 'Terbuka · Tempo';
+              statusColor = AppTheme.stockWarnFg(isDark);
+            }
+            final a = e.transactionId == null ? null : actors[e.transactionId];
+            final fulfillers = events
+                .where((ev) => ev.entryId == e.id && ev.aksi == 'penuhi')
+                .toList();
+            children.add(_RiwayatCard(
+              key: ValueKey('po-${e.id}'),
+              onTap: e.transactionId == null
+                  ? null
+                  : () => context.push('/kasir/struk/${e.transactionId}'),
+              title: customerOf(e),
+              subtitle: '${_n(e.qtyOrdered)} ${productNameOf(e)}'
+                  '${e.depositQty > 0 ? ' - ${_n(e.depositQty)} jaminan' : ''}',
+              statusText: statusText,
+              statusColor: statusColor,
+              metaLeading: 'Dipesan',
+              createdAt: e.createdAt,
+              progress: isOpen
+                  ? _progressLine(
+                      taken: takenQty,
+                      total: e.qtyOrdered,
+                      verb: 'Dipenuhi',
+                      isDark: isDark)
+                  : null,
+              extraLines: [
+                if (a != null) 'Dicatat oleh ${_deviceLabel(a.kasirId, known)}',
+                if (fulfillers.isNotEmpty)
+                  'Pemenuhan terakhir oleh '
+                      '${_deviceLabel(fulfillers.first.deviceCode, known)}'
+                      ' (${fulfillers.length}x)',
+              ],
+              isDark: isDark,
+            ));
+          }
+        }
+
+        final summary = _PoSummary(
+          addedCount: added.length,
+          sumOrdered: sumOrdered,
+          fulfilledCount: fulfilledEvents.length,
+          sumFulfilled: sumFulfilled,
+          byCustomer: byCustomer,
+          byProduct: byProduct,
+        );
+
         return Column(
           children: [
+            _statusFilterRow(),
             Expanded(
-              child: filtered.isEmpty
-                  ? _emptyState(scheme, items.isEmpty)
-                  : ListView.separated(
-                      padding: const EdgeInsets.all(12),
-                      itemCount: filtered.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 8),
-                      itemBuilder: (_, i) {
-                        final e = filtered[i];
-                        final name = _customerLabel(
-                            txId: e.transactionId,
-                            liveNames: liveNames,
-                            fallback: e.customerName);
-                        final takenQty = taken[e.id] ?? 0;
-                        String statusText;
-                        Color statusColor;
-                        if (e.cancelledAt != null) {
-                          statusText = 'Dibatalkan ${_fmtDateTime(e.cancelledAt!)}';
-                          statusColor = AppTheme.debtFg(isDark);
-                        } else if (e.fulfilledAt != null) {
-                          statusText = 'Dipenuhi ${_fmtDateTime(e.fulfilledAt!)}';
-                          statusColor = AppTheme.changeFg(isDark);
-                        } else {
-                          statusText = e.paid ? 'Terbuka · Lunas' : 'Terbuka · Tempo';
-                          statusColor = AppTheme.stockWarnFg(isDark);
-                        }
-                        final open =
-                            e.cancelledAt == null && e.fulfilledAt == null;
-                        return _RiwayatCard(
-                          onTap: e.transactionId == null
-                              ? null
-                              : () => context
-                                  .push('/kasir/struk/${e.transactionId}'),
-                          title: name,
-                          subtitle:
-                              '${_n(e.qtyOrdered)} ${productNameOf(e)}'
-                              '${e.depositQty > 0 ? ' - ${_n(e.depositQty)} jaminan' : ''}',
-                          statusText: statusText,
-                          statusColor: statusColor,
-                          metaLeading: 'Dipesan',
-                          createdAt: e.createdAt,
-                          progress: open
-                              ? _progressLine(
-                                  taken: takenQty,
-                                  total: e.qtyOrdered,
-                                  verb: 'Dipenuhi',
-                                  isDark: isDark)
-                              : null,
-                          isDark: isDark,
-                        );
-                      },
-                    ),
+              child: ListView(
+                padding: const EdgeInsets.all(12),
+                children: [
+                  summary,
+                  const SizedBox(height: 8),
+                  if (children.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 40),
+                      child: Center(
+                        child: Text(
+                          items.isEmpty
+                              ? 'Belum ada riwayat di kategori ini.'
+                              : 'Tidak ada yang cocok dgn pencarian/filter saat ini.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: scheme.onSurfaceVariant),
+                        ),
+                      ),
+                    )
+                  else
+                    for (final c in children) ...[c, const SizedBox(height: 8)],
+                ],
+              ),
             ),
           ],
         );
@@ -512,6 +647,8 @@ class _RiwayatLaciMejaScreenState extends ConsumerState<RiwayatLaciMejaScreen>
 /// per-nota) krn riwayat menampilkan entri terbuka+selesai bercampur.
 class _RiwayatCard extends StatelessWidget {
   const _RiwayatCard({
+    super.key,
+    this.extraLines = const [],
     required this.title,
     required this.subtitle,
     required this.statusText,
@@ -532,6 +669,9 @@ class _RiwayatCard extends StatelessWidget {
   final bool isDark;
   final VoidCallback? onTap;
   final Widget? progress;
+
+  /// Baris keterangan tambahan (mis. "Dicatat oleh …").
+  final List<String> extraLines;
 
   @override
   Widget build(BuildContext context) {
@@ -585,11 +725,109 @@ class _RiwayatCard extends StatelessWidget {
                 ],
               ),
             ),
+            for (final l in extraLines)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(l,
+                    style: TextStyle(
+                        fontSize: 11.5,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant)),
+              ),
             if (progress != null) progress!,
           ],
         ),
       ),
     );
     return onTap == null ? card : InkWell(onTap: onTap, child: card);
+  }
+}
+
+/// Agregat per pelanggan/produk utk ringkasan riwayat pre-order.
+class _PoAgg {
+  int count = 0;
+  double ordered = 0;
+  double fulfilled = 0;
+}
+
+/// Ringkasan di atas daftar riwayat pre-order (mengikuti filter tanggal/
+/// pencarian/produk): berapa yang ditambahkan & dipenuhi, plus rincian per
+/// pelanggan dan per produk.
+class _PoSummary extends StatelessWidget {
+  const _PoSummary({
+    required this.addedCount,
+    required this.sumOrdered,
+    required this.fulfilledCount,
+    required this.sumFulfilled,
+    required this.byCustomer,
+    required this.byProduct,
+  });
+
+  final int addedCount;
+  final double sumOrdered;
+  final int fulfilledCount;
+  final double sumFulfilled;
+  final Map<String, _PoAgg> byCustomer;
+  final Map<String, _PoAgg> byProduct;
+
+  static String _n(double v) => v % 1 == 0 ? v.toInt().toString() : '$v';
+
+  Widget _group(BuildContext context, String title, Map<String, _PoAgg> m) {
+    final rows = m.entries.toList()
+      ..sort((a, b) => b.value.ordered.compareTo(a.value.ordered));
+    return ExpansionTile(
+      key: ValueKey('po-summary-$title'),
+      tilePadding: EdgeInsets.zero,
+      dense: true,
+      visualDensity: VisualDensity.compact,
+      title: Text('$title (${rows.length})',
+          style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+      children: [
+        for (final r in rows)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(r.key,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12.5)),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Dipesan ${_n(r.value.ordered)} · Dipenuhi ${_n(r.value.fulfilled)}',
+                  style: TextStyle(
+                      fontSize: 11.5,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const style = TextStyle(fontSize: 13, fontWeight: FontWeight.w700);
+    return Card(
+      key: const ValueKey('po-summary'),
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 10, 14, 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Ditambahkan: $addedCount pre-order · ${_n(sumOrdered)} qty',
+                style: style),
+            const SizedBox(height: 2),
+            Text('Dipenuhi: $fulfilledCount pemenuhan · ${_n(sumFulfilled)} qty',
+                style: style),
+            if (byCustomer.isNotEmpty) _group(context, 'Per pelanggan', byCustomer),
+            if (byProduct.isNotEmpty) _group(context, 'Per produk', byProduct),
+          ],
+        ),
+      ),
+    );
   }
 }
