@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import '../database/app_database.dart';
 import 'catalog_access_service.dart';
+import 'catalog_display_service.dart';
 import 'price_service.dart';
 
 /// Generate halaman HTML self-contained (tanpa server, tanpa CDN) berisi
@@ -39,8 +40,12 @@ class OrderPageService {
     required String storeName,
     String storeWhatsapp = '',
     bool waDirect = true,
+    CatalogDisplay? display,
+    DateTime? now,
   }) async {
     final catalog = await _buildCatalogJson(db);
+    final disp = display ?? await CatalogDisplayService.load(db);
+    final nowTs = now ?? DateTime.now();
     final generatedAt = _formatGeneratedAt(DateTime.now());
     final nameOrDefault = storeName.isEmpty ? 'Toko' : storeName;
     final waDigits = storeWhatsapp.replaceAll(RegExp(r'[^0-9]'), '');
@@ -60,6 +65,15 @@ class OrderPageService {
       // kode akses per pelanggan. null = fitur tidak dipakai.
       'hours': await CatalogAccessService.hoursJson(db),
       'access': await CatalogAccessService.accessJson(db),
+      // Halaman awal: kategori (terurut — lihat [categoriesFor]), saran
+      // terlaris di kolom cari, pengumuman toko, & toggle "Pesan lagi".
+      'showCategories': disp.showCategories,
+      'categories': categoriesFor(catalog),
+      'topSellers': await _topSellerNames(db, catalog, disp, nowTs),
+      'announcement': disp.hasAnnouncement
+          ? {'text': disp.effectiveAnnouncement, 'enabled': true}
+          : null,
+      'reorder': disp.reorderEnabled,
       'products': catalog,
     });
 
@@ -68,11 +82,57 @@ class OrderPageService {
         // toko yang mengandung karakter itu tidak merusak markup.
         .replaceAll('__STORE_NAME__', _escapeHtml(nameOrDefault))
         // Konteks di dalam <script> — SELALU escape "</" jadi "<\/" (teknik
-        // standar embed-JSON-in-script) supaya nama toko yang kebetulan
-        // memuat "</script>" tidak menutup blok skrip lebih awal lalu
-        // membuat sisanya dieksekusi sebagai HTML/skrip baru (XSS).
-        .replaceAll('__DATA_JSON__', dataJson.replaceAll('</', r'<\/'));
+        // standar embed-JSON-in-script) supaya nama toko / teks pengumuman
+        // yang kebetulan memuat "</script>" tidak menutup blok skrip lebih
+        // awal lalu membuat sisanya dieksekusi sebagai HTML/skrip baru
+        // (XSS). "<!--" ikut di-escape (state "script data escaped" HTML
+        // bisa menelan "</script>" berikutnya). Keduanya tetap JSON/JS
+        // valid ("\/" dan "\u0021" di dalam string literal = karakter itu).
+        .replaceAll(
+            '__DATA_JSON__',
+            dataJson.replaceAll('</', r'<\/').replaceAll('<!--', r'<\u0021--'));
     return (html: html, productCount: catalog.length);
+  }
+
+  /// Daftar kategori yang punya produk di katalog, URUT: jumlah produk
+  /// terbanyak dulu, seri diurutkan abjad (tanpa pembeda huruf besar/kecil).
+  /// Dipilih ketimbang abjad murni karena pelanggan paling sering mencari di
+  /// kategori besar (sembako, minuman) — chip terpenting ada di depan — dan
+  /// urutannya tetap konsisten antar-Publish selama isi katalog sama.
+  /// Produk tanpa kategori tidak masuk daftar (hanya ada di "Semua produk").
+  static List<String> categoriesFor(List<Map<String, Object?>> catalog) {
+    final counts = <String, int>{};
+    for (final p in catalog) {
+      final c = ((p['category'] as String?) ?? '').trim();
+      if (c.isEmpty) continue;
+      counts[c] = (counts[c] ?? 0) + 1;
+    }
+    final names = counts.keys.toList()
+      ..sort((a, b) {
+        final byCount = counts[b]!.compareTo(counts[a]!);
+        if (byCount != 0) return byCount;
+        return a.toLowerCase().compareTo(b.toLowerCase());
+      });
+    return names;
+  }
+
+  /// Nama produk terlaris (persis `name` di `DATA.products`) — hanya yang
+  /// ADA di katalog (aktif, berharga) dan tidak `outOfStock` (manual
+  /// maupun stok riil), maksimal [CatalogDisplay.topCount].
+  static Future<List<String>> _topSellerNames(AppDatabase db,
+      List<Map<String, Object?>> catalog, CatalogDisplay disp, DateTime now) async {
+    final range = disp.topRange(now);
+    final ranked = await db.getTopSellingParentProducts(range.from, range.to);
+    if (ranked.isEmpty) return const [];
+    final byId = {for (final p in catalog) p['id'] as String: p};
+    final out = <String>[];
+    for (final r in ranked) {
+      final p = byId[r.productId];
+      if (p == null || p['outOfStock'] == true) continue;
+      out.add(p['name'] as String);
+      if (out.length >= disp.topCount) break;
+    }
+    return out;
   }
 
   static Future<List<Map<String, Object?>>> _buildCatalogJson(

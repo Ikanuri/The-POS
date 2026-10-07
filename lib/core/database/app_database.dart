@@ -378,6 +378,16 @@ class AppDatabase extends _$AppDatabase {
     'receipt_show_employee',
     // Perilaku katalog pesanan.
     'katalog_wa_direct',
+    // Tampilan katalog HTML (halaman awal, kategori, terlaris, pengumuman,
+    // Pesan lagi) — daftar yang sama dgn `CatalogDisplayService.allKeys`.
+    'katalog_show_categories',
+    'katalog_top_days',
+    'katalog_top_from',
+    'katalog_top_to',
+    'katalog_top_count',
+    'katalog_announce_enabled',
+    'katalog_announce_text',
+    'katalog_reorder_enabled',
     // Kuota antrian pre-order per produk — ditetapkan owner, dibaca kasir
     // saat memutuskan siapa yang diprioritaskan di dashboard Laci Meja.
     // BEDA dari `saved_catalogs` (scratchpad pribadi per device, sengaja
@@ -6638,6 +6648,53 @@ class AppDatabase extends _$AppDatabase {
         cogs: (r.read(cogs) ?? 0).round(),
       );
     }).toList();
+  }
+
+  /// Peringkat produk INDUK terlaris untuk saran di kolom cari katalog HTML
+  /// — satu query agregat (JOIN + GROUP BY, tanpa N+1).
+  ///
+  /// - Varian digabung ke induknya (`COALESCE(parent_product_id, id)`).
+  /// - Skor = jumlah NOTA berbeda yang memuat produk itu (bukan jumlah baris
+  ///   / qty), tie-break total qty lalu nama (urutan stabil).
+  /// - Nota `void` dikecualikan; baris retur (qty <= 0) tidak dihitung.
+  /// - Hanya induk AKTIF yang tidak ditandai habis manual. Filter "ada di
+  ///   katalog" (punya harga) & stok riil dilakukan pemanggil terhadap
+  ///   daftar produk katalog; [limit] sengaja longgar untuk itu.
+  Future<List<({String productId, int txCount, double qty})>>
+      getTopSellingParentProducts(
+    DateTime from,
+    DateTime to, {
+    int limit = 200,
+  }) async {
+    final rows = await customSelect(
+      'SELECT par.id AS pid, '
+      '  COUNT(DISTINCT ti.transaction_id) AS tx_count, '
+      '  SUM(ti.qty) AS qty '
+      'FROM transaction_items ti '
+      'JOIN transactions t ON t.id = ti.transaction_id '
+      'JOIN products p ON p.id = ti.product_id '
+      'JOIN products par ON par.id = COALESCE(p.parent_product_id, p.id) '
+      "WHERE t.status != 'void' "
+      '  AND ti.qty > 0 '
+      '  AND t.created_at >= ? AND t.created_at <= ? '
+      '  AND par.is_active = 1 AND par.marked_out_of_stock = 0 '
+      'GROUP BY par.id '
+      'ORDER BY tx_count DESC, qty DESC, par.name ASC '
+      'LIMIT ?',
+      variables: [
+        Variable.withDateTime(from),
+        Variable.withDateTime(to),
+        Variable.withInt(limit),
+      ],
+      readsFrom: {transactionItems, transactions, products},
+    ).get();
+    return rows
+        .map((r) => (
+              productId: r.read<String>('pid'),
+              txCount: r.read<int>('tx_count'),
+              qty: r.read<double>('qty'),
+            ))
+        .toList();
   }
 
   /// Top pelanggan terdaftar berdasarkan total belanja — satu query JOIN.
