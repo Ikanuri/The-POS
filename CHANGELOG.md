@@ -7,6 +7,12 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-10-07 (katalog 60 baris + struk ambil barang pelanggan)
+
+- feat(struk-ambil-barang): cetak nama pelanggan (tebal) & alamat pelanggan tetap di header (dipecah per kata ke lebar kertas, ASCII; tanpa nama = header identik byte-per-byte)
+- feat(keranjang): ikon Hapus Tanda merah (warna error tema), Tandai Semua tetap hijau
+- perf(katalog-html): daftar dibatasi 60 baris + tombol Tampilkan lagi, indeks pencarian dihitung sekali (2000 produk: 9,8 dtk -> ~0,1 dtk di CPU 4x); bump 2.87.0+183
+
 ## 2026-10-07 (fix cetak struk ambil barang)
 
 - fix(printer): struk ambil barang dikirim bertahap (strip raster <= 96 baris/perintah, jeda 40 ms) — satu blok raster besar membuat printer kehilangan sinkron & mencetak data mentah sbg teks sampah; qty pecahan dibulatkan maks 3 desimal; bump 2.86.1+182

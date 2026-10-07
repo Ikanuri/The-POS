@@ -8,6 +8,14 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 7 Oktober 2026 (Katalog Lebih Cepat + Pelanggan di Struk Ambil Barang)
+
+- **Pencarian di katalog pesanan jauh lebih cepat**, terutama untuk toko dengan ribuan produk (dulu bisa tersendat beberapa detik di HP biasa). Daftar kini menampilkan 60 produk dulu; ketik nama barang untuk mencari, atau tekan **Tampilkan 60 lagi** untuk melihat lebih banyak. Perlu Publish ulang katalog.
+- **Tombol Hapus Tanda di keranjang kini berwarna merah** (Tandai Semua tetap hijau), supaya tidak tertukar.
+- **Struk Ambil Barang memuat nama pelanggan** (tebal) dan, untuk pelanggan tetap yang punya alamat, alamatnya, tepat di bawah waktu cetak. Tanpa pelanggan, struk sama seperti biasa.
+
+---
+
 ## 7 Oktober 2026 (Perbaikan Cetak Struk Ambil Barang)
 
 - **Cetak Struk Ambil Barang tidak lagi mengeluarkan huruf acak:** pada keranjang dengan banyak barang, struk sempat tercetak sebagian lalu berubah jadi deretan simbol tak terbaca. Kini data dikirim ke printer sedikit demi sedikit.
