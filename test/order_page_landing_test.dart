@@ -116,4 +116,38 @@ void main() {
     });
   });
 
+  group('Pesan lagi & tempel pesanan lama', () {
+    test('riwayat di localStorage (kunci tanpa generatedAt), persist, try/catch',
+        () {
+      expect(html, contains("var HIST_KEY = 'posOrderHistory';"));
+      expect(html.contains('HIST_KEY + DATA.generatedAt'), isFalse);
+      expect(html, contains('navigator.storage.persist'));
+      expect(fn('function loadHistory(){', 'function requestPersist'),
+          contains('catch (e)'));
+    });
+
+    test('riwayat disimpan saat kirim (submitOrder), anti dobel-ketuk', () {
+      expect(fn('function submitOrder(){', '// Blueprint §5'),
+          contains('recordOrder()'));
+      expect(html, contains('DUP_WINDOW_MS = 120000'));
+    });
+
+    test('parser tempel: toleran #PSN: / PSN:, galat ramah', () {
+      expect(html, contains(r'/#?PSN:(\S+)/gi'));
+      expect(html, contains('Kode pesanan tidak ditemukan di teks ini'));
+      expect(html, contains('decodeURIComponent(raw)'));
+    });
+
+    test('item habis/tak ada dilewati, harga dari katalog terkini', () {
+      final apply = fn('function applyOrderItems(items){', 'function reorderMessage');
+      expect(apply, contains('p.outOfStock'));
+      expect(apply.contains('price'), isFalse);
+      expect(html, contains('tidak tersedia lagi'));
+    });
+
+    test('toggle OFF: tanpa simpan riwayat', () {
+      expect(fn('function recordOrder(){', 'function p2'),
+          contains('if (!DATA.reorder) return;'));
+    });
+  });
 }

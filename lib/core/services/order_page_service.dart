@@ -504,6 +504,33 @@ body{
 #pageMenu[data-catrow="1"] .cat-row{display:flex;}
 .extras-slot-b{display:none;padding:2px 16px 0;}
 #pageMenu[data-extras="1"] .extras-slot-b{display:block;}
+#app.closed .extras{display:none;}
+.sect{font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);
+  font-weight:700;margin:16px 0 8px;text-align:left;}
+.again{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:12px 14px;
+  display:flex;align-items:center;gap:12px;text-align:left;box-shadow:0 2px 10px rgba(0,0,0,.05);}
+.again-t{flex:1;min-width:0;}
+.again .t{font-weight:700;font-size:14px;}
+.again .s{font-size:12px;color:var(--ink-2);margin-top:2px;line-height:1.35;display:-webkit-box;
+  -webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.btn{flex-shrink:0;min-height:40px;border:none;border-radius:999px;padding:0 16px;background:var(--accent);
+  color:#fff;font-family:var(--font);font-weight:700;font-size:13px;white-space:nowrap;cursor:pointer;}
+.btn.o{background:transparent;color:var(--accent);border:1.5px solid var(--accent);}
+.link-row{text-align:right;}
+.link{border:none;background:none;min-height:40px;padding:0 2px;font-family:var(--font);font-size:12.5px;
+  color:var(--accent);font-weight:700;cursor:pointer;}
+.nohist{border:1.5px dashed var(--line);border-radius:16px;padding:11px 14px;text-align:left;}
+.nohist b{display:block;font-size:13.5px;}
+.nohist span{font-size:12px;color:var(--ink-2);}
+.paste{margin-top:10px;display:flex;gap:8px;align-items:center;}
+.paste .inp{flex:1;min-width:0;height:40px;border-radius:12px;border:1.5px dashed var(--line);
+  background:transparent;color:var(--ink);font-family:var(--font);font-size:13px;padding:0 12px;outline:none;}
+.paste .inp:focus{border-color:var(--accent);border-style:solid;}
+.paste .inp::placeholder{color:var(--ink-3);}
+.paste .btn2{flex:0 0 72px;height:40px;border:none;border-radius:12px;background:var(--field);
+  color:var(--ink-2);font-family:var(--font);font-weight:700;font-size:13px;cursor:pointer;}
+.paste-msg{min-height:0;margin-top:6px;font-size:12.5px;color:var(--danger);text-align:left;}
+.paste-msg:empty{display:none;}
 .list-info{text-align:center;font-size:12.5px;line-height:1.45;color:var(--ink-3);margin:2px 20px 8px;}
 #listWrap{display:none;}
 #pageMenu[data-view="list"] #listWrap{display:block;}
@@ -535,6 +562,17 @@ body{
   transform:scaleX(1);}
 .ann-pop.manual{padding-bottom:16px;}
 .ann-pop.manual .ann-prog{display:none;}
+/* Riwayat pesanan (bottom sheet) — pola sama dgn modal produk. */
+.hist-body{padding:0 16px 18px;}
+.hist-it{border:1px solid var(--line);border-radius:14px;padding:10px 12px;margin-bottom:8px;
+  display:flex;align-items:center;gap:10px;}
+.hist-it .hi-t{flex:1;min-width:0;}
+.hist-it .t{font-weight:700;font-size:13.5px;}
+.hist-it .s{font-size:12px;color:var(--ink-2);margin-top:2px;line-height:1.35;display:-webkit-box;
+  -webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.hist-msg{margin:0 16px 16px;padding:9px 12px;border-radius:12px;background:var(--accsoft);color:var(--accent);
+  font-size:12.5px;font-weight:600;text-align:left;}
+.hist-msg:empty{display:none;}
 @media (prefers-reduced-motion: reduce){
   .tb-id,.blobs,.sticky-head::before,.ph span,.ann-pop,.ann-pop.show{transition:none;}
 }
@@ -1054,6 +1092,35 @@ textarea.tfield{resize:none;min-height:64px;}
   </div>
 </div>
 
+
+<div class="extras" id="extras" hidden>
+  <div id="againWrap" hidden>
+    <div class="sect">Pesan lagi</div>
+    <div class="again">
+      <div class="again-t"><div class="t" id="againTitle"></div><div class="s" id="againSub"></div></div>
+      <button class="btn" id="againBtn" type="button">Pesan lagi</button>
+    </div>
+    <div class="link-row"><button class="link" id="histOpen" type="button">Lihat semua pesanan (<span id="histN">0</span>)</button></div>
+  </div>
+  <div id="noHist" hidden>
+    <div class="sect">Pesan lagi</div>
+    <div class="nohist"><b>Belum ada riwayat di HP ini</b><span>Punya pesanan lama di WhatsApp? Tempel di bawah.</span></div>
+  </div>
+  <div class="paste">
+    <input class="inp" id="pasteIn" type="text" placeholder="Tempel pesanan lama…" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Tempel pesanan lama dari WhatsApp" />
+    <button class="btn2" id="pasteBtn" type="button">Muat</button>
+  </div>
+  <div class="paste-msg" id="pasteMsg" role="status"></div>
+</div>
+
+<div class="scrim" id="histScrim"></div>
+<div class="sheet" id="histSheet" role="dialog" aria-label="Pesanan sebelumnya">
+  <div class="sheet-grip"></div>
+  <button class="sheet-x" id="histClose" type="button" aria-label="Tutup">&times;</button>
+  <div class="sheet-head"><b>Pesanan sebelumnya <span id="histCount"></span></b></div>
+  <div class="sheet-body hist-body" id="histList"></div>
+  <div class="hist-msg" id="histMsg" role="status"></div>
+</div>
 
 <div class="confirm-overlay" id="confirmOverlay">
   <div class="confirm-box">
@@ -2766,6 +2833,212 @@ function initAnn(){
   }, 450);
 }
 
+// ── Pesan lagi: riwayat pesanan di localStorage HP pelanggan sendiri (kunci
+// TIDAK memuat generatedAt, jadi bertahan lintas Publish; SEMUA pesanan
+// disimpan, tanpa batas jumlah). Semua akses try/catch. Harga SELALU dari
+// katalog terkini — yang disimpan hanya unitId, qty, nama tampil, catatan.
+var HIST_KEY = 'posOrderHistory';
+var DUP_WINDOW_MS = 120000;
+var MONTHS_ID = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Ags','Sep','Okt','Nov','Des'];
+function loadHistory(){
+  var out = [];
+  try {
+    var raw = localStorage.getItem(HIST_KEY);
+    if (!raw) return out;
+    var arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return out;
+    arr.forEach(function(o){
+      if (!o || typeof o.t !== 'number' || !Array.isArray(o.items)) return;
+      var items = o.items.filter(function(it){ return it && typeof it.id === 'string' && it.q > 0; });
+      if (items.length) out.push({t: o.t, items: items});
+    });
+  } catch (e) {}
+  out.sort(function(a, b){ return b.t - a.t; });
+  return out;
+}
+function requestPersist(){
+  try {
+    if (navigator.storage && navigator.storage.persist) {
+      var r = navigator.storage.persist();
+      if (r && r.catch) r.catch(function(){});
+    }
+  } catch (e) {}
+}
+function orderSig(items){
+  return items.map(function(it){ return it.id + ':' + it.q + ':' + (it.note || ''); }).sort().join('|');
+}
+// Dipanggil tiap pelanggan menekan kirim. Isi identik < 2 menit dari
+// pesanan terakhir (dobel-ketuk) diabaikan.
+function recordOrder(){
+  if (!DATA.reorder) return;
+  var items = [];
+  Object.keys(cart).forEach(function(id){
+    var u = byUnit[id];
+    if (!u || !(cart[id] > 0)) return;
+    var it = {id: id, q: cart[id], n: u.name};
+    var note = (cartNotes[id] || '').trim();
+    if (note) it.note = note;
+    items.push(it);
+  });
+  if (!items.length) return;
+  var list = loadHistory();
+  var now = Date.now();
+  if (list.length && now - list[0].t < DUP_WINDOW_MS && orderSig(list[0].items) === orderSig(items)) return;
+  list.unshift({t: now, items: items});
+  try { localStorage.setItem(HIST_KEY, JSON.stringify(list)); } catch (e) { return; }
+  requestPersist();
+  renderExtras();
+}
+function p2(n){ return (n < 10 ? '0' : '') + n; }
+function fmtOrderDate(t, withYear, withTime){
+  var d = new Date(t);
+  return d.getDate() + ' ' + MONTHS_ID[d.getMonth()] + (withYear ? ' ' + d.getFullYear() : '') +
+    (withTime ? ' · ' + p2(d.getHours()) + '.' + p2(d.getMinutes()) : '');
+}
+function summarizeItems(items, withQty){
+  var parts = items.slice(0, 3).map(function(it){ return it.n + (withQty ? ' ×' + fmtQty(it.q) : ''); });
+  if (items.length > 3) parts.push('+' + (items.length - 3) + ' lagi');
+  return parts.join(', ');
+}
+var extrasEl = byId('extras');
+function renderExtras(){
+  var on = !!DATA.reorder;
+  extrasEl.hidden = !on;
+  if (!on) return;
+  var list = loadHistory();
+  byId('againWrap').hidden = list.length === 0;
+  byId('noHist').hidden = list.length > 0;
+  if (list.length) {
+    var o = list[0];
+    byId('againTitle').textContent = fmtOrderDate(o.t, false, false) + ' · ' + o.items.length + ' jenis barang';
+    byId('againSub').textContent = summarizeItems(o.items, false);
+    byId('histN').textContent = String(list.length);
+  }
+}
+// Masukkan item ke keranjang: qty = qty tersimpan (item lain tidak disentuh),
+// lewati unitId yg tak ada di katalog sekarang / produk habis.
+function applyOrderItems(items){
+  var added = 0, missing = [];
+  items.forEach(function(it){
+    var u = byUnit[it.id], p = u ? findProductForUnit(it.id) : null;
+    if (!u || !p || p.outOfStock) { missing.push(it.n || (u && u.name) || 'barang'); return; }
+    cart[it.id] = it.q;
+    dropDraft(it.id);
+    if (it.note) cartNotes[it.id] = it.note;
+    added++;
+  });
+  if (added) { render(); saveCart(); }
+  return {added: added, missing: missing};
+}
+function reorderMessage(res){
+  if (!res.added) {
+    return {text: res.missing.length ? 'Barang di pesanan ini sudah tidak tersedia' : 'Tidak ada barang untuk dimasukkan', err: true};
+  }
+  var t = res.added + ' barang dimasukkan';
+  if (res.missing.length) {
+    t += ' · ' + res.missing.length + ' tidak tersedia lagi (' +
+      res.missing.slice(0, 2).join(', ') + (res.missing.length > 2 ? ', dll' : '') + ')';
+  }
+  return {text: t, err: false};
+}
+function reorderFrom(items, inSheet){
+  try {
+    var res = applyOrderItems(items), m = reorderMessage(res);
+    showToast(m.text, {ms: 4500, error: m.err});
+    if (inSheet) byId('histMsg').textContent = (m.err ? '' : '✓ ') + m.text;
+  } catch (e) { showToast('Gagal memasukkan pesanan', {error: true}); }
+}
+byId('againBtn').addEventListener('click', function(){
+  var list = loadHistory();
+  if (list.length) reorderFrom(list[0].items, false);
+});
+function renderHistSheet(){
+  var list = loadHistory(), box = byId('histList');
+  byId('histCount').textContent = '(' + list.length + ')';
+  box.textContent = '';
+  list.forEach(function(o, idx){
+    var row = document.createElement('div');
+    row.className = 'hist-it';
+    var tx = document.createElement('div');
+    tx.className = 'hi-t';
+    var t = document.createElement('div');
+    t.className = 't';
+    t.textContent = fmtOrderDate(o.t, true, true);
+    var s = document.createElement('div');
+    s.className = 's';
+    s.textContent = summarizeItems(o.items, true);
+    tx.appendChild(t);
+    tx.appendChild(s);
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'btn' + (idx === 0 ? '' : ' o');
+    b.textContent = 'Pesan lagi';
+    b.addEventListener('click', function(){ reorderFrom(o.items, true); });
+    row.appendChild(tx);
+    row.appendChild(b);
+    box.appendChild(row);
+  });
+}
+function openHist(){
+  renderHistSheet();
+  byId('histMsg').textContent = '';
+  byId('histScrim').classList.add('show');
+  byId('histSheet').classList.add('show');
+  document.documentElement.classList.add('modal-open');
+}
+function closeHist(){
+  byId('histScrim').classList.remove('show');
+  byId('histSheet').classList.remove('show');
+  document.documentElement.classList.remove('modal-open');
+}
+byId('histOpen').addEventListener('click', openHist);
+byId('histClose').addEventListener('click', closeHist);
+byId('histScrim').addEventListener('click', closeHist);
+attachSheetSwipe(byId('histSheet'), closeHist);
+
+// Pemulihan: tempel teks WhatsApp -> ambil kode `#PSN:` / `PSN:` (teks lain
+// diabaikan), format `unitId=qty[:catatanEncoded];...`. Tidak boleh melempar.
+function parsePsn(text){
+  var items = [], re = /#?PSN:(\S+)/gi, m;
+  var src = String(text == null ? '' : text);
+  while ((m = re.exec(src)) !== null) {
+    m[1].split(';').forEach(function(part){
+      var eq = part.indexOf('=');
+      if (eq <= 0) return;
+      var id = part.slice(0, eq), rest = part.slice(eq + 1), ci = rest.indexOf(':');
+      var q = parseFloat(ci >= 0 ? rest.slice(0, ci) : rest);
+      if (!id || !(q > 0) || !isFinite(q)) return;
+      var it = {id: id, q: q};
+      if (ci >= 0) {
+        var raw = rest.slice(ci + 1), note = raw;
+        try { note = decodeURIComponent(raw); } catch (e) { note = raw; }
+        note = note.trim();
+        if (note) it.note = note;
+      }
+      items.push(it);
+    });
+  }
+  return items;
+}
+function loadPasted(){
+  var msg = byId('pasteMsg');
+  try {
+    var items = parsePsn(byId('pasteIn').value);
+    if (!items.length) { msg.textContent = 'Kode pesanan tidak ditemukan di teks ini'; return; }
+    msg.textContent = '';
+    var res = applyOrderItems(items), m = reorderMessage(res);
+    showToast(m.text, {ms: 4500, error: m.err});
+    if (res.added) byId('pasteIn').value = '';
+    else msg.textContent = m.text;
+  } catch (e) {
+    msg.textContent = 'Kode pesanan tidak ditemukan di teks ini';
+  }
+}
+byId('pasteBtn').addEventListener('click', loadPasted);
+byId('pasteIn').addEventListener('keydown', function(e){ if (e.key === 'Enter') { e.preventDefault(); loadPasted(); } });
+byId('pasteIn').addEventListener('input', function(){ byId('pasteMsg').textContent = ''; });
+// Slot "Pesan lagi": di landing (bawah chip) atau, tanpa kategori, di bawah kolom cari.
+(CATS_ON ? byId('extrasSlotL') : extrasSlotB).appendChild(extrasEl);
 
 
 // Blueprint §2/§6 — pindah mode, BUKAN pindah halaman: tidak ada reload,
@@ -2906,6 +3179,7 @@ function submitOrder(){
     ? ('https://wa.me/' + num + '?text=' + encodeURIComponent(text))
     : ('https://api.whatsapp.com/send?text=' + encodeURIComponent(text));
   showToast('Teks pesanan disalin — tempel bila perlu');
+  try { recordOrder(); } catch (e) {}
   window.open(url, '_blank');
 }
 
@@ -2938,6 +3212,8 @@ loadCart();
 loadAccess();
 buildChips();
 initPlaceholder();
+renderExtras();
+if (DATA.reorder && loadHistory().length) requestPersist();
 initAnn();
 applyState(computeState(), false);
 setSelChips();
