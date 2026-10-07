@@ -366,6 +366,10 @@ body{
    baru; arah naik/turun acak. Hanya transform (GPU), hanya digit yang
    berubah, ditiadakan saat prefers-reduced-motion. */
 .roll{display:flex;white-space:pre;line-height:1.15;}
+/* Tiap karakter jadi sel flex sendiri: SPASI di sel flex dgn white-space bawaan
+   (mis. .mb-total{nowrap}) runtuh ke lebar 0 -> "Rp" melonjak 4-6px saat roll
+   dimulai/selesai. Paksa pre di semua sel supaya lebar spasi tetap utuh. */
+.roll>span{white-space:pre;}
 .rd{display:inline-block;height:1.15em;overflow:hidden;}
 .rs{display:block;will-change:transform;}
 .rs i{display:block;font-style:normal;height:1.15em;line-height:1.15;}
@@ -1400,6 +1404,11 @@ function rollSet(el, text){
   clearTimeout(el._rtm);
   if (old === undefined || ROLL_REDUCED) { el.textContent = text; return; }
   el.setAttribute('aria-label', text);
+  // Posisi kiri teks SEKARANG (termasuk transform yg sedang berjalan) —
+  // dipakai di bawah utk meluncurkan teks mulus bila jumlah digit berubah.
+  var oldLeft = rollLeft(el);
+  el.style.transition = 'none';
+  el.style.transform = '';
   el.innerHTML = '';
   var frag = document.createDocumentFragment();
   var pending = [];
@@ -1438,11 +1447,36 @@ function rollSet(el, text){
   }
   el.appendChild(frag);
   void el.offsetWidth; // paksa reflow supaya transisi mulai dari posisi awal
+  // Jumlah digit berubah (9.999 -> 10.000): teks rata-kanan/tengah akan
+  // melompat selebar satu digit. Mulai dari posisi lama lalu geser mulus
+  // bersama putaran digit. Jumlah digit sama => dx = 0 (tidak ada geseran).
+  var dx = oldLeft - rollLeft(el);
+  if (Math.abs(dx) > 0.5 && !isNaN(dx)) {
+    el.style.transform = 'translateX(' + dx + 'px)';
+    void el.offsetWidth;
+    el.style.transition = 'transform .6s cubic-bezier(.2,.8,.2,1)';
+    el.style.transform = 'translateX(0)';
+  }
   pending.forEach(function(p){
     p[0].style.transition = 'transform .6s cubic-bezier(.2,.8,.2,1)';
     p[0].style.transform = 'translateY(' + p[1] + 'em)';
   });
-  el._rtm = setTimeout(function(){ el.textContent = text; }, 680);
+  el._rtm = setTimeout(function(){
+    el.textContent = text;
+    el.style.transition = '';
+    el.style.transform = '';
+  }, 680);
+}
+// Tepi kiri teks di elemen roll (teks biasa ATAU deretan sel hasil roll).
+function rollLeft(el){
+  var n = el.firstChild;
+  if (!n) return el.getBoundingClientRect().left;
+  if (n.nodeType === 3) {
+    var r = document.createRange();
+    r.selectNodeContents(n);
+    return r.getBoundingClientRect().left;
+  }
+  return n.getBoundingClientRect().left;
 }
 
 function rp(n){
