@@ -7,6 +7,14 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-10-07 (katalog: tombol kirim WhatsApp + Telegram, perbaikan header & roll angka)
+
+- feat(pengaturan): katalog meneruskan kolom Telegram Informasi Toko + teks bantu tombol Kirim ke Telegram
+- feat(katalog-html): tombol kirim dipecah WhatsApp + Telegram bila kolom Telegram toko diisi - 2 tombol 50/50 berbaris 2 (logo+teks / total roll), salin teks lalu buka t.me; normalisasi tautan Telegram
+- fix(katalog-html): header tidak lagi memotong info - nama toko 2 baris, 'Diperbarui <waktu>' utuh, titik status 10px tak terpotong, tombol tampilan disembunyikan di halaman awal, ringkasan Pesan lagi & label kirim 320px utuh
+- fix(katalog-html): animasi roll angka tidak lagi menggeser "Rp" (spasi sel flex runtuh) + geser mulus saat jumlah digit berubah
+- docs: versi 2.89.0+185, CHANGELOG, PATCHNOTES, HANDOFF (tombol kirim Telegram, perbaikan header & roll angka)
+
 ## 2026-10-07 (katalog: halaman awal, kategori, terlaris, pengumuman, Pesan lagi)
 
 - feat(katalog-html): data halaman awal baru - kategori terurut, saran terlaris (query agregat), pengumuman, toggle Pesan lagi + setting tampilan tersinkron

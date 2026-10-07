@@ -8,6 +8,18 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 7 Oktober 2026 (Katalog Pesanan: Kirim ke Telegram + Perapian Tampilan)
+
+> **Perlu Publish ulang katalog** (tekan "Publish ke Web" atau "Buat & Bagikan") agar semua perubahan di bawah muncul di HP pelanggan.
+
+- **Tombol "Kirim ke Telegram" di halaman Pesanan.** Bila kolom Telegram di Informasi Toko diisi (mis. `@namatoko`, `t.me/namatoko`, atau `t.me/namatoko?direct`), tombol kirim terbagi dua: WhatsApp (hijau) dan Telegram (biru), masing-masing menampilkan total belanja. Karena Telegram tidak bisa mengisi pesan otomatis, tombol Telegram menyalin pesanan lalu membuka chat toko; pelanggan tinggal menempel (tahan lalu "Tempel") dan kirim. Bila kolom Telegram kosong, tombolnya tetap satu seperti biasa.
+- **Angka total tidak lagi bergeser** saat berputar: tulisan "Rp" di tombol bawah dan di total halaman Pesanan dulu bergeser sedikit tiap angka berubah. Sekarang diam di tempat, dan saat angkanya bertambah digit (9.999 ke 10.000) bergeser dengan mulus.
+- **Info di bagian atas katalog tidak lagi terpotong.** Nama toko panjang turun ke baris kedua, keterangan "Diperbarui ..." tampil utuh, dan tombol ikon tidak ada yang keluar layar di HP berlayar sempit. Ringkasan pesanan di "Pesan lagi" dan tulisan tombol kirim di layar kecil juga tampil penuh.
+- **Tombol pengalih tampilan daftar/kotak disembunyikan di halaman awal** (di sana memang tidak berfungsi); tetap ada di daftar produk.
+- **Titik status buka/tutup lebih besar dan jelas**, tidak lagi terpotong di sisi kiri.
+
+---
+
 ## 7 Oktober 2026 (Katalog Pesanan: Halaman Awal Baru)
 
 > **Perlu Publish ulang katalog** (tekan "Publish ke Web" atau "Buat & Bagikan") agar semua perubahan di bawah muncul di HP pelanggan.
