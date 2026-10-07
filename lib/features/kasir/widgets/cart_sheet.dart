@@ -23,6 +23,7 @@ import '../../../core/services/order_parser_service.dart';
 import '../../../core/services/price_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/item_count_badge.dart';
+import '../../../core/widgets/marquee_text.dart';
 import '../cart_debt_settlement_provider.dart';
 import '../cart_meta_provider.dart';
 import '../cart_prabayar_provider.dart';
@@ -948,6 +949,9 @@ class _CartSheetState extends ConsumerState<CartSheet> {
           final minusConfirm = dialogRef.watch(cartMinusConfirmProvider);
           final showCategoryChips =
               dialogRef.watch(cartPriceCategoryChipsProvider);
+          final chipsBesideName = dialogRef.watch(cartChipsBesideNameProvider);
+          final subtotalBeside =
+              dialogRef.watch(cartSubtotalBesidePriceProvider);
           return Material(
             color: sheetScheme.surface,
             shape: const RoundedRectangleBorder(
@@ -1070,6 +1074,58 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                         ),
                         onChanged: (v) => dialogRef
                             .read(cartPriceCategoryChipsProvider.notifier)
+                            .set(v),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                      child: SwitchListTile(
+                        key: const ValueKey('cart-setting-chips-beside-name'),
+                        contentPadding: EdgeInsets.zero,
+                        secondary: CircleAvatar(
+                          radius: 18,
+                          backgroundColor:
+                              sheetScheme.tertiary.withOpacity(0.12),
+                          child: Icon(Icons.view_agenda_outlined,
+                              color: sheetScheme.tertiary, size: 20),
+                        ),
+                        value: chipsBesideName,
+                        activeColor: AppTheme.accent,
+                        title: const Text('Chip kategori di samping nama'),
+                        subtitle: const Text(
+                          'Chip Kategori Harga sejajar dengan nama produk '
+                          '(bisa digeser ke samping); nama panjang jadi teks '
+                          'berjalan. Hanya berlaku bila chip kategori '
+                          'ditampilkan',
+                          style: TextStyle(fontSize: 11.5),
+                        ),
+                        onChanged: (v) => dialogRef
+                            .read(cartChipsBesideNameProvider.notifier)
+                            .set(v),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      child: SwitchListTile(
+                        key: const ValueKey('cart-setting-subtotal-beside'),
+                        contentPadding: EdgeInsets.zero,
+                        secondary: CircleAvatar(
+                          radius: 18,
+                          backgroundColor: AppTheme.accent.withOpacity(0.12),
+                          child: const Icon(Icons.price_change_outlined,
+                              color: AppTheme.accent, size: 20),
+                        ),
+                        value: subtotalBeside,
+                        activeColor: AppTheme.accent,
+                        title: const Text('Subtotal di samping harga'),
+                        subtitle: const Text(
+                          'Nominal total per produk ditaruh sejajar dengan '
+                          '"satuan · harga", rata kanan — bukan di baris '
+                          'sendiri di bawahnya',
+                          style: TextStyle(fontSize: 11.5),
+                        ),
+                        onChanged: (v) => dialogRef
+                            .read(cartSubtotalBesidePriceProvider.notifier)
                             .set(v),
                       ),
                     ),
@@ -1978,6 +2034,11 @@ class _CartItemTileState extends ConsumerState<_CartItemTile>
     // SELURUH baris ikut bergetar (lihat `_handleMinusTap`), lebih kentara
     // walau jempol/fokus mata sedang di area manapun pada baris ini.
     final minusConfirm = ref.watch(cartMinusConfirmProvider);
+    // Opsi layout (Pengaturan Keranjang): subtotal di samping "satuan ·
+    // harga", dan chip Kategori Harga di samping nama. Keduanya default OFF.
+    final subtotalBeside = ref.watch(cartSubtotalBesidePriceProvider);
+    final chipsBesideName = ref.watch(cartChipsBesideNameProvider) &&
+        ref.watch(cartPriceCategoryChipsProvider);
     final checkbox = Checkbox(
       value: item.checked,
       visualDensity: VisualDensity.compact,
@@ -2055,7 +2116,20 @@ class _CartItemTileState extends ConsumerState<_CartItemTile>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Row(
+                        _wrapNameRow(
+                          chipsBesideName: chipsBesideName,
+                          item: item,
+                          effectiveQty: effectiveQty,
+                          cartId: cartId,
+                          isVariant: isVariant,
+                          nameStyle: TextStyle(
+                              fontSize: isVariant ? 15 : 17,
+                              color:
+                                  isVariant ? scheme.onSurfaceVariant : null),
+                          checkbox: position == CartCheckboxPosition.kananNama
+                              ? checkbox
+                              : null,
+                          plain: Row(
                           children: [
                             if (isVariant)
                               Padding(
@@ -2124,12 +2198,16 @@ class _CartItemTileState extends ConsumerState<_CartItemTile>
                             ],
                           ],
                         ),
+                        ),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Row(
                               children: [
+                                Expanded(
+                                    child: Row(
+                                  children: [
                                 Flexible(
                                   child: Text.rich(
                                     TextSpan(
@@ -2176,12 +2254,32 @@ class _CartItemTileState extends ConsumerState<_CartItemTile>
                                       style: TextStyle(
                                           fontSize: 12, color: scheme.primary)),
                                 ],
+                                  ],
+                                )),
+                                // Opsi "subtotal di samping": nominal rata
+                                // kanan di baris yang sama; grup kiri
+                                // (satuan · harga) yang menyusut/ellipsis
+                                // lebih dulu, nominal tidak pernah terpotong.
+                                if (subtotalBeside) ...[
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    formatRupiah(subtotal),
+                                    maxLines: 1,
+                                    style: AppTheme.numStyle(context,
+                                        size: 14,
+                                        weight: FontWeight.w700,
+                                        color: isZeroed
+                                            ? scheme.onSurfaceVariant
+                                            : scheme.primary),
+                                  ),
+                                ],
                               ],
                             ),
                             // Susulan (permintaan user): nominal subtotal taruh PERSIS di
                             // bawah baris satuan+harga ("Karung · Rp 65.000") — bukan di
                             // blok kanan (dulu sempat dicoba di bawah qty badge kiri, lalu
                             // di bawah stepper; keduanya BUKAN yang dimaksud user).
+                            if (!subtotalBeside)
                             Padding(
                               padding: const EdgeInsets.only(top: 2),
                               child: Text(
@@ -2204,7 +2302,8 @@ class _CartItemTileState extends ConsumerState<_CartItemTile>
                             // opsi + tap langsung terapkan, TIDAK termasuk
                             // toggle header "Normal"/kategori yg SUDAH ADA
                             // & tidak berubah sama sekali.
-                            if (ref.watch(cartPriceCategoryChipsProvider))
+                            if (ref.watch(cartPriceCategoryChipsProvider) &&
+                                !chipsBesideName)
                               _ItemPriceCategoryChips(
                                 item: item,
                                 effectiveQty: effectiveQty,
@@ -2370,11 +2469,15 @@ class _ItemPriceCategoryChips extends ConsumerWidget {
     required this.item,
     required this.effectiveQty,
     required this.cartId,
+    this.inline = false,
   });
 
   final CartItem item;
   final double effectiveQty;
   final String cartId;
+
+  /// true = dipakai di SAMPING nama (tanpa jarak atas; tinggi lebih rapat).
+  final bool inline;
 
   Future<void> _apply(WidgetRef ref, String? categoryId) async {
     final priceService = PriceService(ref.read(databaseProvider));
@@ -2411,7 +2514,7 @@ class _ItemPriceCategoryChips extends ConsumerWidget {
         final scheme = Theme.of(context).colorScheme;
         final activeCategoryId = item.priceFromCategoryId;
         return Padding(
-          padding: const EdgeInsets.only(top: 4),
+          padding: EdgeInsets.only(top: inline ? 0 : 4),
           child: SizedBox(
             height: 26,
             child: SingleChildScrollView(
@@ -2477,6 +2580,118 @@ class _ItemPriceCategoryChips extends ConsumerWidget {
         ),
       ),
     );
+  }
+}
+
+/// Baris nama produk: mode biasa = [plain]; mode "chip di samping nama" =
+/// [_NameChipsRow] (nama berjalan + chip scroll horizontal).
+Widget _wrapNameRow({
+  required bool chipsBesideName,
+  required CartItem item,
+  required double effectiveQty,
+  required String cartId,
+  required bool isVariant,
+  required TextStyle nameStyle,
+  required Widget? checkbox,
+  required Widget plain,
+}) {
+  if (!chipsBesideName) return plain;
+  final titip = (item.depositQty != null && item.depositQty! > 0)
+      ? ' · Titip ${item.depositQty! % 1 == 0 ? item.depositQty!.toInt() : item.depositQty}'
+      : '';
+  return _NameChipsRow(
+    label: '${item.productName}$titip',
+    style: nameStyle,
+    leading: isVariant
+        ? const Padding(
+            padding: EdgeInsets.only(right: 4),
+            child: Icon(Icons.subdirectory_arrow_right, size: 15),
+          )
+        : null,
+    checkbox: checkbox,
+    plain: plain,
+    item: item,
+    effectiveQty: effectiveQty,
+    cartId: cartId,
+  );
+}
+
+/// Nama produk (teks berjalan bila tak muat, 1 baris) + chip Kategori Harga
+/// di sebelah kanannya. Lebar nama dibatasi maks. 50% ruang baris supaya chip
+/// selalu kebagian tempat; chip yang tak muat digeser horizontal. Kalau
+/// produk ini tidak punya chip (tak ada kategori / tanpa izin override),
+/// jatuh ke [plain] (nama sampai 2 baris seperti biasa).
+class _NameChipsRow extends ConsumerWidget {
+  const _NameChipsRow({
+    required this.label,
+    required this.style,
+    required this.leading,
+    required this.checkbox,
+    required this.plain,
+    required this.item,
+    required this.effectiveQty,
+    required this.cartId,
+  });
+
+  final String label;
+  final TextStyle style;
+  final Widget? leading;
+  final Widget? checkbox;
+  final Widget plain;
+  final CartItem item;
+  final double effectiveQty;
+  final String cartId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final canOverrideHarga =
+        ref.watch(canOverrideHargaProvider).valueOrNull ?? false;
+    final cats = canOverrideHarga
+        ? (ref
+                .watch(priceCategoriesForProductUnitProvider(
+                    item.productUnitId))
+                .valueOrNull ??
+            const [])
+        : const [];
+    if (cats.isEmpty) return plain;
+    final scheme = Theme.of(context).colorScheme;
+    return LayoutBuilder(builder: (context, c) {
+      final tp = TextPainter(
+        text: TextSpan(text: label, style: style),
+        maxLines: 1,
+        textDirection: ui.TextDirection.ltr,
+      )..layout();
+      // Sisihkan ruang leading + checkbox (perkiraan) dari batas 50%.
+      final reserved = (leading != null ? 19.0 : 0.0) +
+          (checkbox != null ? 34.0 : 0.0);
+      final maxName = max(60.0, c.maxWidth * 0.5 - reserved);
+      final nameW = min(tp.width + 2, maxName);
+      return Row(
+        children: [
+          if (leading != null)
+            IconTheme(
+                data: IconThemeData(color: scheme.onSurfaceVariant),
+                child: leading!),
+          SizedBox(
+            width: nameW,
+            child: MarqueeText(text: label, style: style),
+          ),
+          if (checkbox != null) ...[
+            const SizedBox(width: 2),
+            checkbox!,
+          ],
+          const SizedBox(width: 8),
+          Expanded(
+            child: _ItemPriceCategoryChips(
+              item: item,
+              effectiveQty: effectiveQty,
+              cartId: cartId,
+              inline: true,
+            ),
+          ),
+        ],
+      );
+    });
   }
 }
 
