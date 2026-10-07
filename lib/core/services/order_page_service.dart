@@ -3,6 +3,7 @@ import 'dart:convert';
 import '../database/app_database.dart';
 import 'catalog_access_service.dart';
 import 'catalog_display_service.dart';
+import 'catalog_sticker_service.dart';
 import 'price_service.dart';
 
 /// Generate halaman HTML self-contained (tanpa server, tanpa CDN) berisi
@@ -43,6 +44,8 @@ class OrderPageService {
     bool waDirect = true,
     CatalogDisplay? display,
     DateTime? now,
+    Map<StickerSlot, String>? stickers,
+    String? stickerPlayer,
   }) async {
     final catalog = await _buildCatalogJson(db);
     final disp = display ?? await CatalogDisplayService.load(db);
@@ -81,7 +84,25 @@ class OrderPageService {
       'products': catalog,
     });
 
-    final html = _htmlTemplate
+    // Stiker animasi: JSON Lottie per slot + pustaka pemutar. Pustaka HANYA
+    // disematkan bila ada minimal satu stiker; gagal muat = tanpa stiker.
+    final stk = stickers ?? await CatalogStickerService.loadForPublish(db);
+    String stickerBlocks = '';
+    if (stk.isNotEmpty) {
+      final player = stickerPlayer ?? await CatalogStickerService.loadPlayer();
+      if (player != null && player.isNotEmpty) {
+        final b = StringBuffer();
+        for (final e in stk.entries) {
+          // Konteks <script type=application/json>: escape "</" & "<!--".
+          final j = e.value.replaceAll('</', r'<\/').replaceAll('<!--', r'<\u0021--');
+          b.writeln('<script type="application/json" id="stk-${e.key.name}">$j</script>');
+        }
+        b.writeln('<script>$player</script>');
+        stickerBlocks = b.toString();
+      }
+    }
+
+    var html = _htmlTemplate
         // Konteks HTML biasa (di dalam <title>) — escape &/</> agar nama
         // toko yang mengandung karakter itu tidak merusak markup.
         .replaceAll('__STORE_NAME__', _escapeHtml(nameOrDefault))
@@ -95,6 +116,8 @@ class OrderPageService {
         .replaceAll(
             '__DATA_JSON__',
             dataJson.replaceAll('</', r'<\/').replaceAll('<!--', r'<\u0021--'));
+    // Terakhir: isi stiker/pustaka tidak boleh ikut ter-replace placeholder lain.
+    html = html.replaceFirstMapped('__STICKER_BLOCKS__', (_) => stickerBlocks);
     return (html: html, productCount: catalog.length);
   }
 
@@ -453,15 +476,6 @@ body{
 .mb-total.roll{justify-content:flex-end;}
 #app:not(.order-mode) .mb-total.roll{justify-content:flex-start;}
 .grand .gv.roll{justify-content:flex-end;}
-/* Toko tutup: banner merah menetap (padanan toast "closed" blueprint) di atas
-   daftar yang diabu-abukan; tautan kecil utk pelanggan langganan. */
-.closed-banner{display:none;margin:0 16px 8px;padding:10px 14px;border-radius:12px;
-  background:#e64d44;color:#fff;font-size:13.5px;font-weight:600;
-  flex-direction:column;gap:3px;}
-.closed-banner.show{display:flex;}
-.closed-banner button{align-self:flex-start;border:none;background:transparent;color:#fff;
-  font-family:var(--font);font-size:12.5px;font-weight:600;text-decoration:underline;
-  padding:2px 0;cursor:pointer;}
 .code-err{min-height:18px;margin:6px 0 10px;font-size:12.5px;color:var(--danger);}
 .btn-ok{background:var(--accent);color:#fff;}
 /* Item 79 M2 — toggle List/Tile, gaya sama persis .theme-btn (lingkaran
@@ -789,7 +803,8 @@ body{
   font-family:var(--font);display:grid;grid-template-columns:auto 1fr auto;
   align-items:center;column-gap:10px;min-height:56px;text-align:left;
   box-shadow:0 8px 22px rgba(0,0,0,.22);
-  transition:background-color .24s ease,transform .14s ease,padding .32s ease;}
+  transition:background-color .24s ease,transform .14s ease,padding .32s ease,
+             margin-left .32s cubic-bezier(.3,1.25,.45,1);}
 .mainbtn:active{transform:scale(.985);}
 /* Halaman awal: tombol dipecah (Lihat Pesanan ~3/4 + Kosongkan ~1/4 merah).
    Pindah ke halaman Pesanan: tombol Kosongkan MENYUSUT ke lebar 0 sambil
@@ -855,10 +870,17 @@ body{
              padding .32s ease,opacity .2s ease,visibility 0s linear .32s,
              background-color .24s ease,transform .14s ease;}
 #app .mainbtn.mainbtn-tg{padding-left:0;padding-right:0;}
-#app.order-mode .mainbtn.mainbtn-tg{flex:1 1 0px;margin-left:8px;opacity:1;visibility:visible;
+#app.order-mode .mainbtn.mainbtn-tg{flex:1 1 0px;margin-left:0;opacity:1;visibility:visible;
   pointer-events:auto;padding-left:8px;padding-right:8px;
   transition-delay:0s,0s,0s,0s,0s,0s,0s;}
 @media (hover:hover){ .mainbtn-tg:hover{background:#1d90c8;} }
+/* Urutan baris: Kosongkan | Telegram | WhatsApp — WhatsApp (hijau) SELALU di
+   kanan. Urutan visual lewat `order` (DOM tetap WA lalu TG); jarak antar dua
+   tombol di halaman Pesanan dipasang di tombol WhatsApp (margin-kiri). */
+#mbClear{order:0;}
+#mainBtnTg{order:1;}
+#mainBtn{order:2;}
+#app.order-mode.has-tg #mainBtn{margin-left:8px;}
 #mainBtnWrap.mb-confirm .mainbtn-tg{display:none;}
 /* Dua tombol (WhatsApp + Telegram) di halaman Pesanan: tiap tombol 2 baris —
    baris 1 logo + teks, baris 2 total (roll, rata tengah). */
@@ -1078,6 +1100,45 @@ textarea.tfield{resize:none;min-height:64px;}
   transition:opacity .22s ease,transform .22s cubic-bezier(.22,.61,.36,1);}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);pointer-events:auto;}
 .toast.err{background:#e64d44;color:#fff;}
+/* ── Stiker animasi (Lottie). Kotak dipesan ukurannya dulu supaya tata letak
+   tidak melompat saat animasi siap; tanpa stiker -> [hidden] (display:none). */
+.stk{width:128px;height:128px;margin:0 auto;}
+.stk[hidden]{display:none;}
+.stk svg{display:block;}
+.hero-block .stk{margin-bottom:8px;}
+.nf{text-align:center;color:var(--ink-3);padding:30px 20px 50px;font-size:15px;}
+.nf .stk{width:120px;height:120px;margin-bottom:6px;}
+.nf p{margin:0;overflow-wrap:anywhere;}
+.list.tile-mode .nf{grid-column:1/-1;}
+/* Halaman TOKO TUTUP: hanya stiker + judul + jam buka + pengumuman + tautan kode.
+   Pencarian, kategori, daftar, Pesan lagi & tombol pengumuman header disembunyikan. */
+.closed-page{display:none;text-align:center;padding:clamp(24px,9vh,80px) 24px 32px;}
+#app.shop-closed .closed-page{display:block;}
+#app.shop-closed .sticky-head,#app.shop-closed .hero-block,#app.shop-closed .landing-below,
+#app.shop-closed .extras-slot-b,#app.shop-closed #listWrap,#app.shop-closed #annBtn,
+#app.shop-closed #annPop,#app.shop-closed .layout-btn{display:none !important;}
+.closed-page .stk{width:160px;height:160px;margin-bottom:10px;}
+.closed-page h2{margin:0 0 6px;font-family:var(--serif);font-size:26px;font-weight:600;letter-spacing:-.2px;}
+.cp-when{margin:0;font-size:15px;color:var(--ink-2);font-weight:600;}
+.cp-ann{margin:18px auto 0;max-width:340px;padding:12px 14px;border-radius:14px;background:var(--card);
+  border:1px solid var(--line);font-size:13.5px;line-height:1.45;color:var(--ink-2);text-align:left;
+  white-space:pre-line;overflow-wrap:anywhere;}
+.cp-code{margin-top:22px;border:none;background:transparent;color:var(--ink-3);font-family:var(--font);
+  font-size:12.5px;font-weight:600;text-decoration:underline;padding:8px;cursor:pointer;}
+.st-dot.warn{background:#E8912D;box-shadow:0 0 0 4px rgba(232,145,45,.24);}
+/* Halaman PESANAN TERKIRIM: menutupi semuanya, muncul langsung saat Kirim ditekan. */
+.page-sent{display:none;align-items:center;justify-content:center;text-align:center;z-index:25;}
+#app.sent-mode .page-sent{display:flex;animation:sentIn .3s cubic-bezier(.22,.61,.36,1);}
+@keyframes sentIn{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:none;}}
+#app.sent-mode .mainbtn-wrap{visibility:hidden;pointer-events:none;}
+.sent-body{padding:0 28px;display:flex;flex-direction:column;align-items:center;}
+.sent-body .stk{width:180px;height:180px;margin-bottom:14px;}
+.sent-body h2{margin:0 0 26px;font-family:var(--serif);font-size:28px;font-weight:600;letter-spacing:-.3px;}
+.sent-btn{border:none;background:var(--accent);color:#fff;border-radius:var(--r-btn);padding:14px 26px;
+  font-family:var(--font);font-size:16px;font-weight:700;cursor:pointer;min-height:48px;
+  transition:transform .14s ease,background-color .24s ease;}
+.sent-btn:active{transform:scale(.97);}
+@media (prefers-reduced-motion:reduce){ #app.sent-mode .page-sent{animation:none;} }
 </style>
 </head>
 <body>
@@ -1101,17 +1162,21 @@ textarea.tfield{resize:none;min-height:64px;}
         <button class="theme-btn" id="themeBtn" type="button" aria-label="Ganti tampilan terang/gelap"></button>
       </div>
     </div>
-    <div class="closed-banner" id="closedBanner">
-      <span id="closedMsg"></span>
-      <button id="codeLink" type="button">Pelanggan langganan? Masukkan kode</button>
-    </div>
     <div class="ann-pop" id="annPop" role="dialog" aria-label="Pengumuman toko">
       <h4><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5L6 9H3a1 1 0 00-1 1v4a1 1 0 001 1h3l5 4V5z"/><path d="M15.5 8.5a5 5 0 010 7"/></svg>Pengumuman</h4>
       <p id="annText"></p>
       <div class="ann-prog" aria-hidden="true"><i id="annProg"></i></div>
     </div>
     <div class="menu-scroll" id="menuScroll">
+      <div class="closed-page" id="closedPage">
+        <div class="stk" data-stk="closed" hidden></div>
+        <h2>Toko sedang tutup</h2>
+        <p class="cp-when" id="cpWhen"></p>
+        <p class="cp-ann" id="cpAnn" hidden></p>
+        <button class="cp-code" id="codeLink" type="button">Pelanggan langganan? Masukkan kode</button>
+      </div>
       <div class="hero-block" id="heroBlock">
+        <div class="stk" data-stk="home" hidden></div>
         <h2>Mau pesan apa hari ini?</h2>
         <p>Ketik nama barang atau pilih kategori</p>
       </div>
@@ -1161,6 +1226,15 @@ textarea.tfield{resize:none;min-height:64px;}
       <div class="ofield"><label for="custPhone">No. HP</label><input id="custPhone" type="tel" placeholder="08xxxxxxxxxx" /></div>
       <div class="ofield"><label for="custNote">Catatan (opsional)</label><textarea id="custNote" rows="1" placeholder="mis. antar sore ya"></textarea></div>
       <button class="copy-link" id="copyBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>Salin teks pesanan</button>
+    </div>
+  </section>
+
+  <!-- Halaman pesanan terkirim: tampil seketika saat Kirim (WhatsApp/Telegram) ditekan. -->
+  <section class="page page-sent" id="pageSent" aria-live="polite">
+    <div class="sent-body">
+      <div class="stk" data-stk="sent" hidden></div>
+      <h2>Pesanan dikirim!</h2>
+      <button class="sent-btn" id="sentBack" type="button">Kembali ke halaman awal</button>
     </div>
   </section>
 
@@ -1284,7 +1358,7 @@ textarea.tfield{resize:none;min-height:64px;}
 
 <div class="toast" id="toast"></div>
 
-<script>
+__STICKER_BLOCKS__<script>
 var DATA = __DATA_JSON__;
 var cart = {}; // unitId -> qty
 var cartNotes = {}; // unitId -> catatan per-produk (Item 26a)
@@ -1817,14 +1891,15 @@ function shopMinutesNow(){
 // {closed, msg} menurut jadwal (tanpa memperhitungkan kode).
 function hoursState(){
   var h = DATA.hours;
-  if (!h) return {closed: false, msg: ''};
-  if (h.forced) return {closed: true, msg: 'Toko sedang tutup sementara'};
+  if (!h) return {closed: false, msg: '', when: ''};
+  if (h.forced) return {closed: true, msg: 'Toko sedang tutup sementara', when: 'Toko sedang tutup sementara'};
   if (!h.enabled) return {closed: false, msg: ''};
   var now = shopMinutesNow(), o = h.open, c = h.close;
   var isOpen = (o === c) ? true : (o < c ? (now >= o && now < c) : (now >= o || now < c));
   if (isOpen) return {closed: false, msg: ''};
   var today = (o < c) ? (now < o) : true; // jendela lewat tengah malam: buka lagi hari ini
-  return {closed: true, msg: 'Toko tutup · buka ' + (today ? 'hari ini ' : 'besok ') + fmtHHMM(o)};
+  return {closed: true, msg: 'Toko tutup · buka ' + (today ? 'hari ini ' : 'besok ') + fmtHHMM(o),
+          when: 'Buka lagi ' + (today ? 'hari ini' : 'besok') + ' pukul ' + fmtHHMM(o)};
 }
 function loadAccess(){
   accessGranted = false;
@@ -1846,9 +1921,13 @@ function applyOpenState(){
   if (key === _lastClosedKey) return;
   _lastClosedKey = key;
   app.classList.toggle('closed', closed || _emptyCatalog);
-  var banner = document.getElementById('closedBanner');
-  banner.classList.toggle('show', closed);
-  document.getElementById('closedMsg').textContent = st.msg;
+  // Toko tutup = halaman khusus (stiker + jam buka + pengumuman + tautan kode).
+  app.classList.toggle('shop-closed', closed);
+  document.getElementById('cpWhen').textContent = st.when || '';
+  var cpAnn = document.getElementById('cpAnn');
+  cpAnn.hidden = !(closed && ANN);
+  if (ANN) cpAnn.textContent = ANN;
+  if (closed) closeAnn();
   document.getElementById('codeLink').style.display =
       (DATA.access && DATA.access.hashes && DATA.access.hashes.length) ? '' : 'none';
   if (closed && sheetOpen) closeSheet(false);
@@ -2121,7 +2200,7 @@ function renderList(force){
   list.innerHTML = '';
   _renderedCount = target;
   if (_matches.length === 0) {
-    list.innerHTML = '<div class="empty">Produk "'+esc(q)+'" tidak ditemukan.</div>';
+    list.appendChild(notFoundNode(q));
   } else if (qChanged) {
     // Isi baru dari atas: bertahap (lihat fillRows).
     updateMoreBar(list);
@@ -2796,14 +2875,14 @@ function syncTbId(){
 }
 tbId.addEventListener('click', function(){ if (CATS_ON && curView === 'list') goLanding(); });
 
-function goLanding(){
+function goLanding(noAnim){
   if (!CATS_ON) return;
   selCat = null;
   setSelChips();
   qEl.value = '';
   clearTimeout(searchTimer);
   syncQueryUi();
-  applyState(computeState(), true);
+  applyState(computeState(), !noAnim);
 }
 
 // Riwayat browser: masuk mode daftar dari landing memakai satu entri
@@ -2970,12 +3049,88 @@ goBtn.addEventListener('click', function(){
   }
 });
 
+// ── Stiker animasi (Lottie). JSON per slot tersemat di <script type=
+// application/json id="stk-<slot>"> (hanya bila ada stiker; pustaka lottie ikut
+// tersemat hanya saat itu). Animasi baru dibuat saat kotaknya TERLIHAT (idle),
+// dijeda saat keluar layar / tab disembunyikan, dan jadi gambar diam bila
+// pengguna memilih mengurangi gerakan. Gagal di langkah mana pun = kotak
+// disembunyikan, halaman tetap normal.
+var STK_EL = [];
+function stkJson(slot){
+  if (!window.lottie) return null;
+  var key = '_' + slot;
+  if (stkJson[key] !== undefined) return stkJson[key];
+  var node = document.getElementById('stk-' + slot), v = null;
+  if (node) { try { v = JSON.parse(node.textContent); } catch (e) {} }
+  return (stkJson[key] = v);
+}
+var stkIO = null;
+function stkApply(el){
+  var a = el._anim;
+  if (!a) return;
+  try {
+    if (!motionOk()) a.goToAndStop(Math.floor(a.totalFrames / 2), true);
+    else if (el._vis && !document.hidden) a.play();
+    else a.pause();
+  } catch (e) {}
+}
+function stkCreate(el){
+  if (el._anim || el._dead) return;
+  try {
+    el._anim = lottie.loadAnimation({container: el, renderer: 'svg', loop: true, autoplay: false,
+      animationData: stkJson(el.getAttribute('data-stk')),
+      rendererSettings: {preserveAspectRatio: 'xMidYMid meet'}});
+  } catch (e) { el._dead = true; el.hidden = true; return; }
+  stkApply(el);
+}
+function stkSeen(el, vis){
+  el._vis = vis;
+  if (vis && !el._anim) {
+    var go = function(){ if (el._vis) stkCreate(el); };
+    if (window.requestIdleCallback) requestIdleCallback(go, {timeout: 400}); else setTimeout(go, 60);
+  } else stkApply(el);
+}
+function stkMount(el){
+  if (el._stk) return;
+  if (!stkJson(el.getAttribute('data-stk'))) { el.hidden = true; return; }
+  el._stk = true;
+  el.hidden = false;
+  STK_EL.push(el);
+  if ('IntersectionObserver' in window) {
+    if (!stkIO) stkIO = new IntersectionObserver(function(es){
+      es.forEach(function(e){ stkSeen(e.target, e.isIntersecting); });
+    });
+    stkIO.observe(el);
+  } else stkSeen(el, true);
+}
+document.addEventListener('visibilitychange', function(){ STK_EL.forEach(stkApply); });
+
+// Halaman "Produk tidak ditemukan": satu node dipakai ulang (animasinya tidak
+// dibuat ulang tiap ketikan); hanya teks yang berganti.
+var _nfEl = null, _nfP = null;
+function notFoundNode(q){
+  if (!_nfEl) {
+    _nfEl = document.createElement('div');
+    _nfEl.className = 'nf';
+    var st = document.createElement('div');
+    st.className = 'stk';
+    st.setAttribute('data-stk', 'notFound');
+    st.hidden = true;
+    _nfP = document.createElement('p');
+    _nfEl.appendChild(st);
+    _nfEl.appendChild(_nfP);
+    stkMount(st);
+  }
+  _nfP.textContent = q ? 'Produk "' + q + '" tidak ditemukan' : 'Belum ada produk di sini';
+  return _nfEl;
+}
+
 // ── Status header (buka/tutup + jam) ──────────────────────────────────
 function renderStatus(){
-  var el = byId('storeSub'), h = DATA.hours, st = hoursState(), text, closed = false;
+  var el = byId('storeSub'), h = DATA.hours, st = hoursState(), text, closed = false, warn = false;
   if (h && (h.forced || h.enabled)) {
     if (st.closed && !accessGranted) { closed = true; text = st.msg; }
-    else if (st.closed) text = 'Tutup · akses pelanggan aktif';
+    else if (st.closed) { warn = true; text = 'Pesan titipan · toko tutup'; }
     else text = (h.enabled && h.open !== h.close) ? 'Buka · sampai ' + fmtHHMM(h.close) : 'Buka';
   } else {
     text = null;
@@ -2984,12 +3139,12 @@ function renderStatus(){
   // (waktu tak terputus di tengah). Dengan jam buka: satu teks, boleh membungkus.
   var upd = null;
   if (text === null) { text = 'Katalog pesanan'; upd = DATA.generatedAt; }
-  var key = (closed ? '1' : '0') + text + '|' + (upd || '');
+  var key = (closed ? '1' : warn ? '2' : '0') + text + '|' + (upd || '');
   if (el._k === key) return;
   el._k = key;
   el.textContent = '';
   var dot = document.createElement('i');
-  dot.className = 'st-dot' + (closed ? ' closed' : '');
+  dot.className = 'st-dot' + (closed ? ' closed' : warn ? ' warn' : '');
   var sp = document.createElement('span');
   sp.className = 'st-txt';
   sp.appendChild(document.createTextNode(text));
@@ -3071,7 +3226,7 @@ function initAnn(){
   }, true);
   // Sekali per halaman dibuka — bukan tiap perubahan keadaan.
   setTimeout(function(){
-    if (annAutoShown || sheetOpen) return;
+    if (annAutoShown || sheetOpen || shopClosed) return;
     annAutoShown = true;
     openAnn(true);
   }, 450);
@@ -3321,6 +3476,7 @@ function closeSheet(fromPop){
 document.getElementById('backBtn').addEventListener('click', function(){ closeSheet(false); });
 window.addEventListener('popstate', function(){
   if (_popIgnore > 0) { _popIgnore--; return; }
+  if (sentOpen) { closeSent(true); return; }
   if (sheetOpen) { closeSheet(true); return; }
   // Kembali dari mode daftar (masuk lewat landing) -> kembali ke landing.
   if (_listPushed) { _listPushed = false; goLanding(); }
@@ -3429,6 +3585,7 @@ function submitOrder(channel){
                      : 'Gagal menyalin — salin manual dari halaman Pesanan');
     try { recordOrder(); } catch (e) {}
     window.open(DATA.telegramUrl, '_blank');
+    showSent();
     return;
   }
   var num = (DATA.waNumber || '').replace(/[^0-9]/g, '');
@@ -3440,7 +3597,35 @@ function submitOrder(channel){
   showToast('Teks pesanan disalin — tempel bila perlu');
   try { recordOrder(); } catch (e) {}
   window.open(url, '_blank');
+  showSent();
 }
+
+// Halaman "Pesanan dikirim!": tampil SEGERA setelah Kirim (WhatsApp/Telegram
+// dibuka di tab/aplikasi lain). Keranjang dikosongkan sesudah halaman tampil;
+// riwayat "Pesan lagi" sudah tersimpan (recordOrder) sebelum ini. Memakai entri
+// history milik halaman Pesanan, jadi tombol Kembali HP -> halaman awal.
+var sentOpen = false;
+function showSent(){
+  if (sentOpen) return;
+  sentOpen = true;
+  document.getElementById('app').classList.add('sent-mode');
+  var btn = document.getElementById('sentBack');
+  try { btn.focus({preventScroll: true}); } catch (e) {}
+  setTimeout(function(){ if (sentOpen) doClearCart(); }, 350);
+}
+function closeSent(fromPop){
+  if (!sentOpen) return;
+  sentOpen = false;
+  document.getElementById('app').classList.remove('sent-mode');
+  closeSheet(!!fromPop);
+  // Tanpa animasi: halaman menu sendiri sedang muncul kembali (transisi CSS);
+  // WAAPI di atas itu (flipY kolom cari) pernah membuat kolom cari tetap
+  // 'visibility:hidden' di Chromium.
+  if (CATS_ON) goLanding(true);
+  else { qEl.value = ''; clearTimeout(searchTimer); syncQueryUi(); renderList(true); }
+  menuScroll.scrollTop = 0;
+}
+document.getElementById('sentBack').addEventListener('click', function(){ closeSent(false); });
 
 // Blueprint §5 — satu tombol, dua aksi tergantung mode: dari daftar produk
 // membuka ringkasan, dari ringkasan mengirim pesanan (WhatsApp).
@@ -3471,6 +3656,7 @@ if (!DATA.products || DATA.products.length === 0) {
   document.getElementById('app').classList.add('closed');
 }
 
+Array.prototype.forEach.call(document.querySelectorAll('.stk'), stkMount);
 loadCart();
 loadAccess();
 buildChips();

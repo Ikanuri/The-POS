@@ -388,6 +388,12 @@ class AppDatabase extends _$AppDatabase {
     'katalog_announce_enabled',
     'katalog_announce_text',
     'katalog_reorder_enabled',
+    // Stiker animasi katalog HTML (.tgs unggahan owner, base64) — daftar yang
+    // sama dgn `CatalogStickerService.allKeys`.
+    'katalog_sticker_home',
+    'katalog_sticker_notfound',
+    'katalog_sticker_closed',
+    'katalog_sticker_sent',
     // Kuota antrian pre-order per produk — ditetapkan owner, dibaca kasir
     // saat memutuskan siapa yang diprioritaskan di dashboard Laci Meja.
     // BEDA dari `saved_catalogs` (scratchpad pribadi per device, sengaja

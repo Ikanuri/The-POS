@@ -8,6 +8,17 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 7 Oktober 2026 (Katalog Pesanan: Stiker Animasi, Halaman Toko Tutup & Pesanan Terkirim)
+
+> **Perlu Publish ulang katalog** agar perubahan di bawah muncul di HP pelanggan.
+
+- **Stiker animasi di katalog.** Halaman awal kini disambut stiker bergerak di atas "Mau pesan apa hari ini?". Pencarian yang tidak ketemu menampilkan stiker dan tulisan `Produk "xxx" tidak ditemukan`. Stiker bisa diganti dengan stiker sendiri (berkas .tgs) di Katalog Pesanan > "Stiker animasi", atau dikembalikan ke bawaan. Bila gerakan dimatikan di HP pelanggan, stiker tampil diam.
+- **Halaman "Toko sedang tutup" yang baru.** Saat toko tutup, pelanggan hanya melihat stiker, jam buka berikutnya ("Buka lagi hari ini pukul 08.00"), pengumuman toko, dan tautan kecil "Pelanggan langganan? Masukkan kode". Pelanggan langganan yang memasukkan kode kembali ke halaman awal biasa, dengan keterangan oranye "Pesan titipan - toko tutup" di bagian atas.
+- **Halaman "Pesanan dikirim!"** muncul seketika setelah pelanggan menekan kirim (WhatsApp atau Telegram), dengan satu tombol "Kembali ke halaman awal". Keranjang dikosongkan setelahnya, pesanan tetap tersimpan di "Pesan lagi", dan tombol Kembali di HP juga membawa ke halaman awal.
+- **Tombol WhatsApp (hijau) kini selalu di kanan**, Telegram di sebelah kirinya.
+
+---
+
 ## 7 Oktober 2026 (Logo Katalog)
 
 - **Logo di header katalog kini persik The POS** (garis putih di kotak oranye), bukan lagi huruf awal nama toko. Perlu Publish ulang katalog.

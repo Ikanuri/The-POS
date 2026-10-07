@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
@@ -9,6 +10,7 @@ import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/services/catalog_access_service.dart';
 import '../../core/services/catalog_display_service.dart';
+import '../../core/services/catalog_sticker_service.dart';
 import '../../core/services/cloudflare_publish_service.dart';
 import '../../core/services/order_page_service.dart';
 
@@ -49,6 +51,16 @@ final _waDirectProvider = FutureProvider<bool>((ref) async {
 final _displayProvider = FutureProvider<CatalogDisplay>((ref) async {
   final db = ref.watch(databaseProvider);
   return CatalogDisplayService.load(db);
+});
+
+/// Slot stiker mana yang memakai unggahan sendiri (bukan bawaan).
+final _stickerCustomProvider =
+    FutureProvider<Map<StickerSlot, bool>>((ref) async {
+  final db = ref.watch(databaseProvider);
+  return {
+    for (final s in StickerSlot.values)
+      s: await CatalogStickerService.isCustom(db, s),
+  };
 });
 
 const _idMonthsShort = [
@@ -405,6 +417,78 @@ class _OrderShareScreenState extends ConsumerState<OrderShareScreen> {
     );
   }
 
+  Future<void> _pickSticker(StickerSlot slot) async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.any,
+      withData: true,
+    );
+    if (result == null || result.files.single.bytes == null) return;
+    final v = CatalogStickerService.validateTgs(result.files.single.bytes!);
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    if (v.json == null) {
+      messenger.showSnackBar(SnackBar(
+          content: Text(v.error ?? 'Stiker tidak valid'),
+          backgroundColor: Theme.of(context).colorScheme.error));
+      return;
+    }
+    await CatalogStickerService.setCustom(
+        ref.read(databaseProvider), slot, result.files.single.bytes!);
+    ref.invalidate(_stickerCustomProvider);
+    messenger.showSnackBar(SnackBar(
+        content: Text('Stiker "${slot.label}" diganti - berlaku setelah '
+            'Publish/bagikan ulang')));
+  }
+
+  Future<void> _resetSticker(StickerSlot slot) async {
+    await CatalogStickerService.resetToDefault(
+        ref.read(databaseProvider), slot);
+    ref.invalidate(_stickerCustomProvider);
+  }
+
+  /// Empat stiker animasi katalog (.tgs): bawaan aplikasi, bisa diganti.
+  Widget _buildStickersCard() {
+    final custom = ref.watch(_stickerCustomProvider).valueOrNull ?? const {};
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      children: [
+        for (final slot in StickerSlot.values)
+          ListTile(
+            key: ValueKey('sticker-${slot.name}'),
+            leading: const Icon(Icons.emoji_emotions_outlined),
+            title: Text(slot.label),
+            subtitle: Text(custom[slot] == true ? 'Unggahan sendiri' : 'Bawaan'),
+            trailing: Wrap(
+              spacing: 4,
+              children: [
+                if (custom[slot] == true)
+                  TextButton(
+                    key: ValueKey('sticker-reset-${slot.name}'),
+                    onPressed: () => _resetSticker(slot),
+                    child: const Text('Bawaan'),
+                  ),
+                TextButton(
+                  key: ValueKey('sticker-pick-${slot.name}'),
+                  onPressed: () => _pickSticker(slot),
+                  child: const Text('Ganti'),
+                ),
+              ],
+            ),
+          ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+                'Ganti dengan berkas stiker animasi .tgs (format stiker '
+                'Telegram, maks 64 KB). Berkas tidak valid ditolak.',
+                style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+          ),
+        ),
+      ],
+    );
+  }
+
   /// Bagian "tampilan katalog": kategori, saran terlaris, pengumuman toko &
   /// Pesan lagi — mengikuti mockup (satu kartu per bagian).
   List<Widget> _buildDisplaySections() {
@@ -444,6 +528,8 @@ class _OrderShareScreenState extends ConsumerState<OrderShareScreen> {
               (db) => CatalogDisplayService.setReorderEnabled(db, v)),
         ),
       ),
+      _sectionLabel('Stiker animasi'),
+      Card(child: _buildStickersCard()),
       Padding(
         padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
         child: Text(

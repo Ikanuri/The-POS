@@ -7,6 +7,14 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-10-07 (katalog: stiker animasi, halaman toko tutup & pesanan terkirim)
+
+- feat(katalog-html): stiker animasi Lottie (.tgs) di 4 tempat - halaman awal, produk tidak ditemukan (teks saja + stiker), toko tutup, pesanan dikirim; 4 stiker bawaan di assets/stickers + unggahan owner (validasi gzip/JSON/tanpa expression, 64 KB/200 KB) via kartu "Stiker animasi" di Katalog Pesanan; pustaka lottie_light tersemat HANYA bila ada stiker; key katalog_sticker_* ikut sync
+- feat(katalog-html): halaman Toko tutup baru (stiker, "Buka lagi hari ini/besok pukul HH.MM", pengumuman sbg teks, tautan kode; banner merah & tombol pengumuman header dihapus); header jalur kode = titik oranye "Pesan titipan - toko tutup"
+- feat(katalog-html): halaman "Pesanan dikirim!" setelah Kirim WhatsApp/Telegram (keranjang dikosongkan sesudah tampil, riwayat Pesan lagi tetap, tombol Kembali HP -> halaman awal); fix kolom cari tersangkut visibility:hidden (goLanding tanpa animasi saat keluar dari halaman terkirim)
+- feat(katalog-html): urutan tombol kirim Kosongkan | Telegram | WhatsApp (hijau selalu paling kanan, lewat CSS order + margin-kiri pada WhatsApp)
+- test: catalog_sticker_test (validasi, bawaan vs unggahan, penyematan, kerangka halaman, kartu pengaturan); bump 2.91.0+187
+
 ## 2026-10-07 (logo header katalog)
 
 - feat(katalog-html): logo header diganti persik The POS (garis putih di kotak aksen), menggantikan huruf awal toko; bump 2.90.0+186

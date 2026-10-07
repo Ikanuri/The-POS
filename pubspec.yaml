@@ -1,7 +1,7 @@
 name: the_pos
 description: "The POS — Aplikasi kasir offline-first untuk toko grosir."
 publish_to: 'none'
-version: 2.90.0+186
+version: 2.91.0+187
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
@@ -91,3 +91,4 @@ flutter:
     - assets/icon/
     - assets/icons/
     - assets/qris/
+    - assets/stickers/
