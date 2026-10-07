@@ -432,14 +432,23 @@ body{
   font-family:var(--serif);font-weight:700;font-size:20px;display:flex;align-items:center;
   justify-content:center;flex-shrink:0;box-shadow:0 4px 12px rgba(201,100,66,.35);}
 .tb-txt{min-width:0;display:block;}
-.menu-top .tb-store{display:block;font-size:22px;line-height:1.12;letter-spacing:-.3px;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.tb-status{display:flex;align-items:center;gap:6px;margin-top:3px;font-size:12px;color:var(--ink-2);
-  white-space:nowrap;overflow:hidden;}
-.tb-status span{overflow:hidden;text-overflow:ellipsis;}
-.st-dot{width:7px;height:7px;border-radius:50%;background:var(--ok);flex-shrink:0;
-  box-shadow:0 0 0 3px rgba(79,123,94,.18);}
-.st-dot.closed{background:var(--danger);box-shadow:0 0 0 3px rgba(192,58,58,.16);}
+/* Nama toko boleh membungkus maks. 2 baris (bukan satu baris + "..."),
+   status di bawahnya juga boleh membungkus: semua info header terbaca utuh
+   di 320/360 walau tiga tombol ikon memakan ~130px. */
+.menu-top .tb-store{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;
+  line-clamp:2;font-size:22px;line-height:1.12;letter-spacing:-.3px;
+  white-space:normal;overflow:hidden;overflow-wrap:anywhere;}
+.tb-status{display:flex;align-items:flex-start;gap:8px;margin-top:4px;font-size:12px;
+  line-height:1.3;color:var(--ink-2);white-space:normal;}
+.tb-status .st-txt{min-width:0;overflow-wrap:anywhere;}
+.tb-status .st-upd{display:block;}
+.tb-status .nb{white-space:nowrap;}
+/* Titik status: inti 10px + halo 4px. TIDAK boleh ada overflow:hidden di
+   induknya (halo dulu terpotong di kiri); margin kiri/atas memberi ruang
+   halo di dalam kotak teks, sejajar dgn baris pertama teks. */
+.st-dot{width:10px;height:10px;border-radius:50%;background:var(--ok);flex-shrink:0;
+  margin:4px 0 0 4px;box-shadow:0 0 0 4px rgba(79,123,94,.22);}
+.st-dot.closed{background:var(--danger);box-shadow:0 0 0 4px rgba(192,58,58,.2);}
 .menu-top .topbar-btns{gap:6px;}
 .menu-top .theme-btn,.menu-top .layout-btn,.menu-top .ann-btn{width:40px;height:40px;
   background:var(--card);box-shadow:0 2px 8px rgba(0,0,0,.06);}
@@ -515,8 +524,7 @@ body{
   display:flex;align-items:center;gap:12px;text-align:left;box-shadow:0 2px 10px rgba(0,0,0,.05);}
 .again-t{flex:1;min-width:0;}
 .again .t{font-weight:700;font-size:14px;}
-.again .s{font-size:12px;color:var(--ink-2);margin-top:2px;line-height:1.35;display:-webkit-box;
-  -webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.again .s{font-size:12px;color:var(--ink-2);margin-top:2px;line-height:1.35;overflow-wrap:anywhere;}
 .btn{flex-shrink:0;min-height:40px;border:none;border-radius:999px;padding:0 16px;background:var(--accent);
   color:#fff;font-family:var(--font);font-weight:700;font-size:13px;white-space:nowrap;cursor:pointer;}
 .btn.o{background:transparent;color:var(--accent);border:1.5px solid var(--accent);}
@@ -572,13 +580,18 @@ body{
   display:flex;align-items:center;gap:10px;}
 .hist-it .hi-t{flex:1;min-width:0;}
 .hist-it .t{font-weight:700;font-size:13.5px;}
-.hist-it .s{font-size:12px;color:var(--ink-2);margin-top:2px;line-height:1.35;display:-webkit-box;
-  -webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.hist-it .s{font-size:12px;color:var(--ink-2);margin-top:2px;line-height:1.35;overflow-wrap:anywhere;}
 .hist-msg{margin:0 16px 16px;padding:9px 12px;border-radius:12px;background:var(--accsoft);color:var(--accent);
   font-size:12.5px;font-weight:600;text-align:left;}
 .hist-msg:empty{display:none;}
 @media (prefers-reduced-motion: reduce){
   .tb-id,.blobs,.sticky-head::before,.ph span,.ann-pop,.ann-pop.show{transition:none;}
+}
+/* Tombol tampilan daftar/kotak hanya berfungsi di mode daftar — di halaman
+   awal (landing) tidak ada daftar yang bisa diubah, jadi disembunyikan. */
+#pageMenu[data-view="landing"] #layoutBtn{display:none;}
+@media (max-width:380px){
+  .tb-id{gap:8px;}
 }
 @media (max-width:340px){
   .menu-top{padding-left:12px;padding-right:12px;}
@@ -745,7 +758,9 @@ body{
 .mainbtn>*{transition:opacity .2s ease;}
 .mainbtn.swapping>*{opacity:0;transition:none;}
 .mb-clear.swapping>*{opacity:0;transition:none;}
-@media (max-width:340px){ .mb-clear{width:30%;font-size:9px;padding:0 5px;} }
+@media (max-width:340px){ .mb-clear{width:30%;font-size:9px;padding:0 5px;}
+  /* "Kirim via WhatsApp" dulu terpotong "..." di 320px */
+  #app.order-mode .mb-label{font-size:13px;} }
 .mainbtn.wa{background:#25D366;}
 .mainbtn:disabled{opacity:.6;cursor:default;}
 .mb-badge{min-width:26px;height:26px;padding:0 8px;border-radius:999px;
@@ -2783,16 +2798,31 @@ function renderStatus(){
     else if (st.closed) text = 'Tutup · akses pelanggan aktif';
     else text = (h.enabled && h.open !== h.close) ? 'Buka · sampai ' + fmtHHMM(h.close) : 'Buka';
   } else {
-    text = 'Katalog pesanan · diperbarui ' + DATA.generatedAt;
+    text = null;
   }
-  var key = (closed ? '1' : '0') + text;
+  // Tanpa jam buka: baris 1 = "Katalog pesanan", baris 2 = "Diperbarui <waktu>"
+  // (waktu tak terputus di tengah). Dengan jam buka: satu teks, boleh membungkus.
+  var upd = null;
+  if (text === null) { text = 'Katalog pesanan'; upd = DATA.generatedAt; }
+  var key = (closed ? '1' : '0') + text + '|' + (upd || '');
   if (el._k === key) return;
   el._k = key;
   el.textContent = '';
   var dot = document.createElement('i');
   dot.className = 'st-dot' + (closed ? ' closed' : '');
   var sp = document.createElement('span');
-  sp.textContent = text;
+  sp.className = 'st-txt';
+  sp.appendChild(document.createTextNode(text));
+  if (upd) {
+    var u = document.createElement('span');
+    u.className = 'st-upd';
+    u.appendChild(document.createTextNode('Diperbarui '));
+    var nb = document.createElement('span');
+    nb.className = 'nb';
+    nb.textContent = upd;
+    u.appendChild(nb);
+    sp.appendChild(u);
+  }
   el.appendChild(dot);
   el.appendChild(sp);
 }
