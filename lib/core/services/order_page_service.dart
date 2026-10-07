@@ -501,20 +501,25 @@ body{
 .menu-top{position:relative;z-index:5;flex-shrink:0;display:flex;align-items:center;
   justify-content:space-between;gap:8px;padding:12px 16px 6px;}
 .tb-id{display:flex;align-items:center;gap:10px;min-width:0;flex:1;border:none;background:none;
-  padding:4px 0;margin:-4px 0;text-align:left;color:inherit;font-family:inherit;cursor:default;
-  transform-origin:left center;transition:transform .28s var(--ease);}
+  padding:4px 0;margin:-4px 0;text-align:left;color:inherit;font-family:inherit;cursor:default;}
 .tb-id.clickable{cursor:pointer;}
-#pageMenu[data-view="list"] .tb-id{transform:scale(.84);}
+/* Mode daftar: header mengecil (logo 42->35px, nama 22->18.5px, setara scale .84
+   dulu) lewat ukuran sebenarnya, BUKAN transform: scale() menyisakan lebar
+   tata letak penuh sehingga nama toko membungkus lebih banyak & keterangan
+   status mengecil di bawah 11.5px. */
+#pageMenu[data-view="list"] .tb-logo{width:35px;height:35px;border-radius:12px;font-size:17px;}
+#pageMenu[data-view="list"] .menu-top .tb-store{font-size:18.5px;}
 .tb-logo{width:42px;height:42px;border-radius:14px;background:var(--accent);color:#fff;
   font-family:var(--serif);font-weight:700;font-size:20px;display:flex;align-items:center;
-  justify-content:center;flex-shrink:0;box-shadow:0 4px 12px rgba(201,100,66,.35);}
+  justify-content:center;flex-shrink:0;box-shadow:0 4px 12px rgba(201,100,66,.35);
+  transition:width .28s var(--ease),height .28s var(--ease),font-size .28s var(--ease),border-radius .28s var(--ease);}
 .tb-txt{min-width:0;display:block;}
 /* Nama toko boleh membungkus maks. 2 baris (bukan satu baris + "..."),
    status di bawahnya juga boleh membungkus: semua info header terbaca utuh
    di 320/360 walau tiga tombol ikon memakan ~130px. */
 .menu-top .tb-store{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;
   line-clamp:2;font-size:22px;line-height:1.12;letter-spacing:-.3px;
-  white-space:normal;overflow:hidden;overflow-wrap:anywhere;}
+  white-space:normal;overflow:hidden;overflow-wrap:anywhere;transition:font-size .28s var(--ease);}
 .tb-status{display:flex;align-items:flex-start;gap:8px;margin-top:4px;font-size:12px;
   line-height:1.3;color:var(--ink-2);white-space:normal;}
 .tb-status .st-txt{min-width:0;overflow-wrap:anywhere;}
@@ -662,7 +667,7 @@ body{
   font-size:12.5px;font-weight:600;text-align:left;}
 .hist-msg:empty{display:none;}
 @media (prefers-reduced-motion: reduce){
-  .tb-id,.blobs,.sticky-head::before,.ph span,.ann-pop,.ann-pop.show{transition:none;}
+  .tb-logo,.menu-top .tb-store,.blobs,.sticky-head::before,.ph span,.ann-pop,.ann-pop.show{transition:none;}
 }
 /* Tombol tampilan daftar/kotak hanya berfungsi di mode daftar — di halaman
    awal (landing) tidak ada daftar yang bisa diubah, jadi disembunyikan. */

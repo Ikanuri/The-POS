@@ -23,7 +23,7 @@ void main() {
   }
 
   test('nama toko membungkus maks 2 baris, status tidak di-ellipsis', () {
-    final store = css('.menu-top .tb-store{');
+    final store = css('\n.menu-top .tb-store{');
     expect(store, contains('-webkit-line-clamp:2'));
     expect(store, contains('white-space:normal'));
     final status = css('.tb-status{');
@@ -53,6 +53,18 @@ void main() {
     expect(dot, contains('0 0 0 4px'));
     expect(dot, contains('margin:4px 0 0 4px'));
     expect(css('.st-dot.closed{'), contains('0 0 0 4px'));
+  });
+
+  test('mode daftar: header mengecil lewat ukuran nyata, bukan transform scale',
+      () {
+    expect(html, isNot(contains('.tb-id{transform:scale')));
+    expect(html, isNot(contains('[data-view="list"] .tb-id{transform')));
+    expect(html,
+        contains('#pageMenu[data-view="list"] .tb-logo{width:35px;height:35px;'));
+    expect(
+        html,
+        contains(
+            '#pageMenu[data-view="list"] .menu-top .tb-store{font-size:18.5px;}'));
   });
 
   test('ringkasan Pesan lagi tidak dipotong (tanpa line-clamp)', () {

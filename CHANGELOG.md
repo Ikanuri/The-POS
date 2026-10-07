@@ -9,6 +9,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-10-07 (katalog: tombol kirim WhatsApp + Telegram, perbaikan header & roll angka)
 
+- fix(katalog-html): header mode daftar mengecil lewat ukuran nyata (bukan transform scale) - nama toko tidak lagi terpotong 3 baris & keterangan status tetap 12px di 320px
 - feat(pengaturan): katalog meneruskan kolom Telegram Informasi Toko + teks bantu tombol Kirim ke Telegram
 - feat(katalog-html): tombol kirim dipecah WhatsApp + Telegram bila kolom Telegram toko diisi - 2 tombol 50/50 berbaris 2 (logo+teks / total roll), salin teks lalu buka t.me; normalisasi tautan Telegram
 - fix(katalog-html): header tidak lagi memotong info - nama toko 2 baris, 'Diperbarui <waktu>' utuh, titik status 10px tak terpotong, tombol tampilan disembunyikan di halaman awal, ringkasan Pesan lagi & label kirim 320px utuh
