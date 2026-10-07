@@ -347,6 +347,12 @@ body{
 .oos-badge{background:var(--warn);color:#fff;border-radius:999px;
   padding:8px 13px;font-size:13px;font-weight:700;flex-shrink:0;}
 .empty{text-align:center;color:var(--ink-3);padding:50px 20px;font-size:15px;}
+.more-bar{padding:6px 0 4px;text-align:center;}
+.more-info{font-size:13.5px;line-height:1.45;color:var(--ink-2);margin:4px 4px 10px;}
+.more-btn{display:block;width:100%;min-height:48px;padding:10px 16px;box-sizing:border-box;
+  border:1px solid var(--line);background:var(--card);color:var(--accent);border-radius:999px;
+  font-family:var(--font);font-size:15px;font-weight:700;cursor:pointer;}
+.more-btn:active{background:var(--field);}
 /* Blueprint §4 — "expanded pill" yang MEMECAH. Satu pill lebar bertuliskan
    "Tambah" (84px) menyusut jadi lingkaran angka (40px) begitu qty >= 1,
    sementara tombol minus merah tumbuh keluar dari width 0 + scale(.7).
@@ -417,7 +423,7 @@ body{
 .list.tile-mode .prow-meta{font-size:12.5px;}
 .list.tile-mode .prow-controls{width:100%;justify-content:flex-end;}
 .list.tile-mode .oos-badge{align-self:flex-start;}
-.list.tile-mode .empty{grid-column:1/-1;}
+.list.tile-mode .empty,.list.tile-mode .more-bar{grid-column:1/-1;}
 /* Blueprint §5 — pengganti Telegram MainButton. Katalog ini dibuka di
    browser biasa (bukan Mini App), jadi tombol native Telegram TIDAK ada
    dan harus disediakan sendiri: satu tombol mengambang, sembunyi total
@@ -1288,7 +1294,7 @@ function setQty(unitId, qty){
   // aman di-skip. Fallback ke renderList() penuh kalau produk somehow
   // tidak ketemu (mis. unitId dari sumber tak terduga).
   var p = findProductForUnit(unitId);
-  if (p) refreshProwControls(p); else renderList();
+  if (p) refreshProwControls(p); else renderList(true);
   renderCartBar();
   if (sheetOpen) renderCartSheet();
   saveCart();
@@ -1369,7 +1375,7 @@ function applyOpenState(){
   document.getElementById('codeLink').style.display =
       (DATA.access && DATA.access.hashes && DATA.access.hashes.length) ? '' : 'none';
   if (closed && sheetOpen) closeSheet(false);
-  renderList();
+  renderList(true); // shopClosed berubah — harga/meta baris ikut berubah
   renderCartBar();
 }
 
@@ -1431,60 +1437,144 @@ document.getElementById('codeOverlay').addEventListener('click', function(e){
   if (e.target === this) closeCodeDialog();
 });
 
-function renderList(){
+// Daftar dibatasi PAGE_SIZE baris per tampilan: membangun ribuan baris DOM
+// tiap ketikan terukur 2-10 dtk di HP low-end (2000 produk ~22.000 node).
+// Pelanggan mencari dengan mengetik, hampir tak pernah menggulir semuanya.
+// Pencocokan query TETAP memeriksa SELURUH produk — hanya yang dirender
+// yang dibatasi. JANGAN ganti dgn content-visibility (terukur memperburuk
+// scroll) atau infinite scroll.
+var PAGE_SIZE = 60;
+var shownLimit = PAGE_SIZE;   // baris maks yang dirender utk query aktif
+var _lastQ = null;            // query (trim+lowercase) render terakhir
+var _matches = [];            // produk yang cocok utk _lastQ (semua, bukan hanya yang tampil)
+var _renderedCount = 0;       // berapa dari _matches yang sudah ada di DOM
+var _moreBar = null;          // elemen keterangan + tombol "Tampilkan lagi"
+
+// Indeks pencarian — dihitung SEKALI saat halaman dibuka (nama produk +
+// nama tiap varian, huruf kecil). Aturan cocok sama persis dgn dulu: nama
+// produk cocok ATAU ada varian yang cocok (baris induk tetap tampil).
+var SEARCH_INDEX = DATA.products.map(function(p){
+  return {
+    n: String(p.name).toLowerCase(),
+    v: (p.variants || []).map(function(v){ return String(v.name).toLowerCase(); })
+  };
+});
+function matchesQuery(i, q){
+  var ix = SEARCH_INDEX[i];
+  if (ix.n.indexOf(q) >= 0) return true;
+  for (var k = 0; k < ix.v.length; k++) { if (ix.v[k].indexOf(q) >= 0) return true; }
+  return false;
+}
+function fmtCount(n){ return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); }
+
+function buildProductRow(p){
+  var row = document.createElement('div');
+  row.className = 'prow';
+  row.dataset.pid = p.id;
+  var main = document.createElement('div');
+  main.className = 'prow-main';
+
+  var metaHtml = shopClosed ? '—' : (totalOptionsFor(p) > 1
+    ? totalOptionsFor(p) + ' pilihan · mulai ' + rp(minPriceForProduct(p))
+    : rp(p.price) + ' /' + esc(p.unit));
+  main.innerHTML =
+    '<div class="prow-icon" aria-hidden="true">'+pickIcon(p.name, p.category)+'</div>' +
+    '<div class="prow-info"><div class="prow-name">'+esc(p.name)+'</div>' +
+      '<div class="prow-meta">'+metaHtml+'</div></div>';
+
+  if (p.outOfStock) {
+    // Item 25a — tanda stok habis manual: badge menggantikan tombol
+    // tambah, tidak bisa dipesan lewat katalog HTML statis ini.
+    main.insertAdjacentHTML('beforeend', '<span class="oos-badge">Stok Habis</span>');
+  } else {
+    // Kontrol +/− meniru _AddControl di app kasir (lingkaran "+" oranye,
+    // berubah jadi angka hijau + minus merah begitu ada qty). Tap SISA
+    // badan baris (bukan tombol) buka modal pilih satuan/catatan — sama
+    // seperti tap badan kartu produk di app kasir.
+    main.appendChild(buildProwControls(p));
+    main.addEventListener('click', function(e){
+      if (e.target.closest('.prow-controls')) return;
+      openItemModal(p);
+    });
+  }
+  row.appendChild(main);
+  return row;
+}
+
+// Keterangan "Menampilkan X dari N" + tombol "Tampilkan lagi" di ujung
+// daftar. Elemennya dipakai ulang (fokus tombol tidak hilang saat ditekan).
+function updateMoreBar(list){
+  var total = _matches.length;
+  if (total <= _renderedCount) {
+    if (_moreBar && _moreBar.parentNode) _moreBar.parentNode.removeChild(_moreBar);
+    return;
+  }
+  if (!_moreBar) {
+    _moreBar = document.createElement('div');
+    _moreBar.className = 'more-bar';
+    _moreBar.innerHTML = '<div class="more-info" id="moreInfo"></div>' +
+      '<button type="button" class="more-btn" id="moreBtn"></button>';
+    _moreBar.querySelector('#moreBtn').addEventListener('click', function(){
+      shownLimit += PAGE_SIZE;
+      renderList();
+    });
+  }
+  var remaining = total - _renderedCount;
+  var step = Math.min(PAGE_SIZE, remaining);
+  var info = 'Menampilkan ' + fmtCount(_renderedCount) + ' dari ' + fmtCount(total) + ' produk';
+  if (!_lastQ) info += ' — ketik nama barang untuk mencari';
+  _moreBar.querySelector('#moreInfo').textContent = info;
+  _moreBar.querySelector('#moreBtn').textContent = 'Tampilkan ' + fmtCount(step) + ' lagi' +
+    (remaining > PAGE_SIZE ? ' (sisa ' + fmtCount(remaining) + ')' : '');
+  list.appendChild(_moreBar); // pindah ke baris paling akhir
+}
+
+// force=true: bangun ulang baris yang sedang tampil walau query/limit tak
+// berubah (perlu saat qty/keranjang berubah dari tempat lain, atau
+// shopClosed berganti). Query berubah otomatis mereset limit + gulir ke atas.
+function renderList(force){
   var q = document.getElementById('q').value.trim().toLowerCase();
   var list = document.getElementById('list');
-  var frag = document.createDocumentFragment();
-  var shown = 0;
-  DATA.products.forEach(function(p){
-    var variants = p.variants || [];
-    var nameMatch = !q || p.name.toLowerCase().indexOf(q) >= 0;
-    var matchedVariants = variants.filter(function(v){
-      return !q || v.name.toLowerCase().indexOf(q) >= 0;
-    });
-    if (q && !nameMatch && matchedVariants.length === 0) return;
-    shown++;
+  var qChanged = (q !== _lastQ);
+  if (!force && !qChanged && shownLimit === _renderedCount) return;
+  if (!force && !qChanged && _renderedCount >= _matches.length) return;
 
-    var row = document.createElement('div');
-    row.className = 'prow';
-    row.dataset.pid = p.id;
-    var main = document.createElement('div');
-    main.className = 'prow-main';
-
-    var metaHtml = shopClosed ? '—' : (totalOptionsFor(p) > 1
-      ? totalOptionsFor(p) + ' pilihan · mulai ' + rp(minPriceForProduct(p))
-      : rp(p.price) + ' /' + esc(p.unit));
-    main.innerHTML =
-      '<div class="prow-icon" aria-hidden="true">'+pickIcon(p.name, p.category)+'</div>' +
-      '<div class="prow-info"><div class="prow-name">'+esc(p.name)+'</div>' +
-        '<div class="prow-meta">'+metaHtml+'</div></div>';
-
-    if (p.outOfStock) {
-      // Item 25a — tanda stok habis manual: badge menggantikan tombol
-      // tambah, tidak bisa dipesan lewat katalog HTML statis ini.
-      main.insertAdjacentHTML('beforeend', '<span class="oos-badge">Stok Habis</span>');
-    } else {
-      // Kontrol +/− meniru _AddControl di app kasir (lingkaran "+" oranye,
-      // berubah jadi angka hijau + minus merah begitu ada qty). Tap SISA
-      // badan baris (bukan tombol) buka modal pilih satuan/catatan — sama
-      // seperti tap badan kartu produk di app kasir.
-      main.appendChild(buildProwControls(p));
-      main.addEventListener('click', function(e){
-        if (e.target.closest('.prow-controls')) return;
-        openItemModal(p);
-      });
+  if (qChanged) {
+    shownLimit = PAGE_SIZE;
+    _matches = [];
+    for (var i = 0; i < DATA.products.length; i++) {
+      if (!q || matchesQuery(i, q)) _matches.push(DATA.products[i]);
     }
-    row.appendChild(main);
-    frag.appendChild(row);
-  });
+    _lastQ = q;
+  }
+  var target = Math.min(shownLimit, _matches.length);
+
+  // Tambah baris saja (tombol "Tampilkan lagi") — tanpa bongkar ulang.
+  if (!force && !qChanged && _renderedCount > 0 && target > _renderedCount) {
+    var fragA = document.createDocumentFragment();
+    for (var a = _renderedCount; a < target; a++) fragA.appendChild(buildProductRow(_matches[a]));
+    if (_moreBar && _moreBar.parentNode) _moreBar.parentNode.removeChild(_moreBar);
+    list.appendChild(fragA);
+    _renderedCount = target;
+    updateMoreBar(list);
+    return;
+  }
+
+  var keepScroll = list.scrollTop;
   // Bangun semua baris di DocumentFragment dulu (di luar DOM aktif), baru
   // ditempel sekali di akhir — mencegah reflow bertahap per baris.
+  var frag = document.createDocumentFragment();
+  for (var j = 0; j < target; j++) frag.appendChild(buildProductRow(_matches[j]));
+  if (_moreBar && _moreBar.parentNode) _moreBar.parentNode.removeChild(_moreBar);
   list.innerHTML = '';
-  if (shown === 0) {
+  if (_matches.length === 0) {
     list.innerHTML = '<div class="empty">Produk "'+esc(q)+'" tidak ditemukan.</div>';
   } else {
     list.appendChild(frag);
   }
+  _renderedCount = target;
+  updateMoreBar(list);
+  list.scrollTop = qChanged ? 0 : keepScroll;
 }
 
 // "+" selalu menambah SATUAN DASAR induk, walau produk punya varian — sama
@@ -1933,15 +2023,14 @@ document.getElementById('itemRemoveBtn').addEventListener('click', function(){
   saveCart();
 });
 
-function render(){ renderList(); renderCartBar(); if (sheetOpen) renderCartSheet(); }
+function render(){ renderList(true); renderCartBar(); if (sheetOpen) renderCartSheet(); }
 
-// Debounce ~120ms — tiap huruf diketik memicu renderList() yang membangun
-// ulang SELURUH daftar produk; tanpa debounce ini kerja berat berulang di
-// setiap huruf, dampaknya paling besar untuk performa di HP low-end.
+// Debounce ~120ms — tiap huruf diketik memicu renderList(); tanpa debounce
+// ini kerja berulang di setiap huruf, dampaknya terbesar di HP low-end.
 var searchTimer = null;
 document.getElementById('q').addEventListener('input', function(){
   clearTimeout(searchTimer);
-  searchTimer = setTimeout(renderList, 120);
+  searchTimer = setTimeout(function(){ renderList(); }, 120);
 });
 
 // Blueprint §2/§6 — pindah mode, BUKAN pindah halaman: tidak ada reload,

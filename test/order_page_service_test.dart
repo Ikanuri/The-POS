@@ -400,7 +400,7 @@ void main() {
         .firstMatch(result.html)!
         .group(1)!;
     expect(setQtyBody.contains('refreshProwControls(p)'), isTrue);
-    expect(setQtyBody.contains('else renderList()'), isTrue,
+    expect(setQtyBody.contains('else renderList(true)'), isTrue,
         reason: 'fallback tetap ada utk kasus produk tidak ketemu');
     expect(RegExp(r'^\s*renderList\(\);\s*$', multiLine: true).hasMatch(setQtyBody),
         isFalse,
