@@ -8,6 +8,19 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 7 Oktober 2026 (Katalog Pesanan: Halaman Awal Baru)
+
+> **Perlu Publish ulang katalog** (tekan "Publish ke Web" atau "Buat & Bagikan") agar semua perubahan di bawah muncul di HP pelanggan.
+
+- **Halaman awal katalog yang baru:** pelanggan disambut nama toko, status buka/tutup, dan kolom cari besar "Mau pesan apa hari ini?". Daftar produk tidak langsung menumpuk di layar; pelanggan mengetik nama barang atau memilih kategori. Perpindahan antar tampilan dibuat halus.
+- **Kategori produk di katalog:** chip "Semua produk" dan tiap kategori. Ketuk kategori untuk menelusuri produknya; mengetik di kolom cari tetap mencari di SELURUH produk. Tiap produk menampilkan label kategorinya. Bisa dimatikan di Pengaturan > Katalog Pesanan (bila dimatikan, katalog langsung menampilkan daftar produk seperti biasa).
+- **Saran produk terlaris di kolom cari:** nama barang yang paling sering dibeli tampil bergantian di kolom cari ("Cari Minyak Goreng 2L"); ketuk panah untuk langsung mencarinya. Periode (7/30/90 hari atau rentang tanggal sendiri) dan jumlah saran bisa diatur.
+- **Pengumuman toko:** tulis pengumuman singkat (maks. 280 karakter) yang muncul otomatis sekali saat katalog dibuka lalu bisa dibuka lagi lewat tombol megafon. Cocok untuk info libur atau tutup lebih awal.
+- **"Pesan lagi" untuk pelanggan langganan:** pesanan yang pernah dikirim tersimpan di HP pelanggan sendiri; di halaman awal ada kartu pesanan terakhir dan daftar semua pesanan sebelumnya, tinggal ketuk "Pesan lagi" (harga selalu mengikuti harga terbaru, barang yang sudah habis dilewati). Bila riwayat hilang, pelanggan bisa menempel pesan lama dari WhatsApp lalu menekan "Muat".
+- Tombol "Tambah" di daftar produk sedikit lebih tinggi supaya lebih mudah diketuk.
+
+---
+
 ## 7 Oktober 2026 (Katalog Lebih Cepat + Pelanggan di Struk Ambil Barang)
 
 - **Pencarian di katalog pesanan jauh lebih cepat**, terutama untuk toko dengan ribuan produk (dulu bisa tersendat beberapa detik di HP biasa). Daftar kini menampilkan 60 produk dulu; ketik nama barang untuk mencari, atau tekan **Tampilkan 60 lagi** untuk melihat lebih banyak. Perlu Publish ulang katalog.

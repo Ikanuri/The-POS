@@ -7,6 +7,15 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-10-07 (katalog: halaman awal, kategori, terlaris, pengumuman, Pesan lagi)
+
+- feat(katalog-html): data halaman awal baru - kategori terurut, saran terlaris (query agregat), pengumuman, toggle Pesan lagi + setting tampilan tersinkron
+- feat(pengaturan): kartu tampilan katalog HTML - kategori, periode & jumlah saran terlaris, pengumuman toko (280 karakter), Pesan lagi
+- feat(katalog-html): halaman awal baru - hero + kolom cari besar, chip kategori, saran terlaris bergantian, transisi FLIP halus
+- feat(katalog-html): pengumuman toko - tombol megafon + popup (otomatis sekali, lama sesuai panjang teks, menciut saat scroll/ketuk luar, manual tanpa batas)
+- feat(katalog-html): Pesan lagi (riwayat di HP pelanggan) + tempel pesanan lama dari WhatsApp
+- docs: versi 2.88.0+184, CHANGELOG, PATCHNOTES, HANDOFF (halaman awal katalog baru)
+
 ## 2026-10-07 (katalog 60 baris + struk ambil barang pelanggan)
 
 - feat(struk-ambil-barang): cetak nama pelanggan (tebal) & alamat pelanggan tetap di header (dipecah per kata ke lebar kertas, ASCII; tanpa nama = header identik byte-per-byte)
