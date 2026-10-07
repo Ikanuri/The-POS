@@ -28,46 +28,53 @@ void main() {
 
   bool isBlack(img.Image im, int x, int y) => im.getPixel(x, y).r < 128;
 
-  test('render: gambar selebar kertas, kotak centang kanan, tanda centang '
-      'hanya di baris yang dicentang', () {
+  test(
+      'render: gambar selebar kertas, kotak centang menempel SETELAH nama '
+      '(bukan di tepi kanan), tanda centang hanya di baris yang dicentang', () {
     final chunks = PickListRenderer.render(lines, 384);
     expect(chunks, isNotEmpty);
     for (final c in chunks) {
       expect(c.width, 384);
     }
     final all = chunks.first;
+    final boxes = PickListRenderer.debugBoxes;
+    expect(boxes.length, lines.length);
 
-    // Cari kolom kotak: piksel hitam di x kotak (384-4-44=336..379) pada
-    // batas atas kotak tiap baris. Kotak baris pertama (tak dicentang):
-    // tengah kotak harus PUTIH, sedang baris kedua (dicentang) harus ada
-    // piksel hitam di tengahnya.
-    int boxTop(int fromY) {
-      for (var y = fromY; y < all.height; y++) {
-        if (isBlack(all, 336 + 22, y)) return y;
-      }
-      return -1;
+    // Nama pendek ("Gula Pasir (Kg)") -> kotak jauh dari tepi kanan kertas.
+    expect(boxes[1].x, lessThan(250),
+        reason: 'kotak menempel setelah nama pendek, bukan di ujung kanan');
+    // Nama panjang yang terbungkus -> kotak tetap di dalam kertas.
+    for (final b in boxes) {
+      expect(b.x + b.size, lessThanOrEqualTo(384 - 4));
     }
 
-    final top1 = boxTop(0);
-    expect(top1, greaterThan(0), reason: 'kotak baris 1 harus tergambar');
-    expect(isBlack(all, 336 + 22, top1 + 22), isFalse,
-        reason: 'baris 1 tidak dicentang -> bagian dalam putih');
-    var blackInside2 = 0;
-    // Baris 2 mulai setelah tinggi baris 1; pindai area kotak baris 2.
-    final top2 = boxTop(top1 + 60);
-    for (var y = top2 + 8; y < top2 + 36; y++) {
-      for (var x = 336 + 8; x < 336 + 36; x++) {
-        if (isBlack(all, x, y)) blackInside2++;
+    int blackIn(({int x, int y, int size}) b) {
+      var n = 0;
+      for (var y = b.y + 8; y < b.y + b.size - 8; y++) {
+        for (var x = b.x + 8; x < b.x + b.size - 8; x++) {
+          if (isBlack(all, x, y)) n++;
+        }
       }
+      return n;
     }
-    expect(blackInside2, greaterThan(30),
-        reason: 'baris 2 dicentang -> ada tanda centang di dalam kotak');
+
+    expect(blackIn(boxes[0]), 0, reason: 'baris 1 tidak dicentang');
+    expect(blackIn(boxes[1]), greaterThan(30),
+        reason: 'baris 2 dicentang -> ada tanda centang');
+    // Bingkai kotak tergambar (sisi kiri hitam).
+    final mid = boxes[0].y + boxes[0].size ~/ 2;
+    expect(
+        [for (var d = 0; d < 3; d++) isBlack(all, boxes[0].x + d, mid)]
+            .any((v) => v),
+        isTrue);
   });
 
   test('wrap: nama panjang terpotong maks 3 baris + ".."', () {
-    final w = PickListRenderer.wrap(img.arial24,
+    final w = PickListRenderer.wrap(
+        img.arial24,
         'Aqua 600ml Botol Kemasan Dus Isi Dua Puluh Empat Besar Sekali (Dus)',
-        200, 3);
+        200,
+        3);
     expect(w.length, 3);
     expect(w.last.endsWith('..'), isTrue);
   });
@@ -77,7 +84,8 @@ void main() {
     expect(PickListRenderer.qtyLabel(0.5), '0.5x');
   });
 
-  test('buildPickListBytes: berisi perintah raster (GS v 0) & tidak kosong; '
+  test(
+      'buildPickListBytes: berisi perintah raster (GS v 0) & tidak kosong; '
       'nama toko non-ASCII disanitasi', () async {
     final bytes = await PrinterService.buildPickListBytes(
       storeName: 'Toko Berkah — Jaya',
@@ -98,7 +106,8 @@ void main() {
     if (dump != null) {
       final chunks = PickListRenderer.render(lines, 384);
       for (var i = 0; i < chunks.length; i++) {
-        File('$dump/picklist_$i.png').writeAsBytesSync(img.encodePng(chunks[i]));
+        File('$dump/picklist_$i.png')
+            .writeAsBytesSync(img.encodePng(chunks[i]));
       }
     }
   });

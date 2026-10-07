@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:image/image.dart' as img;
 
 /// Satu baris "struk ambil barang" (daftar pengambilan untuk pegawai gudang,
@@ -38,6 +39,10 @@ class PickListRenderer {
   static const _gap = 8;
   static const _rowPadY = 8;
   static const _noteIndent = 0;
+
+  /// Test-only: posisi kotak centang hasil render terakhir (y absolut).
+  @visibleForTesting
+  static final List<({int x, int y, int size})> debugBoxes = [];
 
   /// Lebar kolom qty = qty terlebar di daftar (dibatasi) supaya nama sejajar.
   static int _textWidth(img.BitmapFont font, String s) {
@@ -100,7 +105,10 @@ class PickListRenderer {
   static List<img.Image> render(List<PickLine> lines, int paperDots,
       {int chunkMax = 640}) {
     if (lines.isEmpty) return const [];
-    final qtyFont = img.arial48;
+    // Qty kecil & biasa; NAMA produk yang tebal (font bitmap tak punya bold ->
+    // digambar dua kali dengan geser 1px). Kotak centang menempel SETELAH
+    // nama (bukan di tepi kanan kertas).
+    final qtyFont = img.arial24;
     final nameFont = img.arial24;
     final noteFont = img.arial14;
 
@@ -108,44 +116,50 @@ class PickListRenderer {
     for (final l in lines) {
       qtyW = _max(qtyW, _textWidth(qtyFont, qtyLabel(l.qty)));
     }
-    // Batasi supaya kolom nama tetap lega di kertas 58mm.
-    qtyW = qtyW.clamp(54, paperDots ~/ 3);
+    qtyW = qtyW.clamp(34, paperDots ~/ 4);
     final nameX = _margin + qtyW + _gap;
-    final boxX = paperDots - _margin - _boxSize;
-    final nameW = boxX - _gap - nameX;
+    final maxNameW = paperDots - _margin - _boxSize - _gap - nameX;
 
+    debugBoxes.clear();
+    var yBase = 0;
     final rows = <img.Image>[];
     for (final l in lines) {
       final indent = l.isVariant ? 14 : 0;
       final nameLines = wrap(
           nameFont,
           l.unit.isEmpty ? l.name : '${l.name} (${l.unit})',
-          nameW - indent,
+          maxNameW - indent,
           3);
       final noteLines = (l.note == null || l.note!.trim().isEmpty)
           ? const <String>[]
-          : wrap(noteFont, '* ${l.note!.trim()}', nameW - indent, 2);
+          : wrap(noteFont, '* ${l.note!.trim()}', maxNameW - indent, 2);
       const nameLH = 28;
       const noteLH = 17;
       final textH = nameLines.length * nameLH + noteLines.length * noteLH;
-      final h = _max(_boxSize, _max(textH, 52)) + _rowPadY * 2;
+      final h = _max(_boxSize, _max(textH, 40)) + _rowPadY * 2;
       final row = img.Image(width: paperDots, height: h, numChannels: 3);
       img.fill(row, color: img.ColorRgb8(255, 255, 255));
       final black = img.ColorRgb8(0, 0, 0);
+      final blockH = _max(textH, _boxSize);
 
-      // qty besar, rata kanan di kolomnya, sejajar baris nama pertama.
+      // qty kecil, rata kanan di kolomnya, sejajar baris nama pertama.
       final q = qtyLabel(l.qty);
       final qw = _textWidth(qtyFont, q);
       img.drawString(row, q,
           font: qtyFont,
           x: _margin + qtyW - qw,
-          y: _rowPadY + (_max(textH, _boxSize) - 48) ~/ 2,
+          y: _rowPadY + (blockH - textH) ~/ 2,
           color: black);
 
-      var y = _rowPadY + (_max(textH, _boxSize) - textH) ~/ 2;
+      var y = _rowPadY + (blockH - textH) ~/ 2;
+      var widest = 0;
       for (final s in nameLines) {
+        // Tebal palsu: gambar dua kali, geser 1px.
         img.drawString(row, s,
             font: nameFont, x: nameX + indent, y: y, color: black);
+        img.drawString(row, s,
+            font: nameFont, x: nameX + indent + 1, y: y, color: black);
+        widest = _max(widest, _textWidth(nameFont, s) + 1);
         y += nameLH;
       }
       for (final s in noteLines) {
@@ -154,8 +168,17 @@ class PickListRenderer {
         y += noteLH;
       }
 
+      // Kotak: tepat setelah teks nama/catatan terlebar (bukan di tepi kanan).
+      var textRight = nameX + indent + widest;
+      for (final s in noteLines) {
+        textRight =
+            _max(textRight, nameX + indent + _textWidth(noteFont, s));
+      }
+      final boxX = (textRight + _gap + 6).clamp(0, paperDots - _margin - _boxSize);
+
       // Kotak centang persegi bersudut tumpul (rata tengah vertikal).
       final by = (h - _boxSize) ~/ 2;
+      debugBoxes.add((x: boxX, y: yBase + by, size: _boxSize));
       img.drawRect(row,
           x1: boxX,
           y1: by,
@@ -188,6 +211,7 @@ class PickListRenderer {
         row.setPixelRgb(x + 1, h - 1, 0, 0, 0);
       }
       rows.add(row);
+      yBase += h;
     }
 
     // Gabungkan jadi gambar-gambar setinggi <= chunkMax.

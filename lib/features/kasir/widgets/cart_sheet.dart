@@ -1403,10 +1403,20 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                     ),
                   ],
                 ),
-                      SingleChildScrollView(
+                      // Baris ikon aksi: arah KANAN-ke-KIRI (rtl) — "Tahan Pesanan"
+                      // paling kanan, sisanya berurutan ke kiri; `reverse: true`
+                      // membuat blok menempel di tepi kanan.
+                      LayoutBuilder(
+                        builder: (context, box) => SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
+                        reverse: true,
+                        // minWidth = lebar tersedia -> Row rtl (start = kanan)
+                        // menempel tepi kanan bila muat; bila tak muat, tetap
+                        // bisa digeser.
+                        child: ConstrainedBox(
+                        constraints: BoxConstraints(minWidth: box.maxWidth),
                         child: Row(
-                          mainAxisSize: MainAxisSize.min,
+                          textDirection: ui.TextDirection.rtl,
                           children: [
                     // Susulan (permintaan user): "Tahan Pesanan" langsung dari
                     // header keranjang, di SAMPING KIRI "Tempel Pesanan" —
@@ -1517,6 +1527,8 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                         icon: const _QrTransferIcon(),
                       ),
                           ],
+                        ),
+                        ),
                         ),
                       ),
                   ],

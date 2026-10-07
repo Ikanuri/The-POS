@@ -12,6 +12,8 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 - **Total di halaman Pesanan katalog tetap besar** saat angkanya berputar (dulu sempat mengecil sebentar). Perlu Publish ulang katalog.
 - **Menu Pengaturan Keranjang kini bisa ditutup dengan swipe turun** (dulu tidak bisa), terbuka 3/4 layar dan bisa ditarik sampai penuh.
+- **Struk Ambil Barang dirapikan:** jumlah lebih kecil, nama produk tebal, dan kotak centang langsung di sebelah nama (tidak jauh di kanan).
+- **Tombol-tombol di header keranjang dibalik urutannya:** "Tahan Pesanan" kini paling kanan.
 - **Dua opsi tata letak baris keranjang** (Pengaturan Keranjang): total per produk bisa ditaruh **di samping harga**, dan chip kategori harga bisa ditaruh **di samping nama produk** (digeser ke samping bila banyak; nama panjang jadi teks berjalan). Tidak menimpa centang atau stepper, apa pun letak centangnya.
 - **Cetak Struk Ambil Barang:** satu tombol di header keranjang mencetak daftar barang (tanpa harga) ke printer thermal Bluetooth, dengan tulisan lebih besar dan kotak centang di kanan tiap barang, supaya pegawai bisa mengambilkan barang sebelum pembeli bayar. Barang yang sudah dicentang di keranjang ikut tercentang di cetakan.
 - **Tombol Tandai Semua** di header keranjang (centang/hapus centang semua barang sekaligus).

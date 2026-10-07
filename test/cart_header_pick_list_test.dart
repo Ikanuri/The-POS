@@ -103,6 +103,34 @@ void main() {
   });
 
   testWidgets(
+      'baris ikon kanan-ke-kiri: Tahan Pesanan paling kanan, ikon '
+      'menempel tepi kanan', (tester) async {
+    container
+        .read(cartProvider(kMainCartId).notifier)
+        .addItem(item('a', 'Produk A'));
+    await pumpCartSheet(tester);
+
+    final order = [
+      'Tahan Pesanan',
+      'Tempel Pesanan',
+      'Bagikan Pratinjau',
+      'Cetak Struk Ambil Barang',
+      'Tandai Semua',
+      'Pengaturan Keranjang',
+    ];
+    var prev = double.infinity;
+    for (final t in order) {
+      final x = tester.getCenter(tip(t)).dx;
+      expect(x, lessThan(prev), reason: '$t harus di kiri ikon sebelumnya');
+      prev = x;
+    }
+    expect(tester.getRect(tip('Tahan Pesanan')).right, greaterThan(360 - 32),
+        reason: 'ikon paling kanan menempel tepi kanan (padding 16)');
+    expect(tester.takeException(), isNull);
+    await drain(tester);
+  });
+
+  testWidgets(
       'Tandai Semua mencentang semua baris, lalu Hapus Tanda '
       'melepas semuanya', (tester) async {
     final n = container.read(cartProvider(kMainCartId).notifier);
