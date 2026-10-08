@@ -8,6 +8,17 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 8 Oktober 2026 (Animasi lebih hidup, uji di build beta)
+
+- **Tombol, kartu produk, dan chip kategori kini memantul halus saat ditekan.**
+- **Baris keranjang yang dihapus meluncur keluar**, baris di bawahnya naik mulus.
+- **Angka (jumlah, total) membengkak sebentar saat bertambah.**
+- **Daftar produk yang sedang dimuat menampilkan kotak berkilau**, bukan lingkaran berputar.
+- **Menu tahan tab Kasir dan menu ekspor laporan tumbuh dari tombolnya.**
+- **Pesan singkat (toast) muncul dan hilang lebih halus, disertai getaran tipis.**
+
+---
+
 ## 8 Oktober 2026 (Jumlah Saran & Salin Link)
 
 - **Jumlah saran terlaris kini diatur dengan tombol − / +** (3 sampai 12), lebih mudah ditekan daripada daftar pilihan lama.

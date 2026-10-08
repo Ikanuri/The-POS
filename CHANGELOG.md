@@ -7,6 +7,15 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-10-08 (marathon animasi Telegram, branch redesign)
+
+- feat(motion): `2da6e8a` — PressScale: tombol memantul (tekan 80ms, lepas 350ms overshoot)
+- feat(motion): `76343b4` — baris keranjang dihapus beranimasi keluar
+- feat(motion): `d3b18c7` — angka bengkak +10% hanya saat bertambah (CounterView)
+- feat(motion): `6e8fb7c` — skeleton memuat menggantikan spinner di daftar produk kasir
+- feat(motion): `3559597` — popup menu tumbuh dari titik pemicu (150+16n ms)
+- feat(motion): `e0ce2db` — toast/SnackBar animasi baku + tik haptik (`showAppSnackBar`)
+
 ## 2026-10-08 (stepper jumlah saran + salin link publish)
 
 - feat(katalog): `666181d` — feat(katalog): stepper jumlah saran terlaris + tombol Salin link hasil publish
