@@ -32,6 +32,11 @@ void main() {
     // Kartu dipindah ke halaman tutup saat init: pakai entri IntersectionObserver
     // TERBARU (es[0] basi bikin loop game tak pernah jalan).
     expect(html, contains('es[es.length - 1].isIntersecting'));
+    // Papan berubah ukuran (awal 320 bawaan -> lebar asli): dinding dibangun
+    // ulang & bola diskalakan, kalau tidak lubang tujuan "melayang" di luar
+    // labirin; ukuran 0 (tersembunyi) tidak mereset papan.
+    expect(html, contains('buildRects();\n      var span = W - 2 * pad'));
+    expect(html, contains('if (!cw && cv.width) return;'));
 
     await CatalogDisplayService.setGameEnabled(db, false);
     expect((await CatalogDisplayService.load(db)).gameEnabled, isFalse);

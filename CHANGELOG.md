@@ -7,6 +7,10 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-10-08 (fix game labirin)
+
+- fix(katalog-html): lubang tujuan game 'melayang' di luar labirin - papan dibangun di lebar bawaan 320 saat kartu tersembunyi, lalu resize ke lebar asli tanpa membangun ulang dinding/bola; kini dinding dibangun ulang & bola diskalakan, resize saat tersembunyi diabaikan; bump 2.92.1+189
+
 ## 2026-10-07 (katalog: game labirin)
 
 - test(katalog): surface test tombol Publish diperbesar (layar Katalog Pesanan lebih panjang)

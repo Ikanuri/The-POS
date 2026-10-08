@@ -8,6 +8,12 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 8 Oktober 2026 (Perbaikan Game Labirin)
+
+- **Lubang tujuan game labirin kini selalu tepat di ujung labirin.** Di sebagian HP, saat link baru dibuka, lubangnya sempat tampak melayang di pojok luar labirin (dindingnya lebih kecil dari papan). Perlu Publish ulang katalog.
+
+---
+
 ## 7 Oktober 2026 (Katalog Pesanan: Game Labirin)
 
 > **Perlu Publish ulang katalog** agar game muncul di HP pelanggan.

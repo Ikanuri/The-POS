@@ -3839,11 +3839,28 @@ if (!DATA.products || DATA.products.length === 0) {
   function rr(c, x, y, w, h, rad) { c.beginPath(); c.moveTo(x + rad, y); c.arcTo(x + w, y, x + w, y + h, rad); c.arcTo(x + w, y + h, x, y + h, rad); c.arcTo(x, y + h, x, y, rad); c.arcTo(x, y, x + w, y, rad); c.closePath(); c.fill(); }
 
   function resize() {
-    var w = Math.round(stage.clientWidth) || 320;
+    var cw = Math.round(stage.clientWidth);
+    if (!cw && cv.width) return; // tersembunyi: pertahankan ukuran terakhir
+    var w = cw || 320;
     if (w === W && cv.width) return;
+    // Ukuran papan berubah (mis. awalnya 320 bawaan saat kartu masih tersembunyi,
+    // lalu lebar asli): geometri labirin HARUS dibangun ulang & posisi bola
+    // diskalakan — kalau tidak dinding tetap berukuran lama sedangkan lubang
+    // tujuan memakai ukuran baru (lubang "melayang" di luar labirin).
+    var oldW = W, oldPad = pad, oldSpan = W - 2 * pad;
+    var nbx = (bx - oldPad) / oldSpan, nby = (by - oldPad) / oldSpan;
+    var nsx = (sx - oldPad) / oldSpan, nsy = (sy - oldPad) / oldSpan;
     W = w; DPR = Math.min(window.devicePixelRatio || 1, 2);
     cv.width = Math.round(W * DPR); cv.height = Math.round(W * DPR);
-    layout(); drawStatic(); draw();
+    layout();
+    if (maze) {
+      buildRects();
+      var span = W - 2 * pad, k = W / oldW;
+      bx = pad + nbx * span; by = pad + nby * span;
+      sx = pad + nsx * span; sy = pad + nsy * span;
+      vx *= k; vy *= k; trail = [];
+    }
+    drawStatic(); draw();
   }
   function layout() {
     var n = LEVELS[level].n; pad = Math.max(5, Math.round(W * .018)); cs = (W - 2 * pad) / n;
