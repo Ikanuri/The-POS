@@ -16,6 +16,15 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 8 Oktober 2026 (Kolom Cari & Pengaturan Jumlah Saran)
+
+> **Perlu Publish ulang katalog** untuk perbaikan kolom cari.
+
+- **Kolom cari tidak lagi tertutup keyboard.** Setelah menghapus pencarian dan kembali ke halaman awal, halaman otomatis bergeser sedikit supaya kolom cari tetap kelihatan di atas keyboard dan tombol keranjang.
+- **Jumlah saran di pengaturan kini berupa dropdown dengan tampilan sendiri** (pilih 3 sampai 12), bukan stepper.
+
+---
+
 ## 8 Oktober 2026 (Katalog Tanpa Kategori)
 
 > **Perlu Publish ulang katalog.**

@@ -322,7 +322,7 @@ class _OrderShareScreenState extends ConsumerState<OrderShareScreen> {
                 ),
               ),
               const SizedBox(width: 8),
-              _TopCountStepper(
+              _TopCountDropdown(
                 value: d.topCount,
                 onChanged: (n) => _saveDisplay(
                     (db) => CatalogDisplayService.setTopCount(db, n)),
@@ -910,58 +910,197 @@ class _StepLine extends StatelessWidget {
   }
 }
 
-/// Stepper pil (− angka +) untuk jumlah saran terlaris. Tombol 48 px
-/// (nyaman di HP), nilai di-clamp ke `topCountMin..topCountMax`.
-class _TopCountStepper extends StatelessWidget {
-  const _TopCountStepper({required this.value, required this.onChanged});
+/// Dropdown jumlah saran: bukan `DropdownButton` bawaan Flutter. Tombol pil
+/// (angka + chevron) membuka kartu pilihan buatan sendiri yang menempel di
+/// bawah tombol: tiap baris 48 px, pilihan aktif berwarna aksen + centang,
+/// angka memakai font angka app. Tutup dengan memilih atau mengetuk di luar.
+class _TopCountDropdown extends StatefulWidget {
+  const _TopCountDropdown({required this.value, required this.onChanged});
 
   final int value;
   final ValueChanged<int> onChanged;
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final canDec = value > CatalogDisplay.topCountMin;
-    final canInc = value < CatalogDisplay.topCountMax;
-    return Container(
-      decoration: BoxDecoration(
-        color: scheme.primary.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: scheme.primary.withOpacity(0.35)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton(
-            key: const ValueKey('top-count-dec'),
-            tooltip: 'Kurangi',
-            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-            icon: const Icon(Icons.remove),
-            color: scheme.primary,
-            onPressed: canDec
-                ? () => onChanged(value - 1)
-                : null,
+  State<_TopCountDropdown> createState() => _TopCountDropdownState();
+}
+
+class _TopCountDropdownState extends State<_TopCountDropdown> {
+  final _link = LayerLink();
+  OverlayEntry? _entry;
+
+  static const _itemH = 48.0;
+  static const _menuW = 132.0;
+
+  bool get _open => _entry != null;
+
+  void _toggle() => _open ? _close() : _show();
+
+  void _show() {
+    final values = [
+      for (var n = CatalogDisplay.topCountMin;
+          n <= CatalogDisplay.topCountMax;
+          n++)
+        n
+    ];
+    _entry = OverlayEntry(builder: (ctx) {
+      final scheme = Theme.of(ctx).colorScheme;
+      return Stack(children: [
+        Positioned.fill(
+          child: GestureDetector(
+            key: const ValueKey('top-count-barrier'),
+            behavior: HitTestBehavior.translucent,
+            onTap: _close,
           ),
-          SizedBox(
-            width: 32,
-            child: Text(
-              '$value',
-              key: const ValueKey('top-count-value'),
-              textAlign: TextAlign.center,
-              style: AppTheme.numStyle(context, size: 20, weight: FontWeight.w700),
+        ),
+        CompositedTransformFollower(
+          link: _link,
+          targetAnchor: Alignment.bottomRight,
+          followerAnchor: Alignment.topRight,
+          offset: const Offset(0, 6),
+          child: TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0, end: 1),
+            duration: const Duration(milliseconds: 140),
+            curve: Curves.easeOutCubic,
+            builder: (_, t, child) => Opacity(
+              opacity: t,
+              child: Transform.scale(
+                  scale: 0.94 + 0.06 * t,
+                  alignment: Alignment.topRight,
+                  child: child),
+            ),
+            child: Material(
+              key: const ValueKey('top-count-menu'),
+              color: scheme.surface,
+              elevation: 6,
+              shadowColor: Colors.black45,
+              borderRadius: BorderRadius.circular(16),
+              clipBehavior: Clip.antiAlias,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                    maxWidth: _menuW, maxHeight: _itemH * 5.5),
+                child: SizedBox(
+                  width: _menuW,
+                  child: ListView(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    shrinkWrap: true,
+                    children: [
+                      for (final n in values)
+                        _TopCountOption(
+                          n: n,
+                          selected: n == widget.value,
+                          onTap: () {
+                            _close();
+                            if (n != widget.value) widget.onChanged(n);
+                          },
+                        ),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ),
-          IconButton(
-            key: const ValueKey('top-count-inc'),
-            tooltip: 'Tambah',
-            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-            icon: const Icon(Icons.add),
-            color: scheme.primary,
-            onPressed: canInc
-                ? () => onChanged(value + 1)
-                : null,
+        ),
+      ]);
+    });
+    Overlay.of(context).insert(_entry!);
+    setState(() {});
+  }
+
+  void _close() {
+    _entry?.remove();
+    _entry = null;
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _entry?.remove();
+    _entry = null;
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return CompositedTransformTarget(
+      link: _link,
+      child: Semantics(
+        button: true,
+        label: 'Jumlah saran, ${widget.value}',
+        child: Material(
+          color: scheme.primary.withOpacity(_open ? 0.14 : 0.08),
+          shape: StadiumBorder(
+              side: BorderSide(
+                  color: scheme.primary.withOpacity(_open ? 0.7 : 0.35))),
+          child: InkWell(
+            key: const ValueKey('top-count-dropdown'),
+            customBorder: const StadiumBorder(),
+            onTap: _toggle,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minWidth: 84, minHeight: 48),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(18, 0, 10, 0),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      '${widget.value}',
+                      key: const ValueKey('top-count-value'),
+                      style: AppTheme.numStyle(context,
+                          size: 20, weight: FontWeight.w700),
+                    ),
+                    const SizedBox(width: 4),
+                    AnimatedRotation(
+                      turns: _open ? 0.5 : 0,
+                      duration: const Duration(milliseconds: 160),
+                      child: Icon(Icons.keyboard_arrow_down_rounded,
+                          color: scheme.primary),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
-        ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TopCountOption extends StatelessWidget {
+  const _TopCountOption(
+      {required this.n, required this.selected, required this.onTap});
+
+  final int n;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return InkWell(
+      key: ValueKey('top-count-opt-$n'),
+      onTap: onTap,
+      child: Container(
+        height: _TopCountDropdownState._itemH,
+        padding: const EdgeInsets.symmetric(horizontal: 18),
+        color: selected ? scheme.primary.withOpacity(0.10) : null,
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                '$n',
+                style: AppTheme.numStyle(context,
+                    size: 19,
+                    weight: selected ? FontWeight.w700 : FontWeight.w500,
+                    color: selected ? scheme.primary : null),
+              ),
+            ),
+            if (selected)
+              Icon(Icons.check_rounded, size: 20, color: scheme.primary),
+          ],
+        ),
       ),
     );
   }

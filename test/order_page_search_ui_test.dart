@@ -27,4 +27,18 @@ void main() {
     expect(html, contains("['mousedown', 'pointerdown'].forEach"));
     expect(html, contains('if (document.activeElement === qEl) e.preventDefault();'));
   });
+
+  test('landing + keyboard: kolom cari digulir agar terlihat (tak tertutup '
+      'keyboard/tombol keranjang)', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(() async => db.close());
+    final html = (await OrderPageService.generateHtml(
+            db: db, storeName: 'T', stickers: {}))
+        .html;
+    expect(html, contains('function revealSearch(delay)'));
+    expect(html, contains("qEl.addEventListener('focus', function(){ revealSearch(380); });"));
+    expect(html, contains("visualViewport.addEventListener('resize'"));
+    // Dipanggil setelah X dan setelah hapus huruf terakhir (-> landing).
+    expect('revealSearch(400);'.allMatches(html).length, 2);
+  });
 }

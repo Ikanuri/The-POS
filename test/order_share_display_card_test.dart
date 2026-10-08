@@ -68,10 +68,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('top-days-90')));
     await tester.pumpAndSettle();
-    for (var i = 0; i < 3; i++) {
-      await tester.tap(find.byKey(const ValueKey('top-count-dec')));
-      await tester.pumpAndSettle();
-    }
+    await tester.tap(find.byKey(const ValueKey('top-count-dropdown')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('top-count-opt-5')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('display-reorder')));
     await tester.pumpAndSettle();
 
@@ -147,28 +147,52 @@ void main() {
     await drain(tester);
   });
 
-  testWidgets('stepper jumlah saran: batas 3..12, tombol >= 44px, tersimpan',
+  testWidgets('dropdown jumlah saran: kustom (bukan DropdownButton), pilihan '
+      '3..12, aktif bertanda, tersimpan, tutup lewat ketuk di luar',
       (tester) async {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(() async => db.close());
-    await CatalogDisplayService.setTopCount(db, CatalogDisplay.topCountMax);
     await pumpScreen(tester, db);
 
-    final inc = find.byKey(const ValueKey('top-count-inc'));
-    final dec = find.byKey(const ValueKey('top-count-dec'));
-    expect(tester.widget<IconButton>(inc).onPressed, isNull);
-    expect(tester.getSize(inc).height, greaterThanOrEqualTo(44));
-    expect(tester.getSize(inc).width, greaterThanOrEqualTo(44));
+    expect(find.byType(DropdownButton<int>), findsNothing);
+    final btn = find.byKey(const ValueKey('top-count-dropdown'));
+    expect(tester.getSize(btn).height, greaterThanOrEqualTo(44));
+    expect(find.byKey(const ValueKey('top-count-menu')), findsNothing);
 
-    for (var i = 0; i < 20; i++) {
-      if (tester.widget<IconButton>(dec).onPressed == null) break;
-      await tester.tap(dec);
-      await tester.pumpAndSettle();
-    }
-    expect(tester.widget<IconButton>(dec).onPressed, isNull);
+    await tester.tap(btn);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('top-count-menu')), findsOneWidget);
+    // Pilihan aktif (8) bertanda centang; opsi di batas ada (menu bisa digulir).
+    expect(
+        find.descendant(
+            of: find.byKey(const ValueKey('top-count-opt-8')),
+            matching: find.byIcon(Icons.check_rounded)),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('top-count-opt-3')), findsOneWidget);
+    await tester.drag(find.byKey(const ValueKey('top-count-menu')),
+        const Offset(0, -400));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('top-count-opt-12')), findsOneWidget);
+
+    // Ketuk di luar menutup tanpa mengubah nilai.
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('top-count-menu')), findsNothing);
+    expect((await CatalogDisplayService.load(db)).topCount, 8);
+
+    // Pilih 12 -> tersimpan, tampil di tombol.
+    await tester.tap(btn);
+    await tester.pumpAndSettle();
+    await tester.drag(find.byKey(const ValueKey('top-count-menu')),
+        const Offset(0, -400));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('top-count-opt-12')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('top-count-menu')), findsNothing);
     expect((await CatalogDisplayService.load(db)).topCount,
-        CatalogDisplay.topCountMin);
-    expect(find.text('${CatalogDisplay.topCountMin}'), findsWidgets);
+        CatalogDisplay.topCountMax);
+    expect(tester.widget<Text>(find.byKey(const ValueKey('top-count-value'))).data,
+        '12');
     expect(tester.takeException(), isNull);
     await drain(tester);
   });

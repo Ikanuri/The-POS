@@ -3084,6 +3084,28 @@ function fillSuggestion(){
   immediateSearch();
   qEl.blur();
 }
+// Landing + keyboard terbuka: kolom cari bisa tertutup keyboard / tombol
+// keranjang di bawah. Gulir halaman secukupnya (kolom cari menempel di bawah
+// header lewat sticky) supaya kolom cari TERLIHAT. Tidak melakukan apa pun
+// bila sudah terlihat penuh.
+var _revealTimer = null;
+function revealSearch(delay){
+  clearTimeout(_revealTimer);
+  _revealTimer = setTimeout(function(){
+    if (curView !== 'landing' || document.activeElement !== qEl) return;
+    var r = searchWrapEl.getBoundingClientRect();
+    var top = menuTopEl.getBoundingClientRect().bottom;
+    var wrap = byId('mainBtnWrap');
+    var lim = window.innerHeight;
+    if (window.visualViewport) lim = Math.min(lim, visualViewport.offsetTop + visualViewport.height);
+    if (!wrap.classList.contains('hidden') && wrap.offsetHeight) lim = Math.min(lim, wrap.getBoundingClientRect().top);
+    if (r.top >= top && r.bottom <= lim - 8) return;
+    var d = r.top - top - 8;
+    if (d > 0) menuScroll.scrollTo({top: menuScroll.scrollTop + d, behavior: motionOk() ? 'smooth' : 'auto'});
+  }, delay);
+}
+qEl.addEventListener('focus', function(){ revealSearch(380); });
+if (window.visualViewport) visualViewport.addEventListener('resize', function(){ revealSearch(120); });
 function immediateSearch(){
   clearTimeout(searchTimer);
   applyState(computeState(), true);
@@ -3101,6 +3123,7 @@ qEl.addEventListener('input', function(){
   var st = computeState();
   if (st.view !== curView || st.catRow !== curCatRow || st.extras !== curExtras) {
     applyState(st, true);
+    if (st.view === 'landing') revealSearch(400);   // hapus huruf terakhir -> landing
     return;
   }
   searchTimer = setTimeout(function(){ renderList(); }, 120);
@@ -3123,6 +3146,7 @@ goBtn.addEventListener('click', function(){
     syncQueryUi();
     immediateSearch();
     qEl.focus();
+    revealSearch(400);
   } else {
     fillSuggestion();
   }

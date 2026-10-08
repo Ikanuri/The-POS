@@ -12,6 +12,11 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 - feat(katalog): `666181d` — feat(katalog): stepper jumlah saran terlaris + tombol Salin link hasil publish
 - feat(katalog-html): saran cari "Cari <nama>? Tekan →" (ikon panah inline; hanya nama produk terpotong), saran tetap berputar saat kolom fokus (berhenti saat ada huruf), tombol X jadi lingkaran outline & tidak mencuri fokus (pointerdown/mousedown preventDefault) sehingga kursor+keyboard tetap terbuka setelah menghapus -> kembali landing
 
+## 2026-10-08 (kolom cari tak tertutup keyboard; dropdown jumlah saran)
+
+- fix(katalog-html): kembali ke landing (X / hapus huruf terakhir) dengan keyboard terbuka -> halaman digulir agar kolom cari terlihat di atas keyboard & tombol keranjang (`revealSearch`, juga saat fokus & visualViewport resize)
+- feat(pengaturan): jumlah saran terlaris = dropdown kustom (tombol pil + kartu pilihan 3..12 buatan sendiri, bukan DropdownButton bawaan), menggantikan stepper; bump 2.95.0+192
+
 ## 2026-10-08 (katalog tanpa kategori tetap punya halaman awal)
 
 - feat(katalog-html): kategori dimatikan -> tetap membuka halaman awal (stiker, cari, Pesan lagi, game) dengan satu chip 'Semua produk', tidak lagi langsung semua produk; tbId/Back/kirim selalu kembali ke landing; bump 2.93.0+190
