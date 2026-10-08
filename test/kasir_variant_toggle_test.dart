@@ -1,3 +1,4 @@
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -12,6 +13,10 @@ import 'package:the_pos/features/kasir/kasir_screen.dart';
 /// tombol chevron (dulu hanya tahan item). Tahan tetap jalan sbg jalan
 /// pintas; produk tanpa varian tidak punya tombol.
 void main() {
+  // Layar Kasir default = landing; test ini menguji DAFTAR produk langsung.
+  setUp(() => SharedPreferences.setMockInitialValues(
+      {'kasir_landing_view': false}));
+
   late AppDatabase db;
   setUp(() => db = AppDatabase(NativeDatabase.memory()));
   tearDown(() async => db.close());

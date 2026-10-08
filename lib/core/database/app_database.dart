@@ -6704,6 +6704,28 @@ class AppDatabase extends _$AppDatabase {
         .toList();
   }
 
+  /// Produk INDUK yang terakhir terjual (terbaru dulu, tanpa duplikat) —
+  /// bagian "Terakhir dijual" di landing Kasir. Satu query agregat; varian
+  /// digabung ke induknya, nota `void` & baris retur (qty <= 0) dikecualikan,
+  /// hanya induk aktif yang tidak ditandai habis manual.
+  Future<List<String>> getRecentlySoldParentProductIds({int limit = 12}) async {
+    final rows = await customSelect(
+      'SELECT par.id AS pid, MAX(t.created_at) AS last_at '
+      'FROM transaction_items ti '
+      'JOIN transactions t ON t.id = ti.transaction_id '
+      'JOIN products p ON p.id = ti.product_id '
+      'JOIN products par ON par.id = COALESCE(p.parent_product_id, p.id) '
+      "WHERE t.status != 'void' AND ti.qty > 0 "
+      '  AND par.is_active = 1 AND par.marked_out_of_stock = 0 '
+      'GROUP BY par.id '
+      'ORDER BY last_at DESC, par.name ASC '
+      'LIMIT ?',
+      variables: [Variable.withInt(limit)],
+      readsFrom: {transactionItems, transactions, products},
+    ).get();
+    return rows.map((r) => r.read<String>('pid')).toList();
+  }
+
   /// Top pelanggan terdaftar berdasarkan total belanja — satu query JOIN.
   Future<List<CustomerRevenueStat>> getTopCustomersByRevenue(
     DateTime from,

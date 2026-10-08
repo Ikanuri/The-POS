@@ -608,6 +608,56 @@ final _kasirGroupsProvider =
 });
 final _kasirSelectedGroupProvider = StateProvider<int?>((ref) => null);
 
+/// Landing Kasir: true = pengguna menekan "Semua produk" (atau memilih
+/// kategori lalu kembali) sehingga daftar penuh ditampilkan walau kolom cari
+/// kosong. Per `cartId` seperti pencarian; kembali ke landing lewat chip
+/// "Beranda" di baris kategori.
+final _kasirShowAllProvider =
+    StateProvider.autoDispose.family<bool, String>((ref, cartId) => false);
+
+/// Produk INDUK terlaris 30 hari terakhir (skor = jumlah nota berbeda) —
+/// sumber yang sama dengan saran terlaris katalog HTML. Dipetakan ke daftar
+/// produk kasir (urutan peringkat dijaga). autoDispose: dihitung ulang tiap
+/// landing tampil lagi (mis. setelah checkout).
+final _landingTopProvider =
+    FutureProvider.autoDispose<List<Product>>((ref) async {
+  final db = ref.watch(databaseProvider);
+  final all = await ref.watch(_kasirProductsProvider(('', null)).future);
+  final byId = {for (final p in all) p.id: p};
+  final now = DateTime.now();
+  final top = await db.getTopSellingParentProducts(
+      now.subtract(const Duration(days: 30)), now,
+      limit: 40);
+  return [
+    for (final t in top)
+      if (byId[t.productId] != null) byId[t.productId]!,
+  ].take(8).toList();
+});
+
+/// "Terakhir dijual" (tanpa pelanggan) atau "Sering dibeli <pelanggan>"
+/// (keranjang punya pelanggan). Key = customerId atau null.
+final _landingRecentProvider =
+    FutureProvider.autoDispose.family<List<Product>, String?>(
+        (ref, customerId) async {
+  final db = ref.watch(databaseProvider);
+  final all = await ref.watch(_kasirProductsProvider(('', null)).future);
+  final byId = {for (final p in all) p.id: p};
+  final List<String> ids;
+  if (customerId == null) {
+    ids = await db.getRecentlySoldParentProductIds(limit: 12);
+  } else {
+    final now = DateTime.now();
+    final stats = await db.getCustomerTopProducts(
+        customerId, now.subtract(const Duration(days: 180)), now,
+        limit: 12);
+    ids = [for (final s in stats) s.productId];
+  }
+  return [
+    for (final id in ids)
+      if (byId[id] != null) byId[id]!,
+  ].take(8).toList();
+});
+
 /// Detail katalog per produk: harga satuan dasar + jumlah satuan.
 class CatalogDetail {
   const CatalogDetail({
@@ -2040,6 +2090,14 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
     final isGrid = ref.watch(kasirGridProvider);
     final heldCount = ref.watch(_heldCountProvider).valueOrNull ?? 0;
     final selectedGroup = ref.watch(_kasirSelectedGroupProvider);
+    // Landing hanya di kasir biasa (mode katalog & tambah-belanjaan memerlukan
+    // daftar langsung) dan bila pengaturan "Tampilan awal" = Landing.
+    final landingOn = ref.watch(kasirLandingProvider) &&
+        !_isCatalogMode &&
+        !_isAddMode;
+    final showAll = ref.watch(_kasirShowAllProvider(_cartId));
+    final isLanding =
+        landingOn && query.isEmpty && selectedGroup == null && !showAll;
     final productsAsync =
         ref.watch(_kasirProductsProvider((query, selectedGroup)));
     final cs = Theme.of(context).colorScheme;
@@ -2099,7 +2157,18 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
             // Mode katalog: sembunyikan Antrian & Riwayat agar tak ambigu.
             showQueueAndHistory: !_isCatalogMode,
           ),
-          const _KasirCategoryChipRow(),
+          if (!isLanding)
+            _KasirCategoryChipRow(
+              showHome: landingOn,
+              onHome: () {
+                _searchCtrl.clear();
+                ref.read(_kasirSearchProvider(_cartId).notifier).state = '';
+                ref.read(_kasirSelectedGroupProvider.notifier).state = null;
+                ref.read(_kasirShowAllProvider(_cartId).notifier).state =
+                    false;
+                _searchFocus.unfocus();
+              },
+            ),
           Expanded(
             // Tap atau scroll di mana pun di bawah topbar keluar dari state
             // input pencarian (fokus hilang → kolom shrink lewat listener di
@@ -2164,7 +2233,25 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
                           : const SizedBox(width: double.infinity),
                     ),
                     Expanded(
-                      child: StepperActiveScope(
+                      child: isLanding
+                          ? _KasirLanding(
+                              cartId: _cartId,
+                              onFocusSearch: _searchFocus.requestFocus,
+                              onScan: _openScanner,
+                              onShowAll: () => ref
+                                  .read(_kasirShowAllProvider(_cartId).notifier)
+                                  .state = true,
+                              tileBuilder: (p) => _ProductListTile(
+                                product: p,
+                                cartId: _cartId,
+                                onTapBody: () => _openEntry(p),
+                                onQuickAdd: _quickAdd,
+                                onOpenEntry: () => _openEntry(p),
+                                onBeforeTap: _markSkipSearchCollapse,
+                                onAfterQtyChange: _highlightSearchIfActive,
+                              ),
+                            )
+                          : StepperActiveScope(
                         child: productsAsync.when(
                           data: (prods) {
                             if (prods.isEmpty) {
@@ -2451,23 +2538,226 @@ const _kSearchAnimCurve = Curves.easeOutCubic;
 /// (jaraknya konsisten, bukan menimpa tombol scan).
 const _kTbGap = 4.0;
 
+/// Tampilan awal layar Kasir (meniru landing katalog HTML): sapaan, kolom cari
+/// besar + tombol scan, chip kategori di tengah, lalu "Terlaris" dan
+/// "Terakhir dijual" / "Sering dibeli <pelanggan>" dengan stepper langsung.
+/// Muncul HANYA saat kolom cari kosong, tak ada kategori dipilih, dan
+/// "Semua produk" belum ditekan. Kolom cari besar hanya PINTU: ketukannya
+/// memberi fokus ke kolom cari topbar (satu-satunya TextField — fokus,
+/// scanner HID, dan pencarian tidak berubah).
+class _KasirLanding extends ConsumerWidget {
+  const _KasirLanding({
+    required this.cartId,
+    required this.onFocusSearch,
+    required this.onScan,
+    required this.onShowAll,
+    required this.tileBuilder,
+  });
+
+  final String cartId;
+  final VoidCallback onFocusSearch;
+  final VoidCallback onScan;
+  final VoidCallback onShowAll;
+  final Widget Function(Product) tileBuilder;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cs = Theme.of(context).colorScheme;
+    final groups =
+        ref.watch(_kasirGroupsProvider).valueOrNull ?? const <ProductGroup>[];
+    final customerId = ref.watch(cartMetaProvider(cartId)).customerId;
+    final customerName = ref.watch(cartMetaProvider(cartId)).customerName;
+    final top = ref.watch(_landingTopProvider);
+    final recent = ref.watch(_landingRecentProvider(customerId));
+    final topIds = {for (final p in top.valueOrNull ?? const <Product>[]) p.id};
+    // Hindari produk yang sama tampil dua kali di layar yang sama.
+    final recentList = [
+      for (final p in recent.valueOrNull ?? const <Product>[])
+        if (!topIds.contains(p.id)) p,
+    ];
+
+    Widget section(String title, Key key, AsyncValue<List<Product>> async,
+        List<Product> items) {
+      if (async.isLoading && items.isEmpty) {
+        return Column(
+          key: key,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _LandingSectionTitle(title),
+            const SkeletonRow(),
+            const SkeletonRow(nameFactor: 0.4),
+          ],
+        );
+      }
+      if (items.isEmpty) return SizedBox.shrink(key: key);
+      return Column(
+        key: key,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _LandingSectionTitle(title),
+          for (var i = 0; i < items.length; i++) ...[
+            if (i > 0)
+              Divider(height: 1, indent: 62, color: cs.outlineVariant),
+            tileBuilder(items[i]),
+          ],
+        ],
+      );
+    }
+
+    return ListView(
+      key: const Key('kasir-landing'),
+      padding: const EdgeInsets.only(bottom: 24),
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 28, 20, 4),
+          child: Column(
+            children: [
+              Text(
+                'Mau jual apa hari ini?',
+                textAlign: TextAlign.center,
+                style: AppTheme.numStyle(context, size: 26),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Scan barang, ketik nama, atau pilih kategori',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+          child: Material(
+            color: cs.surfaceContainerLow,
+            shape: StadiumBorder(side: BorderSide(color: cs.outlineVariant)),
+            child: InkWell(
+              key: const Key('landing-search'),
+              customBorder: const StadiumBorder(),
+              onTap: onFocusSearch,
+              child: SizedBox(
+                height: 52,
+                child: Row(
+                  children: [
+                    const SizedBox(width: 16),
+                    Icon(Icons.search_rounded, color: cs.onSurfaceVariant),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text('Cari produk…',
+                          style: TextStyle(
+                              fontSize: 15, color: cs.onSurfaceVariant)),
+                    ),
+                    IconButton(
+                      key: const Key('landing-scan'),
+                      tooltip: 'Scan barcode',
+                      onPressed: onScan,
+                      icon: Icon(Icons.qr_code_scanner_rounded,
+                          color: AppTheme.scanFg(
+                              Theme.of(context).brightness ==
+                                  Brightness.dark)),
+                    ),
+                    const SizedBox(width: 4),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              PressScale(
+                depth: 0.05,
+                child: ActionChip(
+                  key: const Key('landing-all'),
+                  label: const Text('Semua produk',
+                      style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white)),
+                  backgroundColor: cs.primary,
+                  side: BorderSide.none,
+                  onPressed: onShowAll,
+                ),
+              ),
+              for (final g in groups)
+                PressScale(
+                  depth: 0.05,
+                  child: ActionChip(
+                    key: Key('landing-cat-${g.id}'),
+                    label:
+                        Text(g.name!, style: const TextStyle(fontSize: 12.5)),
+                    side: BorderSide(color: cs.outlineVariant),
+                    backgroundColor: cs.surface,
+                    onPressed: () => ref
+                        .read(_kasirSelectedGroupProvider.notifier)
+                        .state = g.id,
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 4),
+        section('Terlaris', const Key('landing-top'), top,
+            top.valueOrNull ?? const <Product>[]),
+        section(
+            customerName != null && customerName.isNotEmpty
+                ? 'Sering dibeli $customerName'
+                : 'Terakhir dijual',
+            const Key('landing-recent'),
+            recent,
+            recentList),
+      ],
+    );
+  }
+}
+
+class _LandingSectionTitle extends StatelessWidget {
+  const _LandingSectionTitle(this.text);
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 12.5,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.3,
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+      ),
+    );
+  }
+}
+
 /// Item 54 — chip kategori tab Kasir: tombol kecil di bawah topbar, tap
 /// untuk filter (single-select — union kategori utama + tag tambahan,
 /// lihat [AppDatabase.watchProductsForKasir]), hold+drag untuk reorder
 /// (tersimpan ke `sortOrder` via [AppDatabase.reorderProductGroups]).
 /// Kosong total (tidak ada kategori bernama) → tidak render apa pun.
 class _KasirCategoryChipRow extends ConsumerWidget {
-  const _KasirCategoryChipRow();
+  const _KasirCategoryChipRow({this.showHome = false, this.onHome});
+
+  /// Landing aktif: tampilkan chip "Beranda" di depan untuk kembali ke landing.
+  final bool showHome;
+  final VoidCallback? onHome;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final groupsAsync = ref.watch(_kasirGroupsProvider);
     final groups = groupsAsync.valueOrNull ?? const <ProductGroup>[];
-    if (groups.isEmpty) return const SizedBox.shrink();
+    if (groups.isEmpty && !showHome) return const SizedBox.shrink();
     final selected = ref.watch(_kasirSelectedGroupProvider);
     final scheme = Theme.of(context).colorScheme;
 
-    return SizedBox(
+    final list = SizedBox(
       height: 40,
       child: ReorderableListView(
         scrollDirection: Axis.horizontal,
@@ -2508,6 +2798,31 @@ class _KasirCategoryChipRow extends ConsumerWidget {
                 ),  // PressScale
               ),
             ),
+        ],
+      ),
+    );
+    if (!showHome) return list;
+    // Chip "Beranda" tetap di kiri (di luar daftar yang bisa diurut ulang).
+    return SizedBox(
+      height: 40,
+      child: Row(
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 12),
+            child: PressScale(
+              depth: 0.05,
+              child: ActionChip(
+                key: const Key('kasir-home-chip'),
+                avatar: const Icon(Icons.home_rounded, size: 16),
+                label: const Text('Beranda', style: TextStyle(fontSize: 12)),
+                onPressed: onHome,
+                visualDensity: VisualDensity.compact,
+                side: BorderSide.none,
+                padding: EdgeInsets.zero,
+              ),
+            ),
+          ),
+          Expanded(child: list),
         ],
       ),
     );

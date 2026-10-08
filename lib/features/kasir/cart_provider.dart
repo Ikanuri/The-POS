@@ -435,3 +435,29 @@ class KasirGridNotifier extends StateNotifier<bool> {
 
 final kasirGridProvider =
     StateNotifierProvider<KasirGridNotifier, bool>((ref) => KasirGridNotifier());
+
+/// Pilihan tampilan AWAL layar Kasir: true = landing (kolom cari besar,
+/// Terlaris, Terakhir dijual, kategori) sebelum daftar produk; false = langsung
+/// daftar semua produk seperti dulu. Disimpan ke prefs (per perangkat).
+class KasirLandingNotifier extends StateNotifier<bool> {
+  KasirLandingNotifier() : super(true) {
+    _load();
+  }
+
+  static const _prefKey = 'kasir_landing_view';
+
+  Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    state = prefs.getBool(_prefKey) ?? true;
+  }
+
+  Future<void> set(bool value) async {
+    state = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_prefKey, value);
+  }
+}
+
+final kasirLandingProvider = StateNotifierProvider<KasirLandingNotifier, bool>(
+    (ref) => KasirLandingNotifier());

@@ -1,3 +1,4 @@
+import '../kasir/cart_provider.dart' show kasirLandingProvider;
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -442,6 +443,17 @@ class PengaturanScreen extends ConsumerWidget {
                           onTap: () => _showFontScaleDialog(context, ref),
                         );
                       }),
+                      SwitchListTile(
+                        key: const Key('setting-kasir-landing'),
+                        secondary: const Icon(Icons.home_outlined),
+                        title: const Text('Tampilan Awal Kasir'),
+                        subtitle: Text(ref.watch(kasirLandingProvider)
+                            ? 'Landing — Terlaris, Terakhir dijual & kategori'
+                            : 'Langsung daftar semua produk'),
+                        value: ref.watch(kasirLandingProvider),
+                        onChanged: (v) =>
+                            ref.read(kasirLandingProvider.notifier).set(v),
+                      ),
                     ],
                   ),
                 ),
