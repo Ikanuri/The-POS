@@ -34,4 +34,21 @@ void main() {
     // Tag rilis resmi hanya lewat jalur production.
     expect(wf, isNot(contains('flutter build apk --release --target-platform')));
   });
+
+  test('ikon beta ada di semua densitas, berbeda dari ikon produksi', () {
+    const sizes = {'mdpi': 48, 'hdpi': 72, 'xhdpi': 96, 'xxhdpi': 144, 'xxxhdpi': 192};
+    sizes.forEach((density, px) {
+      final beta = File('android/app/src/beta/res/mipmap-$density/ic_launcher.png');
+      final prod = File('android/app/src/main/res/mipmap-$density/ic_launcher.png');
+      expect(beta.existsSync(), isTrue, reason: density);
+      final b = beta.readAsBytesSync();
+      // PNG: lebar & tinggi di header IHDR (byte 16..23).
+      int be32(int o) => (b[o] << 24) | (b[o + 1] << 16) | (b[o + 2] << 8) | b[o + 3];
+      expect(be32(16), px, reason: 'lebar $density');
+      expect(be32(20), px, reason: 'tinggi $density');
+      expect(b, isNot(equals(prod.readAsBytesSync())), reason: density);
+    });
+    // Ikon produksi tidak disentuh: tidak ada override di flavor production.
+    expect(Directory('android/app/src/production').existsSync(), isFalse);
+  });
 }
