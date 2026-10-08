@@ -35,6 +35,7 @@ void main() {
       costPrice: 2000,
     );
     SharedPreferences.setMockInitialValues({
+      'kasir_landing_view': false,
       'cart_v1_main': jsonEncode([walkin.toJson()]),
     });
 
@@ -94,8 +95,8 @@ void main() {
     // terkait Item 18 (murni logika switch). Test ini menegaskan state DB.
     for (var ex = tester.takeException(); ex != null;) {
       final s = ex.toString();
-      expect(s.contains('overflowed') || s.contains('Multiple exceptions'),
-          isTrue,
+      expect(
+          s.contains('overflowed') || s.contains('Multiple exceptions'), isTrue,
           reason: 'hanya overflow layout pre-existing yang boleh: $s');
       ex = tester.takeException();
     }

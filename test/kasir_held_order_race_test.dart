@@ -1,3 +1,4 @@
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -24,6 +25,10 @@ import 'package:the_pos/features/kasir/kasir_screen.dart';
 /// orders) — WAJIB `drain()` di akhir tiap test yg mem-pump-nya, lihat
 /// CLAUDE.md §Gotcha (`kasir_add_mode_paste_order_test.dart`).
 void main() {
+  // Layar Kasir default = landing; test ini menguji DAFTAR produk langsung.
+  setUp(() => SharedPreferences.setMockInitialValues(
+      {'kasir_landing_view': false, 'kasir_swipe_hint_count': 3}));
+
   Future<void> drain(WidgetTester tester) async {
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));

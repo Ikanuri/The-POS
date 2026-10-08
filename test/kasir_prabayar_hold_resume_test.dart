@@ -1,3 +1,4 @@
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -17,6 +18,10 @@ import 'package:the_pos/features/kasir/kasir_screen.dart';
 /// di-hold (`HeldOrders.cartJson`, key baru `prabayar`) dan ikut pulih saat
 /// di-resume — pola sama persis dgn `meta` (lihat `kasir_switch_held_test.dart`).
 void main() {
+  // Layar Kasir default = landing; test ini menguji DAFTAR produk langsung.
+  setUp(() => SharedPreferences.setMockInitialValues(
+      {'kasir_landing_view': false, 'kasir_swipe_hint_count': 3}));
+
   Future<void> drain(WidgetTester tester) async {
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));
@@ -223,8 +228,11 @@ void main() {
     expect(held, hasLength(1));
     final decoded = jsonDecode(held.single.cartJson) as Map<String, dynamic>;
     expect(decoded['prabayarChangeTaken'], 10000);
-    expect(container.read(cartPrabayarProvider(kMainCartId).notifier)
-        .changeTakenTotal, 0,
+    expect(
+        container
+            .read(cartPrabayarProvider(kMainCartId).notifier)
+            .changeTakenTotal,
+        0,
         reason: 'ikut ter-clear dari provider aktif sama seperti entri');
 
     // Resume — changeTakenTotal harus terpulihkan UTUH (bukan 0).
@@ -238,8 +246,8 @@ void main() {
             .read(cartPrabayarProvider(kMainCartId).notifier)
             .changeTakenTotal,
         10000);
-    expect(container.read(cartPrabayarProvider(kMainCartId)).single.amount,
-        30000);
+    expect(
+        container.read(cartPrabayarProvider(kMainCartId)).single.amount, 30000);
 
     await drain(tester);
   });
@@ -310,8 +318,8 @@ void main() {
             .changeTakenTotal,
         0);
     expect(container.read(cartPrabayarProvider(kMainCartId)), hasLength(1));
-    expect(container.read(cartPrabayarProvider(kMainCartId)).single.amount,
-        5000);
+    expect(
+        container.read(cartPrabayarProvider(kMainCartId)).single.amount, 5000);
 
     await drain(tester);
   });

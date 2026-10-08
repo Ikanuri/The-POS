@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:the_pos/core/database/app_database.dart';
 import 'package:the_pos/core/providers/device_provider.dart';
 import 'package:the_pos/core/theme/app_theme.dart';
+import 'package:the_pos/features/kasir/kasir_screen.dart' show kasirStickerProvider;
 
 /// Harness widget test: render [child] dengan `databaseProvider` &
 /// `deviceProvider` diganti versi palsu, tanpa device/SQLCipher sungguhan.
@@ -74,6 +75,9 @@ Future<void> pumpWithFakeApp(
         databaseProvider.overrideWithValue(db),
         deviceProvider
             .overrideWith((ref) => DeviceNotifier()..state = fakeDevice),
+        // Stiker Lottie berulang selamanya -> pumpAndSettle menggantung;
+        // harness mematikannya (test stiker meng-override sendiri).
+        kasirStickerProvider.overrideWith((ref, slot) async => null),
         ...extraOverrides,
       ],
       child: MaterialApp(

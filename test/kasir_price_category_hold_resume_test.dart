@@ -1,3 +1,4 @@
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -18,6 +19,10 @@ import 'package:the_pos/features/kasir/kasir_screen.dart';
 /// baru `priceCategory`) dan ikut pulih saat di-resume — pola sama persis
 /// dgn fitur Pra-Bayar (`kasir_prabayar_hold_resume_test.dart`).
 void main() {
+  // Layar Kasir default = landing; test ini menguji DAFTAR produk langsung.
+  setUp(() => SharedPreferences.setMockInitialValues(
+      {'kasir_landing_view': false, 'kasir_swipe_hint_count': 3}));
+
   Future<void> drain(WidgetTester tester) async {
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));
@@ -115,7 +120,8 @@ void main() {
           originalPrice: 3000,
           costPrice: 2000,
         ));
-    container.read(cartPriceCategoryProvider(kMainCartId).notifier)
+    container
+        .read(cartPriceCategoryProvider(kMainCartId).notifier)
         .setCategory(catId);
     // Pelanggan sudah dipilih -> `_holdCurrent` langsung tahan tanpa dialog
     // label (pola sama `kasir_prabayar_hold_resume_test.dart`).

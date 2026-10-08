@@ -1,3 +1,4 @@
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 
 import 'package:drift/native.dart';
@@ -18,6 +19,10 @@ import 'package:the_pos/features/kasir/kasir_screen.dart';
 /// `HeldOrders.cartJson` key "prabayar" via `_parseHeldPayload` — TANPA perlu
 /// tap kartu itu dulu.
 void main() {
+  // Layar Kasir default = landing; test ini menguji DAFTAR produk langsung.
+  setUp(() => SharedPreferences.setMockInitialValues(
+      {'kasir_landing_view': false, 'kasir_swipe_hint_count': 3}));
+
   Future<void> drain(WidgetTester tester) async {
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));
@@ -43,7 +48,8 @@ void main() {
     costPrice: 2500,
   );
 
-  Future<ProviderContainer> pumpQueue(WidgetTester tester, AppDatabase db) async {
+  Future<ProviderContainer> pumpQueue(
+      WidgetTester tester, AppDatabase db) async {
     await tester.binding.setSurfaceSize(const Size(430, 2400));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 

@@ -1,3 +1,4 @@
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -11,6 +12,10 @@ import 'helpers/pump_app.dart';
 /// produk berikutnya cukup tap field lalu ketik (langsung menimpa), tanpa
 /// harus menjangkau tombol x untuk menghapus dulu.
 void main() {
+  // Layar Kasir default = landing; test ini menguji DAFTAR produk langsung.
+  setUp(() => SharedPreferences.setMockInitialValues(
+      {'kasir_landing_view': false, 'kasir_swipe_hint_count': 3}));
+
   TextField searchField(WidgetTester tester) =>
       tester.widget<TextField>(find.byType(TextField).first);
 
@@ -52,7 +57,8 @@ void main() {
     await db.close();
   });
 
-  testWidgets('fokus pertama saat field kosong → tidak ada teks untuk di-select',
+  testWidgets(
+      'fokus pertama saat field kosong → tidak ada teks untuk di-select',
       (tester) async {
     final db = AppDatabase(NativeDatabase.memory());
     await pumpWithFakeApp(tester, db: db, child: const KasirScreen());

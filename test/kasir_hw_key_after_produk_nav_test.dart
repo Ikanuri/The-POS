@@ -51,7 +51,8 @@ void main() {
       ],
       tiersByUnitTempId: {
         'u1': [
-          PriceTiersCompanion.insert(id: 't1', productUnitId: 'u1', price: 2500),
+          PriceTiersCompanion.insert(
+              id: 't1', productUnitId: 'u1', price: 2500),
         ],
       },
       barcodesByUnitTempId: const {},
@@ -69,6 +70,7 @@ void main() {
       costPrice: 2000,
     );
     SharedPreferences.setMockInitialValues({
+      'kasir_landing_view': false,
       'cart_v1_main': jsonEncode([item.toJson()]),
     });
 
@@ -86,14 +88,15 @@ void main() {
 
     final container = ProviderContainer(overrides: [
       databaseProvider.overrideWithValue(db),
-      deviceProvider.overrideWith((ref) => DeviceNotifier()..state = fakeDevice),
+      deviceProvider
+          .overrideWith((ref) => DeviceNotifier()..state = fakeDevice),
       // Test ini lewat routerProvider sungguhan (bukan cuma widget kasir
       // langsung) — sejak gerbang lisensi diaktifkan (public key ditanam),
       // state default licenseProvider (belum aktivasi) akan redirect ke
       // /aktivasi sebelum sempat sampai /kasir. Override supaya test tetap
       // fokus ke bug HID-nya, bukan soal lisensi.
-      licenseProvider.overrideWith(
-          (ref) => LicenseNotifier()..state = const LicenseState(exp: 'selamanya')),
+      licenseProvider.overrideWith((ref) =>
+          LicenseNotifier()..state = const LicenseState(exp: 'selamanya')),
     ]);
     addTearDown(container.dispose);
 
@@ -133,8 +136,8 @@ void main() {
     // kasir_switch_held_test.dart.
     for (var ex = tester.takeException(); ex != null;) {
       final s = ex.toString();
-      expect(s.contains('overflowed') || s.contains('Multiple exceptions'),
-          isTrue,
+      expect(
+          s.contains('overflowed') || s.contains('Multiple exceptions'), isTrue,
           reason: 'hanya overflow layout pre-existing yang boleh: $s');
       ex = tester.takeException();
     }

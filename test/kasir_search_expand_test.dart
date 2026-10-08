@@ -1,3 +1,4 @@
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -11,6 +12,10 @@ import 'helpers/pump_app.dart';
 /// tap/scroll di luar field mengeluarkan fokus TANPA menghapus teks yang
 /// sudah diketik (field hanya shrink secara visual).
 void main() {
+  // Layar Kasir default = landing; test ini menguji DAFTAR produk langsung.
+  setUp(() => SharedPreferences.setMockInitialValues(
+      {'kasir_landing_view': false, 'kasir_swipe_hint_count': 3}));
+
   Future<double> searchFieldWidth(WidgetTester tester) async {
     final box = tester.renderObject<RenderBox>(find.byType(TextField).first);
     return box.size.width;

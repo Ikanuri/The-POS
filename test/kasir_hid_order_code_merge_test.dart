@@ -1,3 +1,4 @@
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -26,10 +27,15 @@ import 'package:the_pos/features/kasir/kasir_screen.dart';
 /// dari gotcha lama soal TextField yang TIDAK bisa menerima digit via raw
 /// key event, itu soal jalur IME `EditableText`, bukan handler mentah ini).
 void main() {
+  // Layar Kasir default = landing; test ini menguji DAFTAR produk langsung.
+  setUp(() => SharedPreferences.setMockInitialValues(
+      {'kasir_landing_view': false, 'kasir_swipe_hint_count': 3}));
+
   Future<AppDatabase> seedProduct() async {
     final db = AppDatabase(NativeDatabase.memory());
-    await db.into(db.products).insert(
-        ProductsCompanion.insert(id: 'p1', name: 'Sedap Goreng'));
+    await db
+        .into(db.products)
+        .insert(ProductsCompanion.insert(id: 'p1', name: 'Sedap Goreng'));
     await db.into(db.productUnits).insert(ProductUnitsCompanion.insert(
           id: 'u1',
           productId: 'p1',
@@ -60,7 +66,8 @@ void main() {
     await tester.pumpWidget(ProviderScope(
       overrides: [
         databaseProvider.overrideWithValue(db),
-        deviceProvider.overrideWith((ref) => DeviceNotifier()..state = fakeDevice),
+        deviceProvider
+            .overrideWith((ref) => DeviceNotifier()..state = fakeDevice),
       ],
       child: MaterialApp(
         theme: AppTheme.light(),
