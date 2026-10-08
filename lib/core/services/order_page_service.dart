@@ -585,8 +585,11 @@ body{
 .ph.off{display:none;}
 .ph span{position:absolute;left:0;right:0;top:0;bottom:0;display:flex;align-items:center;
   overflow:hidden;white-space:nowrap;transition:transform .32s var(--ease),opacity .28s ease;}
-.ph span i{display:block;min-width:0;font-style:normal;overflow:hidden;text-overflow:ellipsis;}
-.ph span b{color:var(--ink-2);font-weight:600;}
+.ph span i{display:flex;align-items:center;min-width:0;max-width:100%;font-style:normal;white-space:pre;}
+/* Hanya NAMA produk yang boleh terpotong (...); "Cari" dan "? Tekan →" tetap utuh. */
+.ph span i>em{flex-shrink:0;font-style:normal;}
+.ph span b{flex-shrink:1;min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--ink-2);font-weight:600;}
+.ph .ph-arr{width:15px;height:15px;margin-left:3px;color:var(--accent);}
 .ph .cur{transform:none;opacity:1;}
 .ph .up{transform:translateY(-70%);opacity:0;}
 .ph .down{transform:translateY(70%);opacity:0;}
@@ -598,7 +601,7 @@ body{
 .go .x{display:none;}
 .search.has-text .go .arr{display:none;}
 .search.has-text .go .x{display:block;}
-.search.has-text .go{background:var(--field);color:var(--ink-2);box-shadow:none;}
+.search.has-text .go{background:transparent;border:1.5px solid var(--ink-3);color:var(--ink-2);box-shadow:none;}
 .landing-below{display:none;padding:2px 16px 150px;}
 #pageMenu[data-view="landing"] .landing-below{display:block;}
 .cats-hero{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:8px;}
@@ -3017,13 +3020,21 @@ function selectCat(val){
 var SUG = (DATA.topSellers || []).filter(function(s){ return typeof s === 'string' && s.trim(); });
 var sugIdx = 0, phTimer = null;
 var phLayer = byId('phLayer'), phCur = byId('phA'), phNext = byId('phB'), goBtn = byId('goBtn');
+// Format: "Cari <b>Nama</b>? Tekan →" — memberi tahu pelanggan bahwa tombol
+// panah di kanan (atau Enter) langsung mencari saran itu.
+var ARROW_SVG = '<svg class="ph-arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>';
 function setPh(el, name){
   el.textContent = '';
   var i = document.createElement('i');
-  i.appendChild(document.createTextNode('Cari '));
+  var a = document.createElement('em');
+  a.textContent = 'Cari ';
   var b = document.createElement('b');
   b.textContent = name;
-  i.appendChild(b);
+  var c = document.createElement('em');
+  c.textContent = '? Tekan';
+  var arr = document.createElement('em');
+  arr.innerHTML = ARROW_SVG;
+  i.appendChild(a); i.appendChild(b); i.appendChild(c); i.appendChild(arr);
   el.appendChild(i);
 }
 function syncQueryUi(){
@@ -3035,8 +3046,9 @@ function syncQueryUi(){
     has ? 'Hapus pencarian' : (SUG.length ? 'Cari ' + SUG[sugIdx] : 'Cari'));
 }
 function phCanRun(){
-  return SUG.length > 1 && !document.hidden && document.activeElement !== qEl &&
-    !qEl.value && !sheetOpen;
+  // Tetap berjalan saat kolom fokus (kursor di dalam): Enter tetap mencari
+  // saran yang tampil. Berhenti begitu ada satu huruf diketik.
+  return SUG.length > 1 && !document.hidden && !qEl.value && !sheetOpen;
 }
 function phStep(){
   var next = (sugIdx + 1) % SUG.length;
@@ -3099,6 +3111,11 @@ qEl.addEventListener('keydown', function(e){
   if (!qEl.value.trim() && SUG.length) { fillSuggestion(); return; }
   immediateSearch();
   qEl.blur();
+});
+// Tombol (panah/X) tidak boleh mencuri fokus: kursor tetap di kolom cari &
+// keyboard HP tetap terbuka (pelanggan tak perlu mengetuk kolom lagi).
+['mousedown', 'pointerdown'].forEach(function(ev){
+  goBtn.addEventListener(ev, function(e){ if (document.activeElement === qEl) e.preventDefault(); });
 });
 goBtn.addEventListener('click', function(){
   if (qEl.value.length > 0) {
