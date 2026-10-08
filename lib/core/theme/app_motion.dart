@@ -22,6 +22,9 @@ class AppMotion {
   /// Perpindahan halaman.
   static const page = Duration(milliseconds: 300);
 
+  /// Angka/badge yang berubah (CounterView Telegram: ganti angka 430 ms).
+  static const counter = Duration(milliseconds: 430);
+
   // ── Kurva ───────────────────────────────────────────────────────────
   /// Bawaan umum (CSS `ease`).
   static const Curve standard = Cubic(0.25, 0.1, 0.25, 1);

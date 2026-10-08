@@ -3595,7 +3595,7 @@ class _CartBar extends StatelessWidget {
                       ),
                       BumpOnChange(
                         value: total,
-                        peak: 1.06,
+                        peak: 1.08,
                         child: Text(
                           formatRupiah(total),
                           style: AppTheme.numStyle(context,

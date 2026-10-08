@@ -1915,7 +1915,7 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                               value: total +
                                   debtSettlementTotal +
                                   preorderSettlementTotal,
-                              peak: 1.05,
+                              peak: 1.08,
                               child: Text(
                                 // Fitur "Lunasi Hutang" — REDESAIN KEDUA: nominal
                                 // Total besar naik ikut SEMUA entri pelunasan

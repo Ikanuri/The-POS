@@ -42,4 +42,28 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
     expect(scaleOf(tester), 1);
   });
+
+  testWidgets('angka BERKURANG tidak membengkak; kenaikan membengkak ~430 ms; '
+      'teks non-angka membengkak tiap berubah', (tester) async {
+    await tester.pumpWidget(host(5));
+    await tester.pumpWidget(host(4)); // turun
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(scaleOf(tester), 1);
+    await tester.pumpAndSettle();
+
+    await tester.pumpWidget(host(6)); // naik
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(scaleOf(tester), greaterThan(1.02));
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(scaleOf(tester), greaterThan(1.0)); // masih menyusut kembali (430 ms)
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pumpAndSettle();
+    expect(scaleOf(tester), 1);
+
+    await tester.pumpWidget(host('abc'));
+    await tester.pumpWidget(host('abd')); // non-angka
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(scaleOf(tester), greaterThan(1.02));
+    await tester.pumpAndSettle();
+  });
 }

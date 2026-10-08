@@ -43,7 +43,7 @@ class ItemCountBadge extends StatelessWidget {
         // Angka berdenyut halus tiap jumlah berubah.
         child: BumpOnChange(
           value: count,
-          peak: 1.25,
+          peak: 1.15,
           child: Text(
             '$count',
             style: TextStyle(
