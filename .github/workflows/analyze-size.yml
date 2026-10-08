@@ -1,0 +1,79 @@
+name: Analyze APK Size
+
+# Hanya manual (Actions > Analyze APK Size > Run workflow). Mengukur kontributor
+# ukuran APK SEBELUM memangkas apa pun; tidak menerbitkan release dan tidak
+# memakai keystore rilis (jatuh ke debug signing, ukuran tetap representatif).
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.5'
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # Konfigurasi SAMA dgn build-apk.yml (fat APK armeabi-v7a + arm64-v8a).
+      - name: Build APK + analyze size
+        run: |
+          flutter build apk --release --target-platform android-arm,android-arm64 \
+            --analyze-size | tee analyze-size.txt
+
+      - name: Rincian isi APK
+        run: |
+          APK=build/app/outputs/flutter-apk/app-release.apk
+          {
+            echo "## Ukuran APK"
+            echo
+            echo "Total: $(du -h "$APK" | cut -f1) ($(stat -c %s "$APK") byte)"
+            echo
+            echo "### Per ABI (pustaka native, terkompresi di dalam APK)"
+            echo '```'
+            unzip -lv "$APK" 'lib/*' | awk 'NR>3 && $NF ~ /^lib\// {printf "%10d  %10d  %s\n", $3, $1, $NF}' | sort -rn | head -30
+            echo '```'
+            echo "(kolom: ukuran terkompresi, ukuran asli, berkas)"
+            echo
+            echo "### Aset (font, stiker, ikon)"
+            echo '```'
+            unzip -lv "$APK" 'assets/*' | awk 'NR>3 && $NF ~ /^assets\// {printf "%10d  %10d  %s\n", $3, $1, $NF}' | sort -rn | head -40
+            echo '```'
+            echo
+            echo "### Berkas terbesar di APK"
+            echo '```'
+            unzip -lv "$APK" | awk 'NR>3 && NF>=8 {printf "%10d  %10d  %s\n", $3, $1, $NF}' | sort -rn | head -25
+            echo '```'
+            echo
+            echo "### Ringkasan --analyze-size"
+            echo '```'
+            sed -n '1,80p' analyze-size.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload rincian
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-size-analysis
+          path: |
+            analyze-size.txt
+            ~/.flutter-devtools/apk-code-size-analysis_*.json
+          retention-days: 30

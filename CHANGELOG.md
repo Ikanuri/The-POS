@@ -12,6 +12,10 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 - feat(katalog): `666181d` — feat(katalog): stepper jumlah saran terlaris + tombol Salin link hasil publish
 - feat(katalog-html): saran cari "Cari <nama>? Tekan →" (ikon panah inline; hanya nama produk terpotong), saran tetap berputar saat kolom fokus (berhenti saat ada huruf), tombol X jadi lingkaran outline & tidak mencuri fokus (pointerdown/mousedown preventDefault) sehingga kursor+keyboard tetap terbuka setelah menghapus -> kembali landing
 
+## 2026-10-08 (analisis ukuran APK)
+
+- ci: workflow manual `analyze-size.yml` (workflow_dispatch) - `flutter build apk --release --analyze-size` dgn konfigurasi sama dgn build-apk.yml, rincian per ABI/aset/berkas terbesar di Step Summary + artifact; tanpa perubahan kode aplikasi
+
 ## 2026-10-08 (kolom cari tak tertutup keyboard; dropdown jumlah saran)
 
 - fix(katalog-html): kembali ke landing (X / hapus huruf terakhir) dengan keyboard terbuka -> halaman digulir agar kolom cari terlihat di atas keyboard & tombol keranjang (`revealSearch`, juga saat fokus & visualViewport resize)
