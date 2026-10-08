@@ -79,7 +79,12 @@ class _PressScaleState extends State<PressScale>
         child: widget.child,
         builder: (context, child) {
           final s = 1 - widget.depth * _curve.value;
-          return s == 1 ? child! : Transform.scale(scale: s, child: child);
+          // SELALU Transform (bentuk pohon konstan). Dulu `s == 1 ? child :
+          // Transform` → begitu animasi tekan mulai, anak berpindah induk
+          // dan elemennya dibangun ulang; GestureDetector/InkWell di
+          // dalamnya (tombol "+", kartu) kehilangan gestur yang sedang
+          // berjalan → tap hilang, hanya terlihat memantul.
+          return Transform.scale(scale: s, child: child);
         },
       ),
     );

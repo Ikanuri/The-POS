@@ -77,4 +77,18 @@ void main() {
     await tester.pumpAndSettle();
     expect(scaleOf(tester), 1);
   });
+
+  testWidgets('REGRESI: tap yang ditahan beberapa frame (jari sungguhan) '
+      'tetap terkirim ke anak — pohon widget tidak boleh berganti bentuk '
+      'saat animasi mulai', (tester) async {
+    var taps = 0;
+    await tester.pumpWidget(host(onTap: () => taps++));
+    final g = await tester.startGesture(tester.getCenter(find.text('TOMBOL')));
+    // Beberapa frame berlalu selagi jari menempel (animasi tekan berjalan).
+    await tester.pump(const Duration(milliseconds: 16));
+    await tester.pump(const Duration(milliseconds: 60));
+    await g.up();
+    await tester.pumpAndSettle();
+    expect(taps, 1, reason: 'tap hilang: anak dibangun ulang di tengah gestur');
+  });
 }

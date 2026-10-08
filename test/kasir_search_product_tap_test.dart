@@ -154,4 +154,29 @@ void main() {
 
     await db.close();
   });
+
+  testWidgets(
+      'REGRESI (bug vital): tap "+" dengan jari MENEMPEL beberapa frame '
+      '(PressScale berjalan) tetap menambah ke keranjang — dulu pohon widget '
+      'berganti bentuk di tengah gestur sehingga tap hilang & kartu hanya '
+      'memantul', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    await _addProduct(db, name: 'Gula Pasir', price: 15000);
+    await _pumpKasir(tester, db);
+
+    final g = await tester.startGesture(
+        tester.getCenter(find.byIcon(Icons.add_rounded).first));
+    await tester.pump(const Duration(milliseconds: 16));
+    await tester.pump(const Duration(milliseconds: 70));
+    await g.up();
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.add_rounded), findsWidgets);
+    expect(find.text('1'), findsWidgets,
+        reason: 'qty harus jadi 1 setelah tap + yang ditahan beberapa frame');
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+    await db.close();
+  });
 }
