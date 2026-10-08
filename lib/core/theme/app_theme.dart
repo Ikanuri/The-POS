@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'app_page_transitions.dart';
+
 class AppTheme {
   AppTheme._();
 
@@ -201,6 +203,7 @@ class AppTheme {
     );
 
     return base.copyWith(
+      pageTransitionsTheme: AppPageTransitionsBuilder.theme,
       textTheme: GoogleFonts.hankenGroteskTextTheme(base.textTheme).apply(
         bodyColor: ink,
         displayColor: ink,
