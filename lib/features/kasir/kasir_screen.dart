@@ -46,6 +46,7 @@ import 'widgets/paste_order_sheet.dart';
 import 'widgets/tx_history_sheet.dart';
 import '../../core/theme/app_overlays.dart';
 import '../../core/widgets/bump_on_change.dart';
+import '../../core/widgets/press_scale.dart';
 
 const _kasirUuid = Uuid();
 
@@ -2489,7 +2490,9 @@ class _KasirCategoryChipRow extends ConsumerWidget {
               index: i,
               child: Padding(
                 padding: const EdgeInsets.only(right: 6),
-                child: FilterChip(
+                child: PressScale(
+                  depth: 0.05,
+                  child: FilterChip(
                   label: Text(groups[i].name!,
                       style: const TextStyle(fontSize: 12)),
                   selected: selected == groups[i].id,
@@ -2502,6 +2505,7 @@ class _KasirCategoryChipRow extends ConsumerWidget {
                   side: BorderSide.none,
                   padding: EdgeInsets.zero,
                 ),
+                ),  // PressScale
               ),
             ),
         ],
@@ -2922,7 +2926,9 @@ class _ProductCard extends ConsumerWidget {
     return Listener(
       onPointerDown: onBeforeTap == null ? null : (_) => onBeforeTap!(),
       behavior: HitTestBehavior.translucent,
-      child: Material(
+      child: PressScale(
+        depth: 0.03,
+        child: Material(
         color: cs.surfaceContainerLow,
         borderRadius: BorderRadius.circular(14),
         child: InkWell(
@@ -3039,6 +3045,7 @@ class _ProductCard extends ConsumerWidget {
           ),
         ),
       ),
+      ),  // PressScale
     );
   }
 }
@@ -3145,7 +3152,9 @@ class _ProductListTileState extends ConsumerState<_ProductListTile>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          InkWell(
+          PressScale(
+            depth: 0.02,
+            child: InkWell(
             onTap: widget.onTapBody,
             // Tahan item dengan varian → jalan pintas buka/tutup dropdown varian
             // inline (cara utama: tombol chevron di kanan).
@@ -3321,6 +3330,7 @@ class _ProductListTileState extends ConsumerState<_ProductListTile>
               ),
             ),
           ),
+          ),  // PressScale
           // Dropdown varian inline — mendorong item di bawahnya, bukan popup.
           // Membuka/menutup dianimasikan (tinggi + fade); tetap terpasang
           // selama animasi tutup, lalu dilepas saat benar-benar tertutup.
