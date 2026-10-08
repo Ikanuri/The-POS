@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/theme/app_motion.dart';
 import '../../core/providers/device_provider.dart';
 import '../shell/sync_status_banner.dart';
 import 'report_export.dart';
@@ -153,6 +154,11 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
     final result = await showMenu<(String action, String format)>(
       context: context,
       position: position,
+      popUpAnimationStyle: AnimationStyle(
+        duration: const Duration(milliseconds: 182),
+        reverseDuration: const Duration(milliseconds: 120),
+        curve: AppMotion.easeOutQuint,
+      ),
       color: Theme.of(context).colorScheme.surface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       items: [

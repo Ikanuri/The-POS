@@ -275,12 +275,18 @@ class _QuickMenuPopup extends StatefulWidget {
 
 class _QuickMenuPopupState extends State<_QuickMenuPopup>
     with SingleTickerProviderStateMixin {
+  // Ala popup Telegram: 150 ms + 16 ms per item (2 item), tumbuh dari titik
+  // pemicu (tab di bawahnya), keluar lebih singkat.
   late final _controller = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 160));
-  late final _scale =
-      CurvedAnimation(parent: _controller, curve: Curves.easeOutBack);
+      vsync: this,
+      duration: const Duration(milliseconds: 182),
+      reverseDuration: const Duration(milliseconds: 120));
+  late final _scale = CurvedAnimation(
+      parent: _controller,
+      curve: AppMotion.easeOutQuint,
+      reverseCurve: AppMotion.easeIn.flipped);
   late final _fade =
-      CurvedAnimation(parent: _controller, curve: Curves.easeOut);
+      CurvedAnimation(parent: _controller, curve: AppMotion.easeOut);
 
   @override
   void initState() {
