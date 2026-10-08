@@ -7,6 +7,22 @@ part of 'kasir_screen.dart';
 // menduplikasinya; hanya TATA LETAK & tampilan yang berbeda dari Klasik.
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// Nama produk yang SERING DIBELI pelanggan di keranjang (180 hari) — bahan
+/// saran bergilir di kolom cari. Tanpa pelanggan = kosong (hint statis).
+final _customerSuggestionsProvider = FutureProvider.autoDispose
+    .family<List<String>, String?>((ref, customerId) async {
+  if (customerId == null) return const [];
+  final db = ref.watch(databaseProvider);
+  final now = DateTime.now();
+  final stats = await db.getCustomerTopProducts(
+      customerId, now.subtract(const Duration(days: 180)), now,
+      limit: 8);
+  return [
+    for (final s in stats)
+      if (s.name.trim().isNotEmpty) s.name.trim(),
+  ];
+});
+
 extension _KasirModernX on _KasirScreenState {
   /// Antrian pesanan ditahan (tombol pojok). Sementara memakai panel antrian
   /// yang sama dengan Klasik di dalam lembar bawah.
@@ -57,6 +73,7 @@ extension _KasirModernX on _KasirScreenState {
             child: Column(
               children: [
                 _ModernSearchStage(
+                  cartId: _cartId,
                   isLanding: isLanding,
                   ctrl: _searchCtrl,
                   focus: _searchFocus,
@@ -235,6 +252,7 @@ class _ModernBlobs extends StatelessWidget {
 /// kolom cari naik ke atas (satu TextField yang sama — fokus & kursor aman).
 class _ModernSearchStage extends ConsumerStatefulWidget {
   const _ModernSearchStage({
+    required this.cartId,
     required this.isLanding,
     required this.ctrl,
     required this.focus,
@@ -242,6 +260,7 @@ class _ModernSearchStage extends ConsumerStatefulWidget {
     required this.onScan,
   });
 
+  final String cartId;
   final bool isLanding;
   final TextEditingController ctrl;
   final FocusNode focus;
@@ -253,6 +272,18 @@ class _ModernSearchStage extends ConsumerStatefulWidget {
 }
 
 class _ModernSearchStageState extends ConsumerState<_ModernSearchStage> {
+  /// Saran yang SEDANG tampil di hint (diisi `_RotatingHint`).
+  String? _currentSuggestion;
+
+  /// Cari saran yang sedang tampil (panah / Enter pada kolom kosong).
+  void _searchSuggestion() {
+    final q = _currentSuggestion;
+    if (q == null || q.isEmpty) return;
+    widget.ctrl.text = q;
+    widget.ctrl.selection = TextSelection.collapsed(offset: q.length);
+    widget.onChanged(q);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -287,6 +318,10 @@ class _ModernSearchStageState extends ConsumerState<_ModernSearchStage> {
     final sticker =
         ref.watch(kasirStickerProvider(KasirStickerSlot.landing)).valueOrNull;
     final dur = AppMotion.dur(context, AppMotion.page);
+    final customerId = ref.watch(cartMetaProvider(widget.cartId)).customerId;
+    final suggestions =
+        ref.watch(_customerSuggestionsProvider(customerId)).valueOrNull ??
+            const <String>[];
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -358,19 +393,52 @@ class _ModernSearchStageState extends ConsumerState<_ModernSearchStage> {
                 Icon(Icons.search_rounded, color: cs.onSurfaceVariant),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: TextField(
-                    key: const Key('modern-search'),
-                    controller: widget.ctrl,
-                    focusNode: widget.focus,
-                    onChanged: widget.onChanged,
-                    textInputAction: TextInputAction.search,
-                    style: const TextStyle(fontSize: 15),
-                    decoration: InputDecoration.collapsed(
-                      hintText: 'Cari produk…',
-                      hintStyle:
-                          TextStyle(fontSize: 15, color: cs.onSurfaceVariant),
-                    ),
+                  child: Stack(
+                    alignment: Alignment.centerLeft,
+                    children: [
+                      TextField(
+                        key: const Key('modern-search'),
+                        controller: widget.ctrl,
+                        focusNode: widget.focus,
+                        onChanged: widget.onChanged,
+                        onSubmitted: (v) {
+                          if (v.isEmpty) _searchSuggestion();
+                        },
+                        textInputAction: TextInputAction.search,
+                        style: const TextStyle(fontSize: 15),
+                        decoration:
+                            const InputDecoration.collapsed(hintText: ''),
+                      ),
+                      // Hint: saran bergilir (produk yang sering dibeli
+                      // pelanggan) atau 'Cari produk…'. Hilang saat mengetik.
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: ValueListenableBuilder<TextEditingValue>(
+                            valueListenable: widget.ctrl,
+                            builder: (_, v, __) => v.text.isNotEmpty
+                                ? const SizedBox.shrink()
+                                : _RotatingHint(
+                                    names: suggestions,
+                                    onChanged: (n) => _currentSuggestion = n,
+                                  ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
+                ),
+                ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: widget.ctrl,
+                  builder: (_, v, __) =>
+                      (v.text.isEmpty && suggestions.isNotEmpty)
+                          ? IconButton(
+                              key: const Key('modern-suggest-go'),
+                              tooltip: 'Cari saran ini',
+                              icon: Icon(Icons.arrow_forward_rounded,
+                                  size: 20, color: cs.primary),
+                              onPressed: _searchSuggestion,
+                            )
+                          : const SizedBox.shrink(),
                 ),
                 ValueListenableBuilder<TextEditingValue>(
                   valueListenable: widget.ctrl,
@@ -926,6 +994,106 @@ class _LampSwitch extends StatelessWidget {
                 color: dark ? const Color(0xFF3B3430) : const Color(0xFFD97757),
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Hint kolom cari yang bergilir seperti placeholder katalog HTML: "Cari
+/// <b>Nama Produk</b>" berganti tiap ~3 dtk dengan geser-naik + pudar. Tanpa
+/// saran -> 'Cari produk…' statis (tanpa timer). "Kurangi animasi" -> berganti
+/// langsung tanpa geser.
+class _RotatingHint extends StatefulWidget {
+  const _RotatingHint({required this.names, required this.onChanged});
+  final List<String> names;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  State<_RotatingHint> createState() => _RotatingHintState();
+}
+
+class _RotatingHintState extends State<_RotatingHint> {
+  Timer? _timer;
+  int _i = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _start();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _report());
+  }
+
+  @override
+  void didUpdateWidget(_RotatingHint old) {
+    super.didUpdateWidget(old);
+    if (old.names.join('|') != widget.names.join('|')) {
+      _i = 0;
+      _start();
+      WidgetsBinding.instance.addPostFrameCallback((_) => _report());
+    }
+  }
+
+  void _start() {
+    _timer?.cancel();
+    if (widget.names.length < 2) return;
+    _timer = Timer.periodic(const Duration(milliseconds: 3200), (_) {
+      if (!mounted) return;
+      setState(() => _i = (_i + 1) % widget.names.length);
+      _report();
+    });
+  }
+
+  void _report() {
+    if (!mounted) return;
+    widget.onChanged(widget.names.isEmpty ? null : widget.names[_i]);
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    // Hint hilang (mengetik) -> tidak ada saran aktif.
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final style = TextStyle(fontSize: 15, color: cs.onSurfaceVariant);
+    if (widget.names.isEmpty) {
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: Text('Cari produk…', style: style),
+      );
+    }
+    final name = widget.names[_i % widget.names.length];
+    return ClipRect(
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: AnimatedSwitcher(
+          duration: AppMotion.dur(context, AppMotion.medium),
+          switchInCurve: AppMotion.easeOutQuint,
+          transitionBuilder: (child, anim) => FadeTransition(
+            opacity: anim,
+            child: SlideTransition(
+              position:
+                  Tween<Offset>(begin: const Offset(0, 0.6), end: Offset.zero)
+                      .animate(anim),
+              child: child,
+            ),
+          ),
+          child: Text.rich(
+            TextSpan(style: style, children: [
+              const TextSpan(text: 'Cari '),
+              TextSpan(
+                  text: name,
+                  style: TextStyle(
+                      fontWeight: FontWeight.w700, color: cs.onSurface)),
+            ]),
+            key: ValueKey(name),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
       ),

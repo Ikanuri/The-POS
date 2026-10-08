@@ -8,6 +8,7 @@ import 'package:the_pos/core/database/app_database.dart';
 import 'package:the_pos/core/providers/device_provider.dart';
 import 'package:the_pos/core/theme/app_theme.dart';
 import 'package:the_pos/core/providers/theme_provider.dart';
+import 'package:the_pos/features/kasir/cart_meta_provider.dart';
 import 'package:the_pos/features/kasir/cart_provider.dart';
 import 'package:the_pos/features/kasir/kasir_screen.dart';
 import 'package:the_pos/features/kasir/widgets/paste_order_sheet.dart';
@@ -330,6 +331,93 @@ void main() {
       await tester.tap(find.byKey(const Key('fab-grid')));
       await tester.pump();
       expect(container.read(kasirGridProvider), !before);
+
+      await _drain(tester);
+      await db.close();
+    });
+  });
+
+  group('saran pelanggan di kolom cari', () {
+    Future<void> saleFor(
+        AppDatabase db, String customerId, String productId, int times) async {
+      for (var i = 0; i < times; i++) {
+        final txId = 'tc${_seq++}';
+        await db.into(db.transactions).insert(TransactionsCompanion.insert(
+              id: txId,
+              localId: 'K-$txId',
+              status: 'lunas',
+              total: 1000,
+              paid: 1000,
+              changeAmount: 0,
+              paymentMethod: 'tunai',
+              customerId: Value(customerId),
+              createdAt: Value(DateTime.now()),
+            ));
+        await db
+            .into(db.transactionItems)
+            .insert(TransactionItemsCompanion.insert(
+              id: '$txId-0',
+              transactionId: txId,
+              productId: productId,
+              productUnitId: '$productId-u',
+              qty: 1,
+              priceAtSale: 1000,
+              originalPrice: 1000,
+              subtotal: 1000 * (3 - i % 2),
+            ));
+      }
+    }
+
+    testWidgets('tanpa pelanggan: hint statis "Cari produk…", tanpa panah',
+        (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      await _addProduct(db, 'Gula Pasir');
+      await _pumpKasir(tester, db, prefs: modern);
+      expect(find.text('Cari produk…'), findsOneWidget);
+      expect(find.byKey(const Key('modern-suggest-go')), findsNothing);
+      await _drain(tester);
+      await db.close();
+    });
+
+    testWidgets(
+        'dengan pelanggan: hint bergilir produk yang sering dibeli '
+        'pelanggan itu; panah mencari saran yang tampil', (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      final gula = await _addProduct(db, 'Gula Pasir');
+      final beras = await _addProduct(db, 'Beras Rojolele');
+      await _addProduct(db, 'Sabun Mandi');
+      await saleFor(db, 'c1', gula, 3);
+      await saleFor(db, 'c1', beras, 1);
+      await _pumpKasir(tester, db, prefs: modern);
+      final container =
+          ProviderScope.containerOf(tester.element(find.byType(KasirScreen)));
+      container
+          .read(cartMetaProvider(kMainCartId).notifier)
+          .setCustomer('c1', 'Bu Rina');
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(find.textContaining('Cari Gula Pasir', findRichText: true),
+          findsOneWidget);
+      expect(find.byKey(const Key('modern-suggest-go')), findsOneWidget);
+
+      // Bergilir ke saran berikutnya.
+      await tester.pump(const Duration(milliseconds: 3300));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.textContaining('Cari Beras Rojolele', findRichText: true),
+          findsOneWidget);
+
+      // Panah mencari saran yang sedang tampil.
+      await tester.tap(find.byKey(const Key('modern-suggest-go')));
+      await tester.pumpAndSettle();
+      final ctrl = tester
+          .widget<TextField>(find.byKey(const Key('modern-search')))
+          .controller!;
+      expect(ctrl.text, 'Beras Rojolele');
+      expect(find.text('Sabun Mandi'), findsNothing);
+      expect(find.byKey(const Key('modern-suggest-go')), findsNothing,
+          reason: 'saran/panah hilang begitu ada teks');
 
       await _drain(tester);
       await db.close();
