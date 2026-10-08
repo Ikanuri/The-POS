@@ -7,6 +7,81 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-10-08 (stepper jumlah saran + salin link publish)
+
+- feat(katalog): `666181d` — feat(katalog): stepper jumlah saran terlaris + tombol Salin link hasil publish
+- feat(katalog-html): saran cari "Cari <nama>? Tekan →" (ikon panah inline; hanya nama produk terpotong), saran tetap berputar saat kolom fokus (berhenti saat ada huruf), tombol X jadi lingkaran outline & tidak mencuri fokus (pointerdown/mousedown preventDefault) sehingga kursor+keyboard tetap terbuka setelah menghapus -> kembali landing
+
+## 2026-10-08 (kolom cari tak tertutup keyboard; dropdown jumlah saran)
+
+- fix(katalog-html): kembali ke landing (X / hapus huruf terakhir) dengan keyboard terbuka -> halaman digulir agar kolom cari terlihat di atas keyboard & tombol keranjang (`revealSearch`, juga saat fokus & visualViewport resize)
+- feat(pengaturan): jumlah saran terlaris = dropdown kustom (tombol pil + kartu pilihan 3..12 buatan sendiri, bukan DropdownButton bawaan), menggantikan stepper; bump 2.95.0+192
+
+## 2026-10-08 (katalog tanpa kategori tetap punya halaman awal)
+
+- feat(katalog-html): kategori dimatikan -> tetap membuka halaman awal (stiker, cari, Pesan lagi, game) dengan satu chip 'Semua produk', tidak lagi langsung semua produk; tbId/Back/kirim selalu kembali ke landing; bump 2.93.0+190
+
+## 2026-10-08 (fix game labirin)
+
+- fix(katalog-html): lubang tujuan game 'melayang' di luar labirin - papan dibangun di lebar bawaan 320 saat kartu tersembunyi, lalu resize ke lebar asli tanpa membangun ulang dinding/bola; kini dinding dibangun ulang & bola diskalakan, resize saat tersembunyi diabaikan; bump 2.92.1+189
+
+## 2026-10-07 (katalog: game labirin)
+
+- test(katalog): surface test tombol Publish diperbesar (layar Katalog Pesanan lebih panjang)
+- feat(katalog-html): game labirin (3 tingkat, gyro, rekor di HP pelanggan) di bawah halaman awal & halaman toko tutup, bawaan NYALA; saklar "Tampilkan game labirin" di Katalog Pesanan (`katalog_game_enabled`, ikut sync, `DATA.game`); kartu dibuang total bila mati; fix IntersectionObserver game memakai entri terbaru; bump 2.92.0+188
+
+## 2026-10-07 (katalog: stiker animasi, halaman toko tutup & pesanan terkirim)
+
+- feat(katalog-html): stiker animasi Lottie (.tgs) di 4 tempat - halaman awal, produk tidak ditemukan (teks saja + stiker), toko tutup, pesanan dikirim; 4 stiker bawaan di assets/stickers + unggahan owner (validasi gzip/JSON/tanpa expression, 64 KB/200 KB) via kartu "Stiker animasi" di Katalog Pesanan; pustaka lottie_light tersemat HANYA bila ada stiker; key katalog_sticker_* ikut sync
+- feat(katalog-html): halaman Toko tutup baru (stiker, "Buka lagi hari ini/besok pukul HH.MM", pengumuman sbg teks, tautan kode; banner merah & tombol pengumuman header dihapus); header jalur kode = titik oranye "Pesan titipan - toko tutup"
+- feat(katalog-html): halaman "Pesanan dikirim!" setelah Kirim WhatsApp/Telegram (keranjang dikosongkan sesudah tampil, riwayat Pesan lagi tetap, tombol Kembali HP -> halaman awal); fix kolom cari tersangkut visibility:hidden (goLanding tanpa animasi saat keluar dari halaman terkirim)
+- feat(katalog-html): urutan tombol kirim Kosongkan | Telegram | WhatsApp (hijau selalu paling kanan, lewat CSS order + margin-kiri pada WhatsApp)
+- test: catalog_sticker_test (validasi, bawaan vs unggahan, penyematan, kerangka halaman, kartu pengaturan); bump 2.91.0+187
+
+## 2026-10-07 (logo header katalog)
+
+- feat(katalog-html): logo header diganti persik The POS (garis putih di kotak aksen), menggantikan huruf awal toko; bump 2.90.0+186
+
+## 2026-10-07 (katalog: tombol kirim WhatsApp + Telegram, perbaikan header & roll angka)
+
+- fix(katalog-html): header mode daftar mengecil lewat ukuran nyata (bukan transform scale) - nama toko tidak lagi terpotong 3 baris & keterangan status tetap 12px di 320px
+- feat(pengaturan): katalog meneruskan kolom Telegram Informasi Toko + teks bantu tombol Kirim ke Telegram
+- feat(katalog-html): tombol kirim dipecah WhatsApp + Telegram bila kolom Telegram toko diisi - 2 tombol 50/50 berbaris 2 (logo+teks / total roll), salin teks lalu buka t.me; normalisasi tautan Telegram
+- fix(katalog-html): header tidak lagi memotong info - nama toko 2 baris, 'Diperbarui <waktu>' utuh, titik status 10px tak terpotong, tombol tampilan disembunyikan di halaman awal, ringkasan Pesan lagi & label kirim 320px utuh
+- fix(katalog-html): animasi roll angka tidak lagi menggeser "Rp" (spasi sel flex runtuh) + geser mulus saat jumlah digit berubah
+- docs: versi 2.89.0+185, CHANGELOG, PATCHNOTES, HANDOFF (tombol kirim Telegram, perbaikan header & roll angka)
+
+## 2026-10-07 (katalog: halaman awal, kategori, terlaris, pengumuman, Pesan lagi)
+
+- feat(katalog-html): data halaman awal baru - kategori terurut, saran terlaris (query agregat), pengumuman, toggle Pesan lagi + setting tampilan tersinkron
+- feat(pengaturan): kartu tampilan katalog HTML - kategori, periode & jumlah saran terlaris, pengumuman toko (280 karakter), Pesan lagi
+- feat(katalog-html): halaman awal baru - hero + kolom cari besar, chip kategori, saran terlaris bergantian, transisi FLIP halus
+- feat(katalog-html): pengumuman toko - tombol megafon + popup (otomatis sekali, lama sesuai panjang teks, menciut saat scroll/ketuk luar, manual tanpa batas)
+- feat(katalog-html): Pesan lagi (riwayat di HP pelanggan) + tempel pesanan lama dari WhatsApp
+- docs: versi 2.88.0+184, CHANGELOG, PATCHNOTES, HANDOFF (halaman awal katalog baru)
+
+## 2026-10-07 (katalog 60 baris + struk ambil barang pelanggan)
+
+- feat(struk-ambil-barang): cetak nama pelanggan (tebal) & alamat pelanggan tetap di header (dipecah per kata ke lebar kertas, ASCII; tanpa nama = header identik byte-per-byte)
+- feat(keranjang): ikon Hapus Tanda merah (warna error tema), Tandai Semua tetap hijau
+- perf(katalog-html): daftar dibatasi 60 baris + tombol Tampilkan lagi, indeks pencarian dihitung sekali (2000 produk: 9,8 dtk -> ~0,1 dtk di CPU 4x); bump 2.87.0+183
+
+## 2026-10-07 (fix cetak struk ambil barang)
+
+- fix(printer): struk ambil barang dikirim bertahap (strip raster <= 96 baris/perintah, jeda 40 ms) — satu blok raster besar membuat printer kehilangan sinkron & mencetak data mentah sbg teks sampah; qty pecahan dibulatkan maks 3 desimal; bump 2.86.1+182
+
+## 2026-10-07 (riwayat pre-order)
+
+- feat(laci-meja): riwayat pre-order — filter Semua/Terbuka/Pemenuhan/Dibatalkan, ringkasan (ditambahkan & dipenuhi, per pelanggan/produk), pencatat & pemenuh (nama perangkat + role); registri perangkat `known_devices` (dipelajari host dari payload sync, ikut sync ke klien); bump 2.86.0+181
+
+## 2026-10-07 (keranjang: opsi layout + struk ambil barang)
+
+- feat(keranjang): baris ikon header kanan-ke-kiri (Tahan Pesanan paling kanan); struk ambil barang: qty kecil, nama tebal, kotak centang menempel setelah nama; tetap 2.85.0+180
+- fix(keranjang): sheet Pengaturan Keranjang terbuka 3/4 layar (DraggableScrollableSheet), bisa ditarik penuh & tetap bisa di-swipe turun untuk menutup; tetap 2.85.0+180
+- fix(katalog): total di halaman Pesanan tidak lagi mengecil saat animasi roll angka (selektor `.paper-total span` kena digit roll); tetap 2.85.0+180
+- feat(keranjang): opsi layout baris (subtotal di samping harga, chip kategori di samping nama dgn teks berjalan) di Pengaturan Keranjang
+- feat(keranjang): header 2 baris, tombol Cetak Struk Ambil Barang (raster, tanpa harga, kotak centang tumpul) + Tandai Semua; bump 2.85.0+180
+
 ## 2026-10-06 (susulan — revolver qty)
 
 - feat(kasir): revolver qty — geser tombol "+" ke kiri memunculkan pita bertanda (tuner) untuk input qty cepat, kecepatan adaptif; di grid/list kasir, baris varian, dan keranjang; bump 2.84.0+179

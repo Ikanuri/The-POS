@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import '../database/app_database.dart';
 import 'catalog_access_service.dart';
+import 'catalog_display_service.dart';
+import 'catalog_sticker_service.dart';
 import 'price_service.dart';
 
 /// Generate halaman HTML self-contained (tanpa server, tanpa CDN) berisi
@@ -38,9 +40,16 @@ class OrderPageService {
     required AppDatabase db,
     required String storeName,
     String storeWhatsapp = '',
+    String storeTelegram = '',
     bool waDirect = true,
+    CatalogDisplay? display,
+    DateTime? now,
+    Map<StickerSlot, String>? stickers,
+    String? stickerPlayer,
   }) async {
     final catalog = await _buildCatalogJson(db);
+    final disp = display ?? await CatalogDisplayService.load(db);
+    final nowTs = now ?? DateTime.now();
     final generatedAt = _formatGeneratedAt(DateTime.now());
     final nameOrDefault = storeName.isEmpty ? 'Toko' : storeName;
     final waDigits = storeWhatsapp.replaceAll(RegExp(r'[^0-9]'), '');
@@ -49,6 +58,9 @@ class OrderPageService {
       'store': nameOrDefault,
       'generatedAt': generatedAt,
       'waNumber': waDigits,
+      // Tautan Telegram toko (sudah dinormalisasi, lihat [normalizeTelegramUrl]);
+      // kosong = tombol "Kirim ke Telegram" tidak muncul.
+      'telegramUrl': normalizeTelegramUrl(storeTelegram),
       // Item 12 — toggle dari Pengaturan: true = deep-link langsung ke nomor
       // WA toko (`wa.me/<nomor>`); false = share WA generik (pelanggan
       // pilih sendiri kontak tujuan, mis. lupa nomor toko atau mau simpan
@@ -60,19 +72,169 @@ class OrderPageService {
       // kode akses per pelanggan. null = fitur tidak dipakai.
       'hours': await CatalogAccessService.hoursJson(db),
       'access': await CatalogAccessService.accessJson(db),
+      // Halaman awal: kategori (terurut — lihat [categoriesFor]), saran
+      // terlaris di kolom cari, pengumuman toko, & toggle "Pesan lagi".
+      'showCategories': disp.showCategories,
+      'categories': categoriesFor(catalog),
+      'topSellers': await _topSellerNames(db, catalog, disp, nowTs),
+      'announcement': disp.hasAnnouncement
+          ? {'text': disp.effectiveAnnouncement, 'enabled': true}
+          : null,
+      'reorder': disp.reorderEnabled,
+      // Game labirin di bawah halaman awal / toko tutup (bawaan nyala).
+      'game': disp.gameEnabled,
       'products': catalog,
     });
 
-    final html = _htmlTemplate
+    // Stiker animasi: JSON Lottie per slot + pustaka pemutar. Pustaka HANYA
+    // disematkan bila ada minimal satu stiker; gagal muat = tanpa stiker.
+    final stk = stickers ?? await CatalogStickerService.loadForPublish(db);
+    String stickerBlocks = '';
+    if (stk.isNotEmpty) {
+      final player = stickerPlayer ?? await CatalogStickerService.loadPlayer();
+      if (player != null && player.isNotEmpty) {
+        final b = StringBuffer();
+        for (final e in stk.entries) {
+          // Konteks <script type=application/json>: escape "</" & "<!--".
+          final j = e.value.replaceAll('</', r'<\/').replaceAll('<!--', r'<\u0021--');
+          b.writeln('<script type="application/json" id="stk-${e.key.name}">$j</script>');
+        }
+        b.writeln('<script>$player</script>');
+        stickerBlocks = b.toString();
+      }
+    }
+
+    var html = _htmlTemplate
         // Konteks HTML biasa (di dalam <title>) — escape &/</> agar nama
         // toko yang mengandung karakter itu tidak merusak markup.
         .replaceAll('__STORE_NAME__', _escapeHtml(nameOrDefault))
         // Konteks di dalam <script> — SELALU escape "</" jadi "<\/" (teknik
-        // standar embed-JSON-in-script) supaya nama toko yang kebetulan
-        // memuat "</script>" tidak menutup blok skrip lebih awal lalu
-        // membuat sisanya dieksekusi sebagai HTML/skrip baru (XSS).
-        .replaceAll('__DATA_JSON__', dataJson.replaceAll('</', r'<\/'));
+        // standar embed-JSON-in-script) supaya nama toko / teks pengumuman
+        // yang kebetulan memuat "</script>" tidak menutup blok skrip lebih
+        // awal lalu membuat sisanya dieksekusi sebagai HTML/skrip baru
+        // (XSS). "<!--" ikut di-escape (state "script data escaped" HTML
+        // bisa menelan "</script>" berikutnya). Keduanya tetap JSON/JS
+        // valid ("\/" dan "\u0021" di dalam string literal = karakter itu).
+        .replaceAll(
+            '__DATA_JSON__',
+            dataJson.replaceAll('</', r'<\/').replaceAll('<!--', r'<\u0021--'));
+    // Terakhir: isi stiker/pustaka tidak boleh ikut ter-replace placeholder lain.
+    html = html.replaceFirstMapped('__STICKER_BLOCKS__', (_) => stickerBlocks);
     return (html: html, productCount: catalog.length);
+  }
+
+  /// Normalisasi isian kolom Telegram (Informasi Toko) jadi tautan `https://t.me/...`
+  /// yang bisa dibuka langsung. Terima: `@Barokah3?direct`, `Barokah3`,
+  /// `t.me/Barokah3`, `https://t.me/Barokah3?direct`, `telegram.me/...`,
+  /// `telegram.dog/...`, `tg://resolve?domain=Barokah3`, tautan undangan
+  /// `t.me/+kode` / `t.me/joinchat/kode`, dengan/ tanpa spasi. '@' dibuang,
+  /// skema https ditambahkan, query string (mis. `?direct`) DIPERTAHANKAN apa
+  /// adanya (tidak ditambahkan bila tak diisi), segmen path setelah username
+  /// dibuang. Username hanya `[A-Za-z0-9_]` 5-32 karakter. Tak valid /
+  /// kosong => '' (dianggap tidak diisi).
+  static String normalizeTelegramUrl(String raw) {
+    var s = raw.replaceAll(RegExp(r'\s+'), '');
+    if (s.isEmpty) return '';
+    final hash = s.indexOf('#');
+    if (hash >= 0) s = s.substring(0, hash);
+
+    String path;
+    var query = '';
+    final tg = RegExp(r'^tg://resolve\?(?:.*&)?domain=([^&]+)',
+            caseSensitive: false)
+        .firstMatch(s);
+    if (tg != null) {
+      path = tg.group(1)!;
+    } else {
+      s = s.replaceFirst(RegExp(r'^https?://', caseSensitive: false), '');
+      final q = s.indexOf('?');
+      if (q >= 0) {
+        query = s.substring(q);
+        s = s.substring(0, q);
+      }
+      final hostMatch = RegExp(
+              r'^(?:www\.)?(?:t\.me|telegram\.me|telegram\.dog)(?:/|$)',
+              caseSensitive: false)
+          .firstMatch(s);
+      if (hostMatch != null) {
+        s = s.substring(hostMatch.end);
+      } else if (s.contains('.') || s.contains(':')) {
+        // Tampak seperti domain lain (bukan Telegram) => tidak valid.
+        return '';
+      }
+      path = s;
+    }
+
+    path = path.replaceFirst(RegExp(r'^/+'), '');
+    final segments = path.split('/').where((e) => e.isNotEmpty).toList();
+    if (segments.isEmpty) return '';
+
+    String target;
+    final first = segments.first;
+    if (first.startsWith('+')) {
+      final code = first.substring(1);
+      if (!RegExp(r'^[A-Za-z0-9_-]{5,}$').hasMatch(code)) return '';
+      target = '+$code';
+    } else if (first.toLowerCase() == 'joinchat') {
+      if (segments.length < 2 ||
+          !RegExp(r'^[A-Za-z0-9_-]{5,}$').hasMatch(segments[1])) {
+        return '';
+      }
+      target = 'joinchat/${segments[1]}';
+    } else {
+      final user = first.startsWith('@') ? first.substring(1) : first;
+      if (!RegExp(r'^[A-Za-z0-9_]{5,32}$').hasMatch(user)) return '';
+      target = user;
+    }
+
+    // Query dipertahankan hanya bila aman (huruf/angka/_ - . = & % + ~).
+    if (query == '?' ||
+        (query.isNotEmpty &&
+            !RegExp(r'^\?[A-Za-z0-9_\-.=&%+~]*$').hasMatch(query))) {
+      query = '';
+    }
+    return 'https://t.me/$target$query';
+  }
+
+  /// Daftar kategori yang punya produk di katalog, URUT: jumlah produk
+  /// terbanyak dulu, seri diurutkan abjad (tanpa pembeda huruf besar/kecil).
+  /// Dipilih ketimbang abjad murni karena pelanggan paling sering mencari di
+  /// kategori besar (sembako, minuman) — chip terpenting ada di depan — dan
+  /// urutannya tetap konsisten antar-Publish selama isi katalog sama.
+  /// Produk tanpa kategori tidak masuk daftar (hanya ada di "Semua produk").
+  static List<String> categoriesFor(List<Map<String, Object?>> catalog) {
+    final counts = <String, int>{};
+    for (final p in catalog) {
+      final c = ((p['category'] as String?) ?? '').trim();
+      if (c.isEmpty) continue;
+      counts[c] = (counts[c] ?? 0) + 1;
+    }
+    final names = counts.keys.toList()
+      ..sort((a, b) {
+        final byCount = counts[b]!.compareTo(counts[a]!);
+        if (byCount != 0) return byCount;
+        return a.toLowerCase().compareTo(b.toLowerCase());
+      });
+    return names;
+  }
+
+  /// Nama produk terlaris (persis `name` di `DATA.products`) — hanya yang
+  /// ADA di katalog (aktif, berharga) dan tidak `outOfStock` (manual
+  /// maupun stok riil), maksimal [CatalogDisplay.topCount].
+  static Future<List<String>> _topSellerNames(AppDatabase db,
+      List<Map<String, Object?>> catalog, CatalogDisplay disp, DateTime now) async {
+    final range = disp.topRange(now);
+    final ranked = await db.getTopSellingParentProducts(range.from, range.to);
+    if (ranked.isEmpty) return const [];
+    final byId = {for (final p in catalog) p['id'] as String: p};
+    final out = <String>[];
+    for (final r in ranked) {
+      final p = byId[r.productId];
+      if (p == null || p['outOfStock'] == true) continue;
+      out.add(p['name'] as String);
+      if (out.length >= disp.topCount) break;
+    }
+    return out;
   }
 
   static Future<List<Map<String, Object?>>> _buildCatalogJson(
@@ -306,21 +468,16 @@ body{
    baru; arah naik/turun acak. Hanya transform (GPU), hanya digit yang
    berubah, ditiadakan saat prefers-reduced-motion. */
 .roll{display:flex;white-space:pre;line-height:1.15;}
+/* Tiap karakter jadi sel flex sendiri: SPASI di sel flex dgn white-space bawaan
+   (mis. .mb-total{nowrap}) runtuh ke lebar 0 -> "Rp" melonjak 4-6px saat roll
+   dimulai/selesai. Paksa pre di semua sel supaya lebar spasi tetap utuh. */
+.roll>span{white-space:pre;}
 .rd{display:inline-block;height:1.15em;overflow:hidden;}
 .rs{display:block;will-change:transform;}
 .rs i{display:block;font-style:normal;height:1.15em;line-height:1.15;}
 .mb-total.roll{justify-content:flex-end;}
 #app:not(.order-mode) .mb-total.roll{justify-content:flex-start;}
 .grand .gv.roll{justify-content:flex-end;}
-/* Toko tutup: banner merah menetap (padanan toast "closed" blueprint) di atas
-   daftar yang diabu-abukan; tautan kecil utk pelanggan langganan. */
-.closed-banner{display:none;margin:0 16px 8px;padding:10px 14px;border-radius:12px;
-  background:#e64d44;color:#fff;font-size:13.5px;font-weight:600;
-  flex-direction:column;gap:3px;}
-.closed-banner.show{display:flex;}
-.closed-banner button{align-self:flex-start;border:none;background:transparent;color:#fff;
-  font-family:var(--font);font-size:12.5px;font-weight:600;text-decoration:underline;
-  padding:2px 0;cursor:pointer;}
 .code-err{min-height:18px;margin:6px 0 10px;font-size:12.5px;color:var(--danger);}
 .btn-ok{background:var(--accent);color:#fff;}
 /* Item 79 M2 — toggle List/Tile, gaya sama persis .theme-btn (lingkaran
@@ -329,15 +486,223 @@ body{
   background:var(--field);color:var(--ink-2);border-radius:999px;cursor:pointer;
   display:flex;align-items:center;justify-content:center;}
 .layout-btn svg{width:18px;height:18px;}
-.search-wrap{padding:10px 16px;}
-.search{display:flex;align-items:center;gap:8px;background:var(--field);
-  border-radius:var(--r-btn);padding:11px 14px;}
-.search input{flex:1;border:none;background:transparent;font-size:16px;
-  color:var(--ink);outline:none;font-family:var(--font);}
-.search svg{flex-shrink:0;opacity:.6;}
-.list{flex:1;overflow-y:auto;padding:0 16px 100px;transition:opacity .12s ease;}
+/* ── Halaman awal (landing) + mode daftar ─────────────────────────────
+   Satu section #pageMenu, dua keadaan lewat atribut data-view:
+   "landing" (hero + kolom cari besar + chip kategori) dan "list" (header
+   kecil, kolom cari menempel, daftar produk). Seluruh isi menu ada di SATU
+   scroller (#menuScroll) supaya kolom cari bisa `position:sticky`, dan
+   input TIDAK pernah dipindah DOM-nya (fokus & kursor aman saat mengetik).
+   Transisi antar-keadaan memakai teknik FLIP (lihat applyState di JS):
+   layout berganti sekali, lalu elemen yang bergeser dianimasikan HANYA
+   dengan transform/opacity — tidak ada animasi height/top/margin. */
+:root{
+  --blob1:rgba(242,184,160,.55); --blob2:rgba(246,217,168,.5);
+  --shadow-s:0 6px 24px rgba(90,60,30,.12); --accsoft:rgba(201,100,66,.13);
+  --ease:cubic-bezier(.22,.61,.36,1);
+}
+:root[data-theme="dark"]{
+  --blob1:rgba(150,72,46,.42); --blob2:rgba(130,100,44,.30);
+  --shadow-s:0 6px 24px rgba(0,0,0,.4); --accsoft:rgba(224,133,95,.16);
+}
+:root[data-theme="light"]{
+  --blob1:rgba(242,184,160,.55); --blob2:rgba(246,217,168,.5);
+  --shadow-s:0 6px 24px rgba(90,60,30,.12); --accsoft:rgba(201,100,66,.13);
+}
+[hidden]{display:none !important;}
+.blobs{position:absolute;left:0;right:0;top:0;height:440px;pointer-events:none;z-index:0;
+  background:radial-gradient(260px 260px at 0% 0%,var(--blob1),transparent 70%),
+             radial-gradient(240px 240px at 100% 6%,var(--blob2),transparent 70%);
+  transition:opacity .3s var(--ease);}
+#pageMenu[data-view="list"] .blobs{opacity:.5;}
+.menu-top{position:relative;z-index:5;flex-shrink:0;display:flex;align-items:center;
+  justify-content:space-between;gap:8px;padding:12px 16px 6px;}
+.tb-id{display:flex;align-items:center;gap:10px;min-width:0;flex:1;border:none;background:none;
+  padding:4px 0;margin:-4px 0;text-align:left;color:inherit;font-family:inherit;cursor:default;}
+.tb-id.clickable{cursor:pointer;}
+/* Mode daftar: header mengecil (logo 42->35px, nama 22->18.5px, setara scale .84
+   dulu) lewat ukuran sebenarnya, BUKAN transform: scale() menyisakan lebar
+   tata letak penuh sehingga nama toko membungkus lebih banyak & keterangan
+   status mengecil di bawah 11.5px. */
+#pageMenu[data-view="list"] .tb-logo{width:35px;height:35px;border-radius:12px;font-size:17px;}
+#pageMenu[data-view="list"] .menu-top .tb-store{font-size:18.5px;}
+.tb-logo{width:42px;height:42px;border-radius:14px;background:var(--accent);color:#fff;
+  font-family:var(--serif);font-weight:700;font-size:20px;display:flex;align-items:center;
+  justify-content:center;flex-shrink:0;box-shadow:0 4px 12px rgba(201,100,66,.35);
+  transition:width .28s var(--ease),height .28s var(--ease),font-size .28s var(--ease),border-radius .28s var(--ease);}
+.tb-logo svg{width:72%;height:72%;display:block;}
+.tb-txt{min-width:0;display:block;}
+/* Nama toko boleh membungkus maks. 2 baris (bukan satu baris + "..."),
+   status di bawahnya juga boleh membungkus: semua info header terbaca utuh
+   di 320/360 walau tiga tombol ikon memakan ~130px. */
+.menu-top .tb-store{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;
+  line-clamp:2;font-size:22px;line-height:1.12;letter-spacing:-.3px;
+  white-space:normal;overflow:hidden;overflow-wrap:anywhere;transition:font-size .28s var(--ease);}
+.tb-status{display:flex;align-items:flex-start;gap:8px;margin-top:4px;font-size:12px;
+  line-height:1.3;color:var(--ink-2);white-space:normal;}
+.tb-status .st-txt{min-width:0;overflow-wrap:anywhere;}
+.tb-status .st-upd{display:block;}
+.tb-status .nb{white-space:nowrap;}
+/* Titik status: inti 10px + halo 4px. TIDAK boleh ada overflow:hidden di
+   induknya (halo dulu terpotong di kiri); margin kiri/atas memberi ruang
+   halo di dalam kotak teks, sejajar dgn baris pertama teks. */
+.st-dot{width:10px;height:10px;border-radius:50%;background:var(--ok);flex-shrink:0;
+  margin:4px 0 0 4px;box-shadow:0 0 0 4px rgba(79,123,94,.22);}
+.st-dot.closed{background:var(--danger);box-shadow:0 0 0 4px rgba(192,58,58,.2);}
+.menu-top .topbar-btns{gap:6px;}
+.menu-top .theme-btn,.menu-top .layout-btn,.menu-top .ann-btn{width:40px;height:40px;
+  background:var(--card);box-shadow:0 2px 8px rgba(0,0,0,.06);}
+.ann-btn{position:relative;flex-shrink:0;border:1px solid var(--line);color:var(--ink-2);
+  border-radius:999px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;}
+.ann-btn svg{width:19px;height:19px;}
+.ann-dot{position:absolute;top:8px;right:9px;width:9px;height:9px;border-radius:50%;
+  background:var(--accent);border:2px solid var(--card);}
+.ann-btn.seen .ann-dot{display:none;}
+.menu-scroll{position:relative;z-index:1;flex:1;overflow-y:auto;overflow-x:hidden;
+  -webkit-overflow-scrolling:touch;}
+.hero-block{display:none;text-align:center;padding:clamp(30px,13vh,120px) 20px 16px;}
+@supports (height:100dvh){ .hero-block{padding-top:clamp(30px,13dvh,120px);} }
+#pageMenu[data-view="landing"] .hero-block{display:block;}
+.hero-block h2{margin:0 0 6px;font-family:var(--serif);font-size:27px;font-weight:600;
+  line-height:1.15;letter-spacing:-.4px;}
+.hero-block p{margin:0;font-size:13.5px;color:var(--ink-2);}
+.sticky-head{position:sticky;top:0;z-index:3;}
+.sticky-head::before{content:'';position:absolute;left:0;right:0;top:0;bottom:0;
+  background:var(--panel);border-bottom:1px solid var(--line);opacity:0;pointer-events:none;
+  transition:opacity .28s var(--ease);}
+#pageMenu[data-view="list"] .sticky-head::before{opacity:1;}
+.sticky-head>*{position:relative;}
+.search-wrap{padding:8px 16px 10px;}
+.search{display:flex;align-items:center;gap:8px;height:52px;background:var(--card);
+  border:1.5px solid var(--line);border-radius:999px;padding:5px 5px 5px 16px;
+  box-shadow:var(--shadow-s);position:relative;}
+.search:focus-within{border-color:var(--accent);}
+.search svg.mag{width:19px;height:19px;flex-shrink:0;opacity:.55;}
+.q-box{position:relative;flex:1;min-width:0;height:100%;display:flex;align-items:center;}
+.search input{width:100%;height:100%;border:none;background:transparent;font-size:16px;
+  color:var(--ink);outline:none;font-family:var(--font);padding:0;min-width:0;}
+.ph{position:absolute;left:0;right:0;top:0;bottom:0;pointer-events:none;overflow:hidden;
+  font-size:16px;color:var(--ink-3);white-space:nowrap;}
+.ph.off{display:none;}
+.ph span{position:absolute;left:0;right:0;top:0;bottom:0;display:flex;align-items:center;
+  overflow:hidden;white-space:nowrap;transition:transform .32s var(--ease),opacity .28s ease;}
+.ph span i{display:flex;align-items:center;min-width:0;max-width:100%;font-style:normal;white-space:pre;}
+/* Hanya NAMA produk yang boleh terpotong (...); "Cari" dan "? Tekan →" tetap utuh. */
+.ph span i>em{flex-shrink:0;font-style:normal;}
+.ph span b{flex-shrink:1;min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--ink-2);font-weight:600;}
+.ph .ph-arr{width:15px;height:15px;margin-left:3px;color:var(--accent);}
+.ph .cur{transform:none;opacity:1;}
+.ph .up{transform:translateY(-70%);opacity:0;}
+.ph .down{transform:translateY(70%);opacity:0;}
+.ph .noanim{transition:none;}
+.go{width:40px;height:40px;border-radius:50%;border:none;background:var(--accent);color:#fff;
+  flex-shrink:0;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;
+  box-shadow:0 4px 12px rgba(201,100,66,.4);}
+.go svg{width:19px;height:19px;}
+.go .x{display:none;}
+.search.has-text .go .arr{display:none;}
+.search.has-text .go .x{display:block;}
+.search.has-text .go{background:transparent;border:1.5px solid var(--ink-3);color:var(--ink-2);box-shadow:none;}
+.landing-below{display:none;padding:2px 16px 150px;}
+#pageMenu[data-view="landing"] .landing-below{display:block;}
+.cats-hero{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:8px;}
+.cat-chip{min-height:40px;font-family:var(--font);font-size:13.5px;font-weight:600;border-radius:999px;
+  padding:8px 15px;background:var(--card);border:1px solid var(--line);color:var(--ink);
+  cursor:pointer;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.cat-chip:active{transform:scale(.97);}
+.cats-hero .cat-chip.all{background:var(--accent);border-color:var(--accent);color:#fff;
+  box-shadow:0 4px 12px rgba(201,100,66,.35);}
+.cat-chip.sel{background:var(--accsoft);border-color:var(--accent);color:var(--accent);}
+.cat-row{display:none;gap:8px;overflow-x:auto;padding:0 16px 8px;scrollbar-width:none;
+  -webkit-overflow-scrolling:touch;}
+.cat-row::-webkit-scrollbar{display:none;}
+.cat-row .cat-chip{flex:0 0 auto;}
+#pageMenu[data-catrow="1"] .cat-row{display:flex;}
+.extras-slot-b{display:none;padding:2px 16px 0;}
+#pageMenu[data-extras="1"] .extras-slot-b{display:block;}
+#app.closed .extras{display:none;}
+.sect{font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);
+  font-weight:700;margin:16px 0 8px;text-align:left;}
+.again{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:12px 14px;
+  display:flex;align-items:center;gap:12px;text-align:left;box-shadow:0 2px 10px rgba(0,0,0,.05);}
+.again-t{flex:1;min-width:0;}
+.again .t{font-weight:700;font-size:14px;}
+.again .s{font-size:12px;color:var(--ink-2);margin-top:2px;line-height:1.35;overflow-wrap:anywhere;}
+.btn{flex-shrink:0;min-height:40px;border:none;border-radius:999px;padding:0 16px;background:var(--accent);
+  color:#fff;font-family:var(--font);font-weight:700;font-size:13px;white-space:nowrap;cursor:pointer;}
+.btn.o{background:transparent;color:var(--accent);border:1.5px solid var(--accent);}
+.link-row{text-align:right;}
+.link{border:none;background:none;min-height:40px;padding:0 2px;font-family:var(--font);font-size:12.5px;
+  color:var(--accent);font-weight:700;cursor:pointer;}
+.nohist{border:1.5px dashed var(--line);border-radius:16px;padding:11px 14px;text-align:left;}
+.nohist b{display:block;font-size:13.5px;}
+.nohist span{font-size:12px;color:var(--ink-2);}
+.paste{margin-top:10px;display:flex;gap:8px;align-items:center;}
+.paste .inp{flex:1;min-width:0;height:40px;border-radius:12px;border:1.5px dashed var(--line);
+  background:transparent;color:var(--ink);font-family:var(--font);font-size:13px;padding:0 12px;outline:none;}
+.paste .inp:focus{border-color:var(--accent);border-style:solid;}
+.paste .inp::placeholder{color:var(--ink-3);}
+.paste .btn2{flex:0 0 72px;height:40px;border:none;border-radius:12px;background:var(--field);
+  color:var(--ink-2);font-family:var(--font);font-weight:700;font-size:13px;cursor:pointer;}
+.paste-msg{min-height:0;margin-top:6px;font-size:12.5px;color:var(--danger);text-align:left;}
+.paste-msg:empty{display:none;}
+.list-info{text-align:center;font-size:12.5px;line-height:1.45;color:var(--ink-3);margin:2px 20px 8px;}
+#listWrap{display:none;}
+#pageMenu[data-view="list"] #listWrap{display:block;}
+.list{padding:0 16px 100px;transition:opacity .12s ease;}
+.ghost{position:absolute;pointer-events:none;z-index:2;margin:0;overflow:hidden;}
+.prow-cat{display:inline-block;max-width:100%;margin-top:5px;font-size:10.5px;font-weight:600;
+  border-radius:999px;padding:2px 8px;background:var(--field);color:var(--ink-2);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:top;}
+/* Pengumuman: popup kecil di bawah tombol megafon. Ada DI DALAM #pageMenu
+   (konteks susun sendiri) sehingga otomatis di BAWAH scrim/modal/toast. */
+.ann-pop{position:absolute;right:12px;top:64px;width:min(300px,calc(100% - 24px));z-index:6;
+  background:var(--card);border:1px solid var(--line);border-radius:20px;padding:14px 16px 22px;
+  box-shadow:0 14px 40px rgba(60,40,20,.28);text-align:left;
+  opacity:0;visibility:hidden;transform:scale(.5);transform-origin:var(--ax,90%) 0;
+  transition:opacity .22s ease,transform .26s var(--ease),visibility 0s linear .26s;}
+.ann-pop.show{opacity:1;visibility:visible;transform:scale(1);
+  transition:opacity .22s ease,transform .26s var(--ease),visibility 0s;}
+.ann-pop::before{content:'';position:absolute;top:-7px;left:calc(var(--ax,90%) - 7px);width:14px;height:14px;
+  background:var(--card);border-left:1px solid var(--line);border-top:1px solid var(--line);
+  transform:rotate(45deg);}
+.ann-pop h4{margin:0 0 6px;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);
+  display:flex;align-items:center;gap:6px;}
+.ann-pop h4 svg{width:15px;height:15px;}
+.ann-pop p{margin:0;font-size:14px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere;
+  max-height:40vh;overflow-y:auto;}
+.ann-prog{position:absolute;left:16px;right:16px;bottom:8px;height:3px;border-radius:3px;
+  background:var(--field);overflow:hidden;}
+.ann-prog i{display:block;height:100%;background:var(--accent);transform-origin:left center;
+  transform:scaleX(1);}
+.ann-pop.manual{padding-bottom:16px;}
+.ann-pop.manual .ann-prog{display:none;}
+/* Riwayat pesanan (bottom sheet) — pola sama dgn modal produk. */
+.hist-body{padding:0 16px 18px;}
+.hist-it{border:1px solid var(--line);border-radius:14px;padding:10px 12px;margin-bottom:8px;
+  display:flex;align-items:center;gap:10px;}
+.hist-it .hi-t{flex:1;min-width:0;}
+.hist-it .t{font-weight:700;font-size:13.5px;}
+.hist-it .s{font-size:12px;color:var(--ink-2);margin-top:2px;line-height:1.35;overflow-wrap:anywhere;}
+.hist-msg{margin:0 16px 16px;padding:9px 12px;border-radius:12px;background:var(--accsoft);color:var(--accent);
+  font-size:12.5px;font-weight:600;text-align:left;}
+.hist-msg:empty{display:none;}
+@media (prefers-reduced-motion: reduce){
+  .tb-logo,.menu-top .tb-store,.blobs,.sticky-head::before,.ph span,.ann-pop,.ann-pop.show{transition:none;}
+}
+/* Tombol tampilan daftar/kotak hanya berfungsi di mode daftar — di halaman
+   awal (landing) tidak ada daftar yang bisa diubah, jadi disembunyikan. */
+#pageMenu[data-view="landing"] #layoutBtn{display:none;}
+@media (max-width:380px){
+  .tb-id{gap:8px;}
+}
+@media (max-width:340px){
+  .menu-top{padding-left:12px;padding-right:12px;}
+  .search-wrap{padding-left:12px;padding-right:12px;}
+  .menu-top .topbar-btns{gap:4px;}
+  .hero-block h2{font-size:24px;}
+}
 .prow{background:var(--card);border:1px solid var(--line);border-radius:var(--r-card);
-  margin-bottom:9px;overflow:hidden;}
+  margin-bottom:9px;overflow:hidden;contain:layout style;}
 .prow-main{display:flex;align-items:center;gap:12px;padding:13px;cursor:pointer;}
 .prow-icon{width:40px;height:40px;flex-shrink:0;border-radius:999px;background:var(--field);
   display:flex;align-items:center;justify-content:center;font-size:19px;line-height:1;}
@@ -347,6 +712,13 @@ body{
 .oos-badge{background:var(--warn);color:#fff;border-radius:999px;
   padding:8px 13px;font-size:13px;font-weight:700;flex-shrink:0;}
 .empty{text-align:center;color:var(--ink-3);padding:50px 20px;font-size:15px;}
+.more-bar{padding:6px 0 4px;text-align:center;}
+.more-info:empty{display:none;}
+.more-info{font-size:13.5px;line-height:1.45;color:var(--ink-2);margin:4px 4px 10px;}
+.more-btn{display:block;width:100%;min-height:48px;padding:10px 16px;box-sizing:border-box;
+  border:1px solid var(--line);background:var(--card);color:var(--accent);border-radius:999px;
+  font-family:var(--font);font-size:15px;font-weight:700;cursor:pointer;}
+.more-btn:active{background:var(--field);}
 /* Blueprint §4 — "expanded pill" yang MEMECAH. Satu pill lebar bertuliskan
    "Tambah" (84px) menyusut jadi lingkaran angka (40px) begitu qty >= 1,
    sementara tombol minus merah tumbuh keluar dari width 0 + scale(.7).
@@ -355,15 +727,15 @@ body{
    node-nya diganti baru tiap qty berubah, browser tidak punya nilai awal
    untuk ditransisikan dan efek "memecah"-nya hilang total. */
 .prow-controls{display:flex;align-items:center;flex-shrink:0;}
-.pc-minus{width:0;height:38px;padding:0;border:none;border-radius:999px;
+.pc-minus{width:0;height:40px;padding:0;border:none;border-radius:999px;
   background:#D64545;color:#fff;font-size:19px;font-weight:700;cursor:pointer;
   flex-shrink:0;overflow:hidden;opacity:0;transform:scale(.7);
   display:flex;align-items:center;justify-content:center;
   box-shadow:0 2px 6px rgba(0,0,0,.15);
   transition:width .26s cubic-bezier(.3,1.25,.45,1),opacity .18s ease,
              transform .26s cubic-bezier(.3,1.25,.45,1),margin-right .26s ease;}
-.prow-controls.selected .pc-minus{width:38px;opacity:1;transform:scale(1);margin-right:7px;}
-.pc-add{position:relative;width:84px;height:38px;border:none;border-radius:999px;
+.prow-controls.selected .pc-minus{width:40px;opacity:1;transform:scale(1);margin-right:7px;}
+.pc-add{position:relative;width:84px;height:40px;border:none;border-radius:999px;
   background:var(--accent);color:#fff;font-size:14.5px;font-weight:700;cursor:pointer;
   flex-shrink:0;overflow:hidden;font-family:var(--font);
   box-shadow:0 2px 6px rgba(0,0,0,.15);
@@ -417,7 +789,7 @@ body{
 .list.tile-mode .prow-meta{font-size:12.5px;}
 .list.tile-mode .prow-controls{width:100%;justify-content:flex-end;}
 .list.tile-mode .oos-badge{align-self:flex-start;}
-.list.tile-mode .empty{grid-column:1/-1;}
+.list.tile-mode .empty,.list.tile-mode .more-bar{grid-column:1/-1;}
 /* Blueprint §5 — pengganti Telegram MainButton. Katalog ini dibuka di
    browser biasa (bukan Mini App), jadi tombol native Telegram TIDAK ada
    dan harus disediakan sendiri: satu tombol mengambang, sembunyi total
@@ -436,7 +808,8 @@ body{
   font-family:var(--font);display:grid;grid-template-columns:auto 1fr auto;
   align-items:center;column-gap:10px;min-height:56px;text-align:left;
   box-shadow:0 8px 22px rgba(0,0,0,.22);
-  transition:background-color .24s ease,transform .14s ease,padding .32s ease;}
+  transition:background-color .24s ease,transform .14s ease,padding .32s ease,
+             margin-left .32s cubic-bezier(.3,1.25,.45,1);}
 .mainbtn:active{transform:scale(.985);}
 /* Halaman awal: tombol dipecah (Lihat Pesanan ~3/4 + Kosongkan ~1/4 merah).
    Pindah ke halaman Pesanan: tombol Kosongkan MENYUSUT ke lebar 0 sambil
@@ -488,8 +861,43 @@ body{
 .mainbtn>*{transition:opacity .2s ease;}
 .mainbtn.swapping>*{opacity:0;transition:none;}
 .mb-clear.swapping>*{opacity:0;transition:none;}
-@media (max-width:340px){ .mb-clear{width:30%;font-size:9px;padding:0 5px;} }
+@media (max-width:340px){ .mb-clear{width:30%;font-size:9px;padding:0 5px;}
+  /* "Kirim via WhatsApp" dulu terpotong "..." di 320px */
+  #app.order-mode .mb-label{font-size:13px;} }
 .mainbtn.wa{background:#25D366;}
+.mb-ic{display:none;width:20px;height:20px;flex-shrink:0;}
+/* Tombol Telegram (khas biru Telegram). Tersembunyi/mengecil di luar halaman
+   Pesanan; di halaman Pesanan melebar jadi 50% dan tombol WhatsApp menyusut
+   ke 50% (gerak sama dgn tombol Kosongkan). Teks tetap putih di mode gelap. */
+.mainbtn-tg{flex:0 1 0px;margin-left:0;opacity:0;visibility:hidden;pointer-events:none;
+  background:#26A5E4;color:#fff;overflow:hidden;
+  transition:flex-grow .32s cubic-bezier(.3,1.25,.45,1),margin-left .32s cubic-bezier(.3,1.25,.45,1),
+             padding .32s ease,opacity .2s ease,visibility 0s linear .32s,
+             background-color .24s ease,transform .14s ease;}
+#app .mainbtn.mainbtn-tg{padding-left:0;padding-right:0;}
+#app.order-mode .mainbtn.mainbtn-tg{flex:1 1 0px;margin-left:0;opacity:1;visibility:visible;
+  pointer-events:auto;padding-left:8px;padding-right:8px;
+  transition-delay:0s,0s,0s,0s,0s,0s,0s;}
+@media (hover:hover){ .mainbtn-tg:hover{background:#1d90c8;} }
+/* Urutan baris: Kosongkan | Telegram | WhatsApp — WhatsApp (hijau) SELALU di
+   kanan. Urutan visual lewat `order` (DOM tetap WA lalu TG); jarak antar dua
+   tombol di halaman Pesanan dipasang di tombol WhatsApp (margin-kiri). */
+#mbClear{order:0;}
+#mainBtnTg{order:1;}
+#mainBtn{order:2;}
+#app.order-mode.has-tg #mainBtn{margin-left:8px;}
+#mainBtnWrap.mb-confirm .mainbtn-tg{display:none;}
+/* Dua tombol (WhatsApp + Telegram) di halaman Pesanan: tiap tombol 2 baris —
+   baris 1 logo + teks, baris 2 total (roll, rata tengah). */
+#app.order-mode.has-tg .mainbtn{grid-template-columns:auto auto;justify-content:center;
+  align-content:center;column-gap:6px;row-gap:1px;padding:7px 8px;font-size:13px;text-align:center;}
+#app.order-mode.has-tg .mb-badge{display:none;}
+#app.order-mode.has-tg .mb-ic{display:block;grid-row:1;grid-column:1;}
+#app.order-mode.has-tg .mb-label{grid-row:1;grid-column:2;font-size:13px;font-weight:700;
+  overflow:visible;text-overflow:clip;opacity:1;}
+#app.order-mode.has-tg .mb-total{grid-column:1 / -1;grid-row:2;font-size:16px;text-align:center;line-height:1.15;}
+#app.order-mode.has-tg .mb-total.roll{justify-content:center;}
+#app.order-mode.has-tg .mb-total.tt{font-size:14px;}
 .mainbtn:disabled{opacity:.6;cursor:default;}
 .mb-badge{min-width:26px;height:26px;padding:0 8px;border-radius:999px;
   background:rgba(255,255,255,.24);display:flex;align-items:center;
@@ -567,7 +975,7 @@ body{
 .stp button.p{background:var(--accent);color:#fff;}
 .stp .qn{min-width:30px;text-align:center;font-family:var(--serif);font-weight:700;font-size:15px;color:var(--ink);flex-shrink:0;}
 .paper-total{display:flex;justify-content:space-between;align-items:baseline;gap:10px;}
-.paper-total span{font-size:12px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:var(--ink-2);}
+.paper-total > span{font-size:12px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:var(--ink-2);}
 .paper-total b{font-family:var(--serif);font-size:clamp(24px,8.2vw,32px);font-weight:600;white-space:nowrap;}
 .paper-total .roll{justify-content:flex-end;}
 .paper-hint{text-align:center;font-size:11.5px;color:var(--ink-3);margin-top:6px;}
@@ -690,40 +1098,167 @@ textarea.tfield{resize:none;min-height:64px;}
    sebagai kegagalan oleh pelanggan. */
 .toast{position:fixed;left:50%;bottom:104px;
   transform:translateX(-50%) translateY(14px);
-  background:var(--ink);color:var(--panel);padding:11px 18px;border-radius:999px;
+  background:var(--ink);color:var(--panel);padding:11px 18px;border-radius:22px;
   font-size:14.5px;font-weight:600;z-index:30;opacity:0;pointer-events:none;
   max-width:calc(100% - 40px);text-align:center;cursor:pointer;
   box-shadow:0 6px 18px rgba(0,0,0,.22);
   transition:opacity .22s ease,transform .22s cubic-bezier(.22,.61,.36,1);}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);pointer-events:auto;}
 .toast.err{background:#e64d44;color:#fff;}
+/* ── Stiker animasi (Lottie). Kotak dipesan ukurannya dulu supaya tata letak
+   tidak melompat saat animasi siap; tanpa stiker -> [hidden] (display:none). */
+.stk{width:128px;height:128px;margin:0 auto;}
+.stk[hidden]{display:none;}
+.stk svg{display:block;}
+.hero-block .stk{margin-bottom:8px;}
+.nf{text-align:center;color:var(--ink-3);padding:30px 20px 50px;font-size:15px;}
+.nf .stk{width:120px;height:120px;margin-bottom:6px;}
+.nf p{margin:0;overflow-wrap:anywhere;}
+.list.tile-mode .nf{grid-column:1/-1;}
+/* Halaman TOKO TUTUP: hanya stiker + judul + jam buka + pengumuman + tautan kode.
+   Pencarian, kategori, daftar, Pesan lagi & tombol pengumuman header disembunyikan. */
+.closed-page{display:none;text-align:center;padding:clamp(24px,9vh,80px) 24px 32px;}
+#app.shop-closed .closed-page{display:block;}
+#app.shop-closed .sticky-head,#app.shop-closed .hero-block,#app.shop-closed .landing-below,
+#app.shop-closed .extras-slot-b,#app.shop-closed #listWrap,#app.shop-closed #annBtn,
+#app.shop-closed #annPop,#app.shop-closed .layout-btn{display:none !important;}
+.closed-page .stk{width:160px;height:160px;margin-bottom:10px;}
+.closed-page h2{margin:0 0 6px;font-family:var(--serif);font-size:26px;font-weight:600;letter-spacing:-.2px;}
+.cp-when{margin:0;font-size:15px;color:var(--ink-2);font-weight:600;}
+.cp-ann{margin:18px auto 0;max-width:340px;padding:12px 14px;border-radius:14px;background:var(--card);
+  border:1px solid var(--line);font-size:13.5px;line-height:1.45;color:var(--ink-2);text-align:left;
+  white-space:pre-line;overflow-wrap:anywhere;}
+.cp-code{margin-top:22px;border:none;background:transparent;color:var(--ink-3);font-family:var(--font);
+  font-size:12.5px;font-weight:600;text-decoration:underline;padding:8px;cursor:pointer;}
+.st-dot.warn{background:#E8912D;box-shadow:0 0 0 4px rgba(232,145,45,.24);}
+/* Halaman PESANAN TERKIRIM: menutupi semuanya, muncul langsung saat Kirim ditekan. */
+.page-sent{display:none;align-items:center;justify-content:center;text-align:center;z-index:25;}
+#app.sent-mode .page-sent{display:flex;animation:sentIn .3s cubic-bezier(.22,.61,.36,1);}
+@keyframes sentIn{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:none;}}
+#app.sent-mode .mainbtn-wrap{visibility:hidden;pointer-events:none;}
+.sent-body{padding:0 28px;display:flex;flex-direction:column;align-items:center;}
+.sent-body .stk{width:180px;height:180px;margin-bottom:14px;}
+.sent-body h2{margin:0 0 26px;font-family:var(--serif);font-size:28px;font-weight:600;letter-spacing:-.3px;}
+.sent-btn{border:none;background:var(--accent);color:#fff;border-radius:var(--r-btn);padding:14px 26px;
+  font-family:var(--font);font-size:16px;font-weight:700;cursor:pointer;min-height:48px;
+  transition:transform .14s ease,background-color .24s ease;}
+.sent-btn:active{transform:scale(.97);}
+@media (prefers-reduced-motion:reduce){ #app.sent-mode .page-sent{animation:none;} }
+/* ── Game labirin (DATA.game): di bawah halaman awal & halaman toko tutup. */
+.game-slot{padding:0 0 8px;}
+.closed-page .game-slot{margin-top:18px;}
+.maze-card{margin:26px auto 0;max-width:380px;background:var(--card);border:1px solid var(--line);border-radius:22px;padding:14px 14px 12px;box-shadow:0 6px 22px rgba(60,40,20,.08);text-align:left}
+:root[data-theme="dark"] .maze-card{box-shadow:0 6px 22px rgba(0,0,0,.35)}
+.mz-head{display:flex;align-items:center;gap:10px}
+.mz-title{flex:1;min-width:0}
+.mz-title b{display:block;font-family:var(--serif);font-size:18px;font-weight:600;letter-spacing:-.2px}
+.mz-title small{display:block;font-size:12px;color:var(--ink-2);margin-top:1px}
+.mz-ibtn{width:40px;height:40px;border-radius:50%;border:1px solid var(--line);background:var(--field);color:var(--ink-2);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;flex-shrink:0;transition:background-color .2s ease,color .2s ease,border-color .2s ease,transform .12s ease}
+.mz-ibtn:active{transform:scale(.92)}
+.mz-ibtn svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.mz-ibtn[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.mz-seg{display:flex;gap:4px;background:var(--field);border-radius:999px;padding:4px;margin:12px 0 10px}
+.mz-seg button{flex:1;border:none;background:transparent;color:var(--ink-2);font:700 13px var(--font);border-radius:999px;padding:9px 0;min-height:36px;cursor:pointer;transition:background-color .2s ease,color .2s ease,box-shadow .2s ease}
+.mz-seg button[aria-selected="true"]{background:var(--card);color:var(--ink);box-shadow:0 2px 8px rgba(60,40,20,.16)}
+:root[data-theme="dark"] .mz-seg button[aria-selected="true"]{box-shadow:0 2px 8px rgba(0,0,0,.4)}
+.mz-stage{position:relative;width:100%;aspect-ratio:1/1;border-radius:18px;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;background:var(--field);outline:none}
+.mz-stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+.mz-win{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;background:rgba(20,15,10,.38);color:#fff;text-align:center;opacity:0;pointer-events:none;transition:opacity .28s ease;backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px)}
+.mz-win.show{opacity:1;pointer-events:auto}
+.mz-win b{font-family:var(--serif);font-size:26px;font-weight:600}
+.mz-win span{font-size:14px;font-weight:600}
+.mz-win em{font-style:normal;font-size:12px;font-weight:700;background:var(--accent);border-radius:999px;padding:3px 10px;margin-top:4px}
+.mz-foot{display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-size:13px;color:var(--ink-2)}
+.mz-foot b{font-family:var(--serif);font-size:17px;color:var(--ink);font-weight:600}
+.mz-hint{margin:6px 0 0;font-size:11.5px;color:var(--ink-3);text-align:center}
 </style>
 </head>
 <body>
 <div id="app">
-  <!-- Halaman 1 — daftar produk (mode browse). -->
-  <section class="page page-menu" id="pageMenu">
-    <div class="topbar">
-      <div>
-        <div class="tb-store" id="storeName"></div>
-        <div class="tb-sub" id="storeSub"></div>
-      </div>
+  <!-- Halaman 1 — menu: landing (hero + kolom cari + kategori) atau daftar
+       produk. Semua isi ada di SATU scroller (#menuScroll); atribut
+       data-view/data-catrow/data-extras diatur JS (applyState). -->
+  <section class="page page-menu" id="pageMenu" data-view="list" data-catrow="0" data-extras="0">
+    <div class="blobs" aria-hidden="true"></div>
+    <div class="menu-top" id="menuTop">
+      <button class="tb-id" id="tbId" type="button">
+        <span class="tb-logo" id="storeLogo" aria-hidden="true"><svg viewBox="0 0 512 512" fill="none" stroke="currentColor" stroke-width="22" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M120.0 79.0 C107.2 84.2 93.0 92.5 82.0 100.0 C71.0 107.5 61.8 115.7 54.0 124.0 C46.2 132.3 40.3 140.3 35.0 150.0 C29.7 159.7 25.2 171.3 22.0 182.0 C18.8 192.7 17.0 201.5 16.0 214.0 C15.0 226.5 14.8 243.3 16.0 257.0 C17.2 270.7 19.5 283.3 23.0 296.0 C26.5 308.7 30.3 320.3 37.0 333.0 C43.7 345.7 53.2 359.8 63.0 372.0 C72.8 384.2 84.8 395.8 96.0 406.0 C107.2 416.2 117.7 424.3 130.0 433.0 C142.3 441.7 156.2 450.5 170.0 458.0 C183.8 465.5 199.0 472.5 213.0 478.0 C227.0 483.5 244.2 489.2 254.0 491.0 C263.8 492.8 264.0 491.2 272.0 489.0 C280.0 486.8 289.3 484.0 302.0 478.0 C314.7 472.0 332.2 463.0 348.0 453.0 C363.8 443.0 382.3 429.8 397.0 418.0 C411.7 406.2 424.7 394.5 436.0 382.0 C447.3 369.5 456.8 357.2 465.0 343.0 C473.2 328.8 480.2 312.0 485.0 297.0 C489.8 282.0 492.5 267.7 494.0 253.0 C495.5 238.3 496.2 224.3 494.0 209.0 C491.8 193.7 486.3 174.3 481.0 161.0 C475.7 147.7 470.0 139.2 462.0 129.0 C454.0 118.8 442.2 107.5 433.0 100.0 C423.8 92.5 416.7 88.5 407.0 84.0 C397.3 79.5 384.5 75.2 375.0 73.0 C365.5 70.8 358.5 70.8 350.0 71.0 C341.5 71.2 331.5 72.5 324.0 74.0 C316.5 75.5 313.3 76.0 305.0 80.0 C296.7 84.0 284.8 98.0 274.0 98.0 C263.2 98.0 252.7 84.8 240.0 80.0 C227.3 75.2 211.5 70.8 198.0 69.0 C184.5 67.2 172.0 67.3 159.0 69.0 C146.0 70.7 132.8 73.8 120.0 79.0Z"/><path d="M466.0 28.0 C466.0 25.2 464.8 25.0 463.0 24.0 C461.2 23.0 464.3 22.5 455.0 22.0 C445.7 21.5 421.7 20.7 407.0 21.0 C392.3 21.3 378.7 22.5 367.0 24.0 C355.3 25.5 345.8 27.5 337.0 30.0 C328.2 32.5 320.2 36.0 314.0 39.0 C307.8 42.0 305.2 43.7 300.0 48.0 C294.8 52.3 288.3 58.3 283.0 65.0 C277.7 71.7 273.7 87.8 268.0 88.0 C262.3 88.2 254.8 71.8 249.0 66.0 C243.2 60.2 240.7 57.8 233.0 53.0 C225.3 48.2 212.3 41.0 203.0 37.0 C193.7 33.0 189.0 31.3 177.0 29.0 C165.0 26.7 146.2 24.0 131.0 23.0 C115.8 22.0 97.3 22.2 86.0 23.0 C74.7 23.8 66.8 25.7 63.0 28.0 C59.2 30.3 60.2 31.2 63.0 37.0 C65.8 42.8 72.8 55.2 80.0 63.0 C87.2 70.8 95.7 82.7 106.0 84.0 C116.3 85.3 128.3 73.8 142.0 71.0 C155.7 68.2 176.0 67.0 188.0 67.0 C200.0 67.0 205.3 69.0 214.0 71.0 C222.7 73.0 230.7 74.7 240.0 79.0 C249.3 83.3 264.3 94.0 270.0 97.0 C275.7 100.0 267.3 100.3 274.0 97.0 C280.7 93.7 297.3 81.5 310.0 77.0 C322.7 72.5 337.2 70.3 350.0 70.0 C362.8 69.7 375.7 72.0 387.0 75.0 C398.3 78.0 406.7 91.5 418.0 88.0 C429.3 84.5 447.5 61.8 455.0 54.0 C462.5 46.2 461.2 45.3 463.0 41.0 C464.8 36.7 466.0 30.8 466.0 28.0Z"/><path d="M281 101 C352 128 392 214 376 306 C363 386 322 446 266 486"/><path d="M92 146 C104 120 128 104 154 98"/></svg></span>
+        <span class="tb-txt">
+          <span class="tb-store" id="storeName"></span>
+          <span class="tb-status" id="storeSub"></span>
+        </span>
+      </button>
       <div class="topbar-btns">
+        <button class="ann-btn" id="annBtn" type="button" hidden aria-label="Pengumuman toko" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3a1 1 0 00-1 1v4a1 1 0 001 1h3l5 4V5z"/><path d="M15.5 8.5a5 5 0 010 7"/><path d="M18.5 5.5a9 9 0 010 13"/></svg><i class="ann-dot" id="annDot"></i></button>
         <button class="layout-btn" id="layoutBtn" type="button" aria-label="Ganti tampilan daftar/kotak"></button>
         <button class="theme-btn" id="themeBtn" type="button" aria-label="Ganti tampilan terang/gelap"></button>
       </div>
     </div>
-    <div class="search-wrap">
-      <div class="search">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-        <input id="q" type="text" placeholder="Cari produk…" autocomplete="off" />
+    <div class="ann-pop" id="annPop" role="dialog" aria-label="Pengumuman toko">
+      <h4><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5L6 9H3a1 1 0 00-1 1v4a1 1 0 001 1h3l5 4V5z"/><path d="M15.5 8.5a5 5 0 010 7"/></svg>Pengumuman</h4>
+      <p id="annText"></p>
+      <div class="ann-prog" aria-hidden="true"><i id="annProg"></i></div>
+    </div>
+    <div class="menu-scroll" id="menuScroll">
+      <div class="closed-page" id="closedPage">
+        <div class="stk" data-stk="closed" hidden></div>
+        <h2>Toko sedang tutup</h2>
+        <p class="cp-when" id="cpWhen"></p>
+        <p class="cp-ann" id="cpAnn" hidden></p>
+        <button class="cp-code" id="codeLink" type="button">Pelanggan langganan? Masukkan kode</button>
+      </div>
+      <div class="hero-block" id="heroBlock">
+        <div class="stk" data-stk="home" hidden></div>
+        <h2>Mau pesan apa hari ini?</h2>
+        <p>Ketik nama barang atau pilih kategori</p>
+      </div>
+      <div class="sticky-head" id="stickyHead">
+        <div class="search-wrap" id="searchWrap">
+          <div class="search" id="searchBox">
+            <svg class="mag" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+            <div class="q-box">
+              <input id="q" type="text" placeholder="Cari barang…" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" aria-label="Cari barang" />
+              <div class="ph off" id="phLayer" aria-hidden="true"><span class="cur" id="phA"></span><span class="down" id="phB"></span></div>
+            </div>
+            <button class="go" id="goBtn" type="button" aria-label="Cari" hidden><svg class="arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg><svg class="x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+          </div>
+        </div>
+        <div class="cat-row" id="catRow" role="group" aria-label="Kategori"></div>
+      </div>
+      <div class="landing-below" id="landingBelow">
+        <div class="cats-hero" id="catsHero" role="group" aria-label="Kategori"></div>
+        <div id="extrasSlotL"></div>
+        <div class="game-slot" id="gameSlot">
+<section class="maze-card" id="mazeCard" aria-label="Permainan labirin bola">
+  <div class="mz-head">
+    <div class="mz-title"><b>Lagi bosan? Main dulu</b><small id="mzSub">🎱 Bawa bola ke lubang tujuan</small></div>
+    <button class="mz-ibtn" id="mzGyro" type="button" aria-pressed="false" aria-label="Kontrol dengan memiringkan HP (gyro)" title="Gyro">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2.5"/><path d="M11 18h2"/><path d="M3.5 9a9 9 0 000 6M20.5 9a9 9 0 010 6"/></svg>
+    </button>
+    <button class="mz-ibtn" id="mzNew" type="button" aria-label="Labirin baru" title="Labirin baru">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 11-2.6-5.9"/><path d="M20 4v5h-5"/></svg>
+    </button>
+  </div>
+  <div class="mz-seg" id="mzSeg" role="tablist" aria-label="Tingkat kesulitan">
+    <button type="button" role="tab" data-lv="mudah" aria-selected="true">Mudah</button>
+    <button type="button" role="tab" data-lv="sedang" aria-selected="false">Sedang</button>
+    <button type="button" role="tab" data-lv="sulit" aria-selected="false">Sulit</button>
+  </div>
+  <div class="mz-stage" id="mzStage" tabindex="0" aria-label="Papan labirin. Geser untuk menggerakkan bola, atau gunakan tombol panah.">
+    <canvas id="mzCanvas"></canvas>
+    <div class="mz-win" id="mzWin" aria-live="polite"><b id="mzWinT">Selesai!</b><span id="mzWinS"></span><em id="mzWinR" hidden>Rekor baru!</em></div>
+  </div>
+  <div class="mz-foot"><span>Waktu <b id="mzTime">0,0</b> dtk</span><span id="mzBest">Rekor —</span></div>
+  <p class="mz-hint" id="mzHint">Geser jari di papan untuk menggerakkan bola</p>
+</section>
+        </div>
+      </div>
+      <div class="extras-slot-b" id="extrasSlotB"></div>
+      <div id="listWrap">
+        <div class="list-info" id="listInfo" hidden></div>
+        <div class="list" id="list"></div>
       </div>
     </div>
-    <div class="closed-banner" id="closedBanner">
-      <span id="closedMsg"></span>
-      <button id="codeLink" type="button">Pelanggan langganan? Masukkan kode</button>
-    </div>
-    <div class="list" id="list"></div>
   </section>
 
   <!-- Halaman 2 — ringkasan pesanan. Ada di DOM sejak awal (blueprint §2). -->
@@ -750,6 +1285,15 @@ textarea.tfield{resize:none;min-height:64px;}
     </div>
   </section>
 
+  <!-- Halaman pesanan terkirim: tampil seketika saat Kirim (WhatsApp/Telegram) ditekan. -->
+  <section class="page page-sent" id="pageSent" aria-live="polite">
+    <div class="sent-body">
+      <div class="stk" data-stk="sent" hidden></div>
+      <h2>Pesanan dikirim!</h2>
+      <button class="sent-btn" id="sentBack" type="button">Kembali ke halaman awal</button>
+    </div>
+  </section>
+
   <!-- Blueprint §5 — tombol aksi utama tunggal, total menyatu di dalamnya. -->
   <div class="mainbtn-wrap hidden" id="mainBtnWrap">
     <div class="mb-row" id="mbRow">
@@ -758,8 +1302,16 @@ textarea.tfield{resize:none;min-height:64px;}
         <span class="mb-q">Kosongkan pesanan?</span>
         <span class="mb-no">Tidak</span>
         <span class="mb-badge" id="mbBadge">0</span>
+        <svg class="mb-ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
         <span class="mb-label" id="mbLabel">Lihat Pesanan</span>
         <span class="mb-total roll" id="mbTotal">Rp 0</span>
+      </button>
+      <!-- Tombol Telegram: hanya bila toko mengisi kolom Telegram (DATA.telegramUrl);
+           muncul di halaman Pesanan, berdampingan 50/50 dgn tombol WhatsApp. -->
+      <button class="mainbtn mainbtn-tg" id="mainBtnTg" type="button" hidden aria-label="Kirim pesanan ke Telegram">
+        <svg class="mb-ic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
+        <span class="mb-label" id="mbLabelTg">Kirim ke Telegram</span>
+        <span class="mb-total roll" id="mbTotalTg">Rp 0</span>
       </button>
     </div>
   </div>
@@ -807,6 +1359,35 @@ textarea.tfield{resize:none;min-height:64px;}
 </div>
 
 
+<div class="extras" id="extras" hidden>
+  <div id="againWrap" hidden>
+    <div class="sect">Pesan lagi</div>
+    <div class="again">
+      <div class="again-t"><div class="t" id="againTitle"></div><div class="s" id="againSub"></div></div>
+      <button class="btn" id="againBtn" type="button">Pesan lagi</button>
+    </div>
+    <div class="link-row"><button class="link" id="histOpen" type="button">Lihat semua pesanan (<span id="histN">0</span>)</button></div>
+  </div>
+  <div id="noHist" hidden>
+    <div class="sect">Pesan lagi</div>
+    <div class="nohist"><b>Belum ada riwayat di HP ini</b><span>Punya pesanan lama di WhatsApp? Tempel di bawah.</span></div>
+  </div>
+  <div class="paste">
+    <input class="inp" id="pasteIn" type="text" placeholder="Tempel pesanan lama…" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Tempel pesanan lama dari WhatsApp" />
+    <button class="btn2" id="pasteBtn" type="button">Muat</button>
+  </div>
+  <div class="paste-msg" id="pasteMsg" role="status"></div>
+</div>
+
+<div class="scrim" id="histScrim"></div>
+<div class="sheet" id="histSheet" role="dialog" aria-label="Pesanan sebelumnya">
+  <div class="sheet-grip"></div>
+  <button class="sheet-x" id="histClose" type="button" aria-label="Tutup">&times;</button>
+  <div class="sheet-head"><b>Pesanan sebelumnya <span id="histCount"></span></b></div>
+  <div class="sheet-body hist-body" id="histList"></div>
+  <div class="hist-msg" id="histMsg" role="status"></div>
+</div>
+
 <div class="confirm-overlay" id="confirmOverlay">
   <div class="confirm-box">
     <div class="confirm-title" id="confirmTitle"></div>
@@ -833,7 +1414,7 @@ textarea.tfield{resize:none;min-height:64px;}
 
 <div class="toast" id="toast"></div>
 
-<script>
+__STICKER_BLOCKS__<script>
 var DATA = __DATA_JSON__;
 var cart = {}; // unitId -> qty
 var cartNotes = {}; // unitId -> catatan per-produk (Item 26a)
@@ -1017,7 +1598,7 @@ document.getElementById('mbClear').addEventListener('click', function(){
 // Scroll daftar ke bawah: keterangan tombol Kosongkan menyusut (sisa ikon);
 // scroll ke atas / di posisi paling atas: muncul lagi.
 (function(){
-  var listEl = document.getElementById('list');
+  var listEl = document.getElementById('menuScroll');
   var wrap = document.getElementById('mainBtnWrap');
   var last = 0, ticking = false;
   listEl.addEventListener('scroll', function(){
@@ -1064,7 +1645,8 @@ DATA.products.forEach(function(p, pIdx){
 
 document.getElementById('storeName').textContent = DATA.store;
 document.getElementById('paperStore').textContent = DATA.store;
-document.getElementById('storeSub').textContent = 'Katalog pesanan · diperbarui ' + DATA.generatedAt;
+// Logo header = persik The POS (garis putih di kotak aksen), disematkan di HTML.
+// Baris status header (buka/tutup + jam) — diisi renderStatus() di bawah.
 
 // ── Angka roll (mesin slot) utk total/subtotal. Digit yang berubah memutar
 // strip [lama, acak..., baru] naik ATAU turun (acak), lalu strip diruntuhkan
@@ -1082,6 +1664,11 @@ function rollSet(el, text){
   clearTimeout(el._rtm);
   if (old === undefined || ROLL_REDUCED) { el.textContent = text; return; }
   el.setAttribute('aria-label', text);
+  // Posisi kiri teks SEKARANG (termasuk transform yg sedang berjalan) —
+  // dipakai di bawah utk meluncurkan teks mulus bila jumlah digit berubah.
+  var oldLeft = rollLeft(el);
+  el.style.transition = 'none';
+  el.style.transform = '';
   el.innerHTML = '';
   var frag = document.createDocumentFragment();
   var pending = [];
@@ -1120,11 +1707,36 @@ function rollSet(el, text){
   }
   el.appendChild(frag);
   void el.offsetWidth; // paksa reflow supaya transisi mulai dari posisi awal
+  // Jumlah digit berubah (9.999 -> 10.000): teks rata-kanan/tengah akan
+  // melompat selebar satu digit. Mulai dari posisi lama lalu geser mulus
+  // bersama putaran digit. Jumlah digit sama => dx = 0 (tidak ada geseran).
+  var dx = oldLeft - rollLeft(el);
+  if (Math.abs(dx) > 0.5 && !isNaN(dx)) {
+    el.style.transform = 'translateX(' + dx + 'px)';
+    void el.offsetWidth;
+    el.style.transition = 'transform .6s cubic-bezier(.2,.8,.2,1)';
+    el.style.transform = 'translateX(0)';
+  }
   pending.forEach(function(p){
     p[0].style.transition = 'transform .6s cubic-bezier(.2,.8,.2,1)';
     p[0].style.transform = 'translateY(' + p[1] + 'em)';
   });
-  el._rtm = setTimeout(function(){ el.textContent = text; }, 680);
+  el._rtm = setTimeout(function(){
+    el.textContent = text;
+    el.style.transition = '';
+    el.style.transform = '';
+  }, 680);
+}
+// Tepi kiri teks di elemen roll (teks biasa ATAU deretan sel hasil roll).
+function rollLeft(el){
+  var n = el.firstChild;
+  if (!n) return el.getBoundingClientRect().left;
+  if (n.nodeType === 3) {
+    var r = document.createRange();
+    r.selectNodeContents(n);
+    return r.getBoundingClientRect().left;
+  }
+  return n.getBoundingClientRect().left;
 }
 
 function rp(n){
@@ -1288,7 +1900,7 @@ function setQty(unitId, qty){
   // aman di-skip. Fallback ke renderList() penuh kalau produk somehow
   // tidak ketemu (mis. unitId dari sumber tak terduga).
   var p = findProductForUnit(unitId);
-  if (p) refreshProwControls(p); else renderList();
+  if (p) refreshProwControls(p); else renderList(true);
   renderCartBar();
   if (sheetOpen) renderCartSheet();
   saveCart();
@@ -1335,14 +1947,15 @@ function shopMinutesNow(){
 // {closed, msg} menurut jadwal (tanpa memperhitungkan kode).
 function hoursState(){
   var h = DATA.hours;
-  if (!h) return {closed: false, msg: ''};
-  if (h.forced) return {closed: true, msg: 'Toko sedang tutup sementara'};
+  if (!h) return {closed: false, msg: '', when: ''};
+  if (h.forced) return {closed: true, msg: 'Toko sedang tutup sementara', when: 'Toko sedang tutup sementara'};
   if (!h.enabled) return {closed: false, msg: ''};
   var now = shopMinutesNow(), o = h.open, c = h.close;
   var isOpen = (o === c) ? true : (o < c ? (now >= o && now < c) : (now >= o || now < c));
   if (isOpen) return {closed: false, msg: ''};
   var today = (o < c) ? (now < o) : true; // jendela lewat tengah malam: buka lagi hari ini
-  return {closed: true, msg: 'Toko tutup · buka ' + (today ? 'hari ini ' : 'besok ') + fmtHHMM(o)};
+  return {closed: true, msg: 'Toko tutup · buka ' + (today ? 'hari ini ' : 'besok ') + fmtHHMM(o),
+          when: 'Buka lagi ' + (today ? 'hari ini' : 'besok') + ' pukul ' + fmtHHMM(o)};
 }
 function loadAccess(){
   accessGranted = false;
@@ -1353,8 +1966,16 @@ function loadAccess(){
     if (saved && DATA.access.hashes.indexOf(saved.hash) >= 0) accessGranted = true;
   } catch (e) {}
 }
+// Game: halaman awal (bawah) atau, saat toko tutup, bawah halaman tutup.
+function placeGame(closed){
+  var g = document.getElementById('gameSlot');
+  if (!g) return;
+  var host = closed ? document.getElementById('closedPage') : document.querySelector('.landing-below');
+  if (host && g.parentNode !== host) host.appendChild(g);
+}
 var _lastClosedKey = null;
 function applyOpenState(){
+  renderStatus();
   var st = hoursState();
   var closed = st.closed && !accessGranted;
   var app = document.getElementById('app');
@@ -1363,13 +1984,18 @@ function applyOpenState(){
   if (key === _lastClosedKey) return;
   _lastClosedKey = key;
   app.classList.toggle('closed', closed || _emptyCatalog);
-  var banner = document.getElementById('closedBanner');
-  banner.classList.toggle('show', closed);
-  document.getElementById('closedMsg').textContent = st.msg;
+  // Toko tutup = halaman khusus (stiker + jam buka + pengumuman + tautan kode).
+  app.classList.toggle('shop-closed', closed);
+  document.getElementById('cpWhen').textContent = st.when || '';
+  var cpAnn = document.getElementById('cpAnn');
+  cpAnn.hidden = !(closed && ANN);
+  if (ANN) cpAnn.textContent = ANN;
+  if (closed) closeAnn();
+  placeGame(closed);
   document.getElementById('codeLink').style.display =
       (DATA.access && DATA.access.hashes && DATA.access.hashes.length) ? '' : 'none';
   if (closed && sheetOpen) closeSheet(false);
-  renderList();
+  renderList(true); // shopClosed berubah — harga/meta baris ikut berubah
   renderCartBar();
 }
 
@@ -1431,60 +2057,228 @@ document.getElementById('codeOverlay').addEventListener('click', function(e){
   if (e.target === this) closeCodeDialog();
 });
 
-function renderList(){
-  var q = document.getElementById('q').value.trim().toLowerCase();
-  var list = document.getElementById('list');
-  var frag = document.createDocumentFragment();
-  var shown = 0;
-  DATA.products.forEach(function(p){
-    var variants = p.variants || [];
-    var nameMatch = !q || p.name.toLowerCase().indexOf(q) >= 0;
-    var matchedVariants = variants.filter(function(v){
-      return !q || v.name.toLowerCase().indexOf(q) >= 0;
-    });
-    if (q && !nameMatch && matchedVariants.length === 0) return;
-    shown++;
+// Daftar dibatasi PAGE_SIZE baris per tampilan: membangun ribuan baris DOM
+// tiap ketikan terukur 2-10 dtk di HP low-end (2000 produk ~22.000 node).
+// Pelanggan mencari dengan mengetik, hampir tak pernah menggulir semuanya.
+// Pencocokan query TETAP memeriksa SELURUH produk — hanya yang dirender
+// yang dibatasi. JANGAN ganti dgn content-visibility (terukur memperburuk
+// scroll) atau infinite scroll.
+var PAGE_SIZE = 60;
+var shownLimit = PAGE_SIZE;   // baris maks yang dirender utk query aktif
+var _lastQ = null;            // query (trim+lowercase) render terakhir ('' = tanpa query)
+var _lastKey = null;          // kunci isi daftar render terakhir (query / kategori / semua)
+var _stale = false;           // true = render dilewati saat landing, wajib dibangun ulang
+var _matches = [];            // produk yang cocok utk _lastQ (semua, bukan hanya yang tampil)
+var _renderedCount = 0;       // berapa dari _matches yang sudah ada di DOM
+var _moreBar = null;          // elemen keterangan + tombol "Tampilkan lagi"
 
-    var row = document.createElement('div');
-    row.className = 'prow';
-    row.dataset.pid = p.id;
-    var main = document.createElement('div');
-    main.className = 'prow-main';
+// Indeks pencarian — dihitung SEKALI saat halaman dibuka (nama produk +
+// nama tiap varian, huruf kecil). Aturan cocok sama persis dgn dulu: nama
+// produk cocok ATAU ada varian yang cocok (baris induk tetap tampil).
+var SEARCH_INDEX = DATA.products.map(function(p){
+  return {
+    n: String(p.name).toLowerCase(),
+    v: (p.variants || []).map(function(v){ return String(v.name).toLowerCase(); })
+  };
+});
+function matchesQuery(i, q){
+  var ix = SEARCH_INDEX[i];
+  if (ix.n.indexOf(q) >= 0) return true;
+  for (var k = 0; k < ix.v.length; k++) { if (ix.v[k].indexOf(q) >= 0) return true; }
+  return false;
+}
+function fmtCount(n){ return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); }
 
-    var metaHtml = shopClosed ? '—' : (totalOptionsFor(p) > 1
-      ? totalOptionsFor(p) + ' pilihan · mulai ' + rp(minPriceForProduct(p))
-      : rp(p.price) + ' /' + esc(p.unit));
-    main.innerHTML =
-      '<div class="prow-icon" aria-hidden="true">'+pickIcon(p.name, p.category)+'</div>' +
-      '<div class="prow-info"><div class="prow-name">'+esc(p.name)+'</div>' +
-        '<div class="prow-meta">'+metaHtml+'</div></div>';
+function buildProductRow(p){
+  var row = document.createElement('div');
+  row.className = 'prow';
+  row.dataset.pid = p.id;
+  var main = document.createElement('div');
+  main.className = 'prow-main';
 
-    if (p.outOfStock) {
-      // Item 25a — tanda stok habis manual: badge menggantikan tombol
-      // tambah, tidak bisa dipesan lewat katalog HTML statis ini.
-      main.insertAdjacentHTML('beforeend', '<span class="oos-badge">Stok Habis</span>');
-    } else {
-      // Kontrol +/− meniru _AddControl di app kasir (lingkaran "+" oranye,
-      // berubah jadi angka hijau + minus merah begitu ada qty). Tap SISA
-      // badan baris (bukan tombol) buka modal pilih satuan/catatan — sama
-      // seperti tap badan kartu produk di app kasir.
-      main.appendChild(buildProwControls(p));
-      main.addEventListener('click', function(e){
-        if (e.target.closest('.prow-controls')) return;
-        openItemModal(p);
-      });
-    }
-    row.appendChild(main);
-    frag.appendChild(row);
-  });
-  // Bangun semua baris di DocumentFragment dulu (di luar DOM aktif), baru
-  // ditempel sekali di akhir — mencegah reflow bertahap per baris.
-  list.innerHTML = '';
-  if (shown === 0) {
-    list.innerHTML = '<div class="empty">Produk "'+esc(q)+'" tidak ditemukan.</div>';
+  var metaHtml = shopClosed ? '—' : (totalOptionsFor(p) > 1
+    ? totalOptionsFor(p) + ' pilihan · mulai ' + rp(minPriceForProduct(p))
+    : rp(p.price) + ' /' + esc(p.unit));
+  main.innerHTML =
+    '<div class="prow-icon" aria-hidden="true">'+pickIcon(p.name, p.category)+'</div>' +
+    '<div class="prow-info"><div class="prow-name">'+esc(p.name)+'</div>' +
+      '<div class="prow-meta">'+metaHtml+'</div>' +
+      (CATS_ON && p.category ? '<div class="prow-cat">'+esc(p.category)+'</div>' : '') +
+      '</div>';
+
+  if (p.outOfStock) {
+    // Item 25a — tanda stok habis manual: badge menggantikan tombol
+    // tambah, tidak bisa dipesan lewat katalog HTML statis ini.
+    main.insertAdjacentHTML('beforeend', '<span class="oos-badge">Stok Habis</span>');
   } else {
-    list.appendChild(frag);
+    // Kontrol +/− meniru _AddControl di app kasir (lingkaran "+" oranye,
+    // berubah jadi angka hijau + minus merah begitu ada qty). Tap SISA
+    // badan baris (bukan tombol) buka modal pilih satuan/catatan — sama
+    // seperti tap badan kartu produk di app kasir.
+    main.appendChild(buildProwControls(p));
+    main.addEventListener('click', function(e){
+      if (e.target.closest('.prow-controls')) return;
+      openItemModal(p);
+    });
   }
+  row.appendChild(main);
+  return row;
+}
+
+// Keterangan di ATAS daftar: "N produk di <Kategori>" (mode kategori) atau
+// "Menampilkan X dari N produk — ketik nama barang untuk mencari" (semua
+// produk tanpa query, mis. layout tanpa kategori). Mode pencarian tidak
+// memakainya (info "Menampilkan X dari N" ada di ujung daftar, di atas
+// tombol "Tampilkan lagi").
+function updateListInfo(){
+  var el = document.getElementById('listInfo');
+  var total = _matches.length, txt = '';
+  if (!_lastQ && total > 0) {
+    var catName = (CATS_ON && selCat && selCat !== '*') ? selCat : '';
+    var trunc = total > _renderedCount;
+    if (catName) {
+      txt = (trunc ? 'Menampilkan ' + fmtCount(_renderedCount) + ' dari ' + fmtCount(total) + ' produk di '
+                   : fmtCount(total) + ' produk di ') + catName;
+    } else if (trunc) {
+      txt = 'Menampilkan ' + fmtCount(_renderedCount) + ' dari ' + fmtCount(total) +
+            ' produk — ketik nama barang untuk mencari';
+    }
+  }
+  el.textContent = txt;
+  el.hidden = !txt;
+}
+
+// Tombol "Tampilkan lagi" di ujung daftar. Elemennya dipakai ulang (fokus
+// tombol tidak hilang saat ditekan). Info "Menampilkan X dari N produk"
+// di sini hanya utk hasil PENCARIAN (selain itu ada di updateListInfo).
+function updateMoreBar(list){
+  var total = _matches.length;
+  if (total <= _renderedCount) {
+    if (_moreBar && _moreBar.parentNode) _moreBar.parentNode.removeChild(_moreBar);
+    return;
+  }
+  if (!_moreBar) {
+    _moreBar = document.createElement('div');
+    _moreBar.className = 'more-bar';
+    _moreBar.innerHTML = '<div class="more-info" id="moreInfo"></div>' +
+      '<button type="button" class="more-btn" id="moreBtn"></button>';
+    _moreBar.querySelector('#moreBtn').addEventListener('click', function(){
+      shownLimit += PAGE_SIZE;
+      renderList();
+    });
+  }
+  var remaining = total - _renderedCount;
+  var step = Math.min(PAGE_SIZE, remaining);
+  var info = _lastQ ? 'Menampilkan ' + fmtCount(_renderedCount) + ' dari ' + fmtCount(total) + ' produk' : '';
+  var infoEl = _moreBar.querySelector('#moreInfo');
+  infoEl.textContent = info;
+  infoEl.hidden = !info;
+  _moreBar.querySelector('#moreBtn').textContent = 'Tampilkan ' + fmtCount(step) + ' lagi' +
+    (remaining > PAGE_SIZE ? ' (sisa ' + fmtCount(remaining) + ')' : '');
+  if (list.lastChild !== _moreBar) list.appendChild(_moreBar); // selalu baris paling akhir
+}
+
+// Baris dibangun BERTAHAP: potongan pertama (cukup utk layar pertama) langsung,
+// sisanya sepotong per frame. Membangun 60 baris sekaligus terukur ~300 ms
+// satu frame di HP lambat (emoji + kartu berbayangan mahal di-raster) —
+// itu yang bikin transisi landing <-> daftar & mengetik tersendat. Token
+// membatalkan pengisian lama begitu render baru dimulai.
+var ROWS_FIRST = 4;
+var _fillToken = 0;
+// Ukuran potongan menyesuaikan kecepatan perangkat (AIMD): frame sebelumnya
+// cepat -> potongan digandakan (maks 20), lambat -> dibagi dua (min 2). HP
+// lambat tetap tidak melewati ~1 frame panjang; perangkat cepat selesai
+// dalam beberapa frame.
+function fillRows(list, from, to, token){
+  var i = from, size = ROWS_FIRST, last = 0;
+  function step(now){
+    if (token !== _fillToken) return;
+    if (last) {
+      var dt = now - last;
+      if (dt > 34) size = Math.max(2, size >> 1);
+      else if (dt < 21) size = Math.min(20, size * 2);
+    }
+    last = now || 0;
+    var end = Math.min(to, i + size);
+    var frag = document.createDocumentFragment();
+    for (; i < end; i++) frag.appendChild(buildProductRow(_matches[i]));
+    list.insertBefore(frag, (_moreBar && _moreBar.parentNode === list) ? _moreBar : null);
+    if (i < to) requestAnimationFrame(step);
+  }
+  step(0);
+}
+
+// Kunci isi daftar: query (PENCARIAN SELALU GLOBAL — mengabaikan kategori
+// terpilih) > kategori terpilih > semua produk.
+function listKeyFor(q){
+  if (q) return 'q:' + q;
+  if (CATS_ON && selCat && selCat !== '*') return 'c:' + selCat;
+  return 'all';
+}
+
+// force=true: bangun ulang baris yang sedang tampil walau query/limit tak
+// berubah (perlu saat qty/keranjang berubah dari tempat lain, atau
+// shopClosed berganti). Query/kategori berubah otomatis mereset limit +
+// gulir ke atas. Saat LANDING daftar tidak tampil: tidak dibangun sama
+// sekali (ditandai _stale, dibangun begitu pindah ke mode daftar).
+function renderList(force){
+  if (curView === 'landing') { _stale = true; return; }
+  var q = document.getElementById('q').value.trim().toLowerCase();
+  var key = listKeyFor(q);
+  var list = document.getElementById('list');
+  var scroller = document.getElementById('menuScroll');
+  var qChanged = (key !== _lastKey) || _stale;
+  _stale = false;
+  if (!force && !qChanged && shownLimit === _renderedCount) return;
+  if (!force && !qChanged && _renderedCount >= _matches.length) return;
+
+  if (qChanged) {
+    shownLimit = PAGE_SIZE;
+    _matches = [];
+    var cat = (!q && CATS_ON && selCat && selCat !== '*') ? selCat : null;
+    for (var i = 0; i < DATA.products.length; i++) {
+      if (q) { if (matchesQuery(i, q)) _matches.push(DATA.products[i]); }
+      else if (cat) { if (DATA.products[i].category === cat) _matches.push(DATA.products[i]); }
+      else _matches.push(DATA.products[i]);
+    }
+    _lastQ = q;
+    _lastKey = key;
+  }
+  var target = Math.min(shownLimit, _matches.length);
+
+  // Tambah baris saja (tombol "Tampilkan lagi") — tanpa bongkar ulang.
+  if (!force && !qChanged && _renderedCount > 0 && target > _renderedCount) {
+    var from = _renderedCount;
+    // Tombol "Tampilkan lagi" TIDAK dicabut/dipindah (mencabut elemen yang
+    // sedang fokus melepas fokusnya) — baris baru disisipkan di depannya.
+    _renderedCount = target;
+    updateMoreBar(list);
+    updateListInfo();
+    fillRows(list, from, target, ++_fillToken);
+    return;
+  }
+
+  var keepScroll = scroller.scrollTop;
+  var token = ++_fillToken;
+  if (_moreBar && _moreBar.parentNode) _moreBar.parentNode.removeChild(_moreBar);
+  list.innerHTML = '';
+  _renderedCount = target;
+  if (_matches.length === 0) {
+    list.appendChild(notFoundNode(q));
+  } else if (qChanged) {
+    // Isi baru dari atas: bertahap (lihat fillRows).
+    updateMoreBar(list);
+    fillRows(list, 0, target, token);
+  } else {
+    // Render ulang paksa (mis. qty berubah) dgn posisi gulir dipertahankan:
+    // harus utuh sekaligus supaya posisi gulir bisa dipulihkan.
+    var frag = document.createDocumentFragment();
+    for (var j = 0; j < target; j++) frag.appendChild(buildProductRow(_matches[j]));
+    list.appendChild(frag);
+    updateMoreBar(list);
+  }
+  updateListInfo();
+  scroller.scrollTop = qChanged ? 0 : keepScroll;
 }
 
 // "+" selalu menambah SATUAN DASAR induk, walau produk punya varian — sama
@@ -1548,6 +2342,60 @@ function syncProwControls(wrap, p, animate){
 
 // Stepper inline +/- — sekarang hanya dipakai di lembar keranjang, di mana
 // barisnya SELALU qty > 0 (barang qty 0 dihapus dari cart, bukan ditampilkan).
+// ── Tombol kirim WhatsApp + Telegram. HAS_TG = toko mengisi kolom Telegram
+// (DATA.telegramUrl, sudah dinormalisasi di sisi app). Tanpa Telegram: satu
+// tombol WhatsApp seperti biasa. Dengan Telegram: halaman Pesanan menampilkan
+// dua tombol 50/50, tiap tombol 2 baris (logo + teks / total).
+var HAS_TG = !!(DATA.telegramUrl && typeof DATA.telegramUrl === 'string');
+var _sendLabelShort = false;
+if (HAS_TG) {
+  document.getElementById('app').classList.add('has-tg');
+  document.getElementById('mainBtnTg').hidden = false;
+}
+// Teks tombol: tunggal = "Kirim via WhatsApp" (seperti dulu); berdua = "Kirim ke
+// WhatsApp"/"Kirim ke Telegram", dipendekkan jadi nama saja bila tak muat.
+function setSendLabels(){
+  var orderMode = document.getElementById('app').classList.contains('order-mode');
+  var wa = document.getElementById('mbLabel');
+  if (!orderMode) { wa.textContent = 'Lihat Pesanan'; return; }
+  if (!HAS_TG) { wa.textContent = 'Kirim via WhatsApp'; return; }
+  wa.textContent = _sendLabelShort ? 'WhatsApp' : 'Kirim ke WhatsApp';
+  document.getElementById('mbLabelTg').textContent =
+      _sendLabelShort ? 'Telegram' : 'Kirim ke Telegram';
+}
+var _measureCtx = null;
+function textWidth(el, str){
+  try {
+    if (!_measureCtx) _measureCtx = document.createElement('canvas').getContext('2d');
+    var cs = getComputedStyle(el);
+    _measureCtx.font = cs.fontStyle + ' ' + cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily;
+    return _measureCtx.measureText(str).width;
+  } catch (e) { return 0; }
+}
+// Lebar tombol saat animasi melebar belum selesai tidak bisa diukur — hitung
+// lebar TARGET (separuh baris) lalu cek apakah "logo + teks penuh" muat.
+function fitSendLabels(){
+  if (!HAS_TG) return;
+  var app = document.getElementById('app');
+  if (!app.classList.contains('order-mode')) return;
+  var row = document.getElementById('mbRow');
+  var btnW = (row.clientWidth - 8) / 2, avail = btnW - 16;
+  if (!(avail > 0)) return;
+  _sendLabelShort = false;
+  setSendLabels();
+  var full = Math.max(
+      textWidth(document.getElementById('mbLabel'), 'Kirim ke WhatsApp'),
+      textWidth(document.getElementById('mbLabelTg'), 'Kirim ke Telegram'));
+  if (20 + 6 + full + 1 > avail) { _sendLabelShort = true; setSendLabels(); }
+  var tot = rp(cartTotal());
+  var tw = textWidth(document.getElementById('mbTotal'), tot);
+  ['mbTotal', 'mbTotalTg'].forEach(function(id){
+    document.getElementById(id).classList.toggle('tt', tw + 1 > avail);
+  });
+}
+window.addEventListener('resize', fitSendLabels);
+try { document.fonts.ready.then(fitSendLabels); } catch (e) {}
+
 // Blueprint §5 — satu tombol aksi utama yang teks/warna/aksinya mengikuti
 // konteks (browse vs ringkasan pesanan), dan SEMBUNYI total saat belum ada
 // barang dipilih. Nominal total menyatu di dalam tombol yang sama.
@@ -1571,16 +2419,27 @@ function renderCartBar(){
     _mbBadgeCount = n;
   }
   rollSet(document.getElementById('mbTotal'), rp(cartTotal()));
+  if (HAS_TG) rollSet(document.getElementById('mbTotalTg'), rp(cartTotal()));
   var mainBtn = document.getElementById('mainBtn');
   if (_mbOrderMode !== null && _mbOrderMode !== orderMode) {
     // Susunan isi tombol berubah (tumpuk <-> satu baris): samarkan sesaat.
     mainBtn.classList.add('swapping');
-    setTimeout(function(){ mainBtn.classList.remove('swapping'); }, 60);
+    if (HAS_TG) document.getElementById('mainBtnTg').classList.add('swapping');
+    setTimeout(function(){
+      mainBtn.classList.remove('swapping');
+      if (HAS_TG) document.getElementById('mainBtnTg').classList.remove('swapping');
+    }, 60);
   }
   _mbOrderMode = orderMode;
-  document.getElementById('mbLabel').textContent =
-      orderMode ? 'Kirim via WhatsApp' : 'Lihat Pesanan';
+  _sendLabelShort = false;
+  setSendLabels();
   document.getElementById('mainBtn').classList.toggle('wa', orderMode);
+  if (orderMode && HAS_TG) {
+    mainBtn.setAttribute('aria-label', 'Kirim pesanan ke WhatsApp');
+    fitSendLabels();
+  } else {
+    mainBtn.removeAttribute('aria-label');
+  }
   document.getElementById('orderSub').textContent =
       n === 0 ? 'Belum ada barang dipilih' : fmtQty(n) + ' produk dipilih';
 }
@@ -1871,8 +2730,8 @@ document.getElementById('itemScrim').addEventListener('click', closeItemModal);
 // menutup bila ditarik > 30% tinggi atau cukup cepat, selain itu kembali
 // (snap-back). touchmove non-pasif + preventDefault supaya browser TIDAK
 // ikut refresh (pull-to-refresh) / membekukan halaman.
-(function(){
-  var sheet = document.getElementById('itemSheet');
+// Dipakai bersama oleh modal produk & sheet riwayat pesanan.
+function attachSheetSwipe(sheet, onClose){
   var body = sheet.querySelector('.sheet-body');
   var startY = 0, dy = 0, startT = 0, tracking = false, dragging = false;
   sheet.addEventListener('touchstart', function(e){
@@ -1901,11 +2760,12 @@ document.getElementById('itemScrim').addEventListener('click', closeItemModal);
     sheet.style.transition = '';
     var close = dy > sheet.offsetHeight * 0.3 || vel > 0.6;
     sheet.style.transform = '';
-    if (close) closeItemModal();
+    if (close) onClose();
   }
   sheet.addEventListener('touchend', end);
   sheet.addEventListener('touchcancel', end);
-})();
+}
+attachSheetSwipe(document.getElementById('itemSheet'), function(){ closeItemModal(); });
 
 document.getElementById('itemAddBtn').addEventListener('click', function(){
   if (!itemModalProduct || !itemModalUnitId) return;
@@ -1933,16 +2793,755 @@ document.getElementById('itemRemoveBtn').addEventListener('click', function(){
   saveCart();
 });
 
-function render(){ renderList(); renderCartBar(); if (sheetOpen) renderCartSheet(); }
+function render(){ renderList(true); renderCartBar(); if (sheetOpen) renderCartSheet(); }
 
-// Debounce ~120ms — tiap huruf diketik memicu renderList() yang membangun
-// ulang SELURUH daftar produk; tanpa debounce ini kerja berat berulang di
-// setiap huruf, dampaknya paling besar untuk performa di HP low-end.
-var searchTimer = null;
-document.getElementById('q').addEventListener('input', function(){
+// ── Halaman awal (landing) / mode daftar ─────────────────────────────────
+// Keadaan tampilan diturunkan dari: ada query? kategori terpilih? Pencarian
+// SELALU global. Pindah keadaan = applyState(): layout berganti SEKALI
+// (atribut data-view di #pageMenu), lalu elemen yang bergeser dianimasikan
+// dgn teknik FLIP — hanya transform/opacity (tanpa animasi height/top/
+// margin, tanpa layout thrash). Input pencarian TIDAK pernah dipindah dari
+// DOM-nya, jadi fokus/kursor/keyboard HP aman saat transisi.
+var CATS = (DATA.categories || []).filter(function(c){ return typeof c === 'string' && c; });
+var CATS_ON = !!DATA.showCategories && CATS.length > 0;
+var selCat = null;   // null = belum memilih (landing); '*' = Semua produk; selain itu nama kategori
+var curView = null, curCatRow = false, curExtras = false;
+function byId(id){ return document.getElementById(id); }
+var qEl = byId('q'), pageMenu = byId('pageMenu'), menuScroll = byId('menuScroll');
+var searchWrapEl = byId('searchWrap'), searchBoxEl = byId('searchBox');
+var heroBlock = byId('heroBlock'), landingBelow = byId('landingBelow');
+var catRowEl = byId('catRow'), catsHero = byId('catsHero');
+var extrasSlotB = byId('extrasSlotB'), listWrapEl = byId('listWrap'), listEl2 = byId('list');
+var tbId = byId('tbId'), menuTopEl = byId('menuTop');
+var UI_EASE = 'cubic-bezier(.22,.61,.36,1)';
+var UI_MS = 280;
+function motionOk(){
+  try {
+    return typeof Element.prototype.animate === 'function' &&
+      !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  } catch (e) { return false; }
+}
+
+function computeState(){
+  var q = qEl.value.trim();
+  // Halaman awal (landing) SELALU ada; tanpa kategori isinya hanya satu chip
+  // "Semua produk" untuk menjelajah — tidak langsung membuka seluruh daftar.
+  var view = (q || selCat !== null) ? 'list' : 'landing';
+  return {view: view, catRow: CATS_ON && view === 'list' && !q, extras: false};
+}
+
+// Salinan visual elemen yang akan HILANG (ghost): ditaruh absolut di posisi
+// lamanya lalu di-fade-out, supaya elemen yang langsung di-display:none
+// tidak lenyap mendadak. id dibuang agar tidak dobel di DOM.
+function ghostOf(el, mode){
+  var pr = pageMenu.getBoundingClientRect(), r = el.getBoundingClientRect();
+  if (!r.width || !r.height) return null;
+  var g;
+  if (mode === 'list') {
+    g = document.createElement('div');
+    g.className = 'list' + (el.classList.contains('tile-mode') ? ' tile-mode' : '');
+    for (var i = 0; i < el.children.length && i < 6; i++) g.appendChild(el.children[i].cloneNode(true));
+  } else {
+    g = el.cloneNode(true);
+  }
+  g.removeAttribute('id');
+  Array.prototype.forEach.call(g.querySelectorAll('[id]'), function(n){ n.removeAttribute('id'); });
+  g.classList.add('ghost');
+  g.setAttribute('aria-hidden', 'true');
+  g.style.display = (mode === 'list') ? 'block' : getComputedStyle(el).display;
+  g.style.left = (r.left - pr.left) + 'px';
+  g.style.top = (r.top - pr.top) + 'px';
+  g.style.width = r.width + 'px';
+  g.style.height = r.height + 'px';
+  return g;
+}
+function flipY(el, oldTop){
+  var dy = oldTop - el.getBoundingClientRect().top;
+  if (Math.abs(dy) > 1) {
+    el.animate([{transform: 'translateY(' + dy + 'px)'}, {transform: 'none'}],
+      {duration: UI_MS, easing: UI_EASE});
+  }
+}
+function enterAnim(el, dy, delay){
+  el.animate([{opacity: 0, transform: 'translateY(' + dy + 'px)'}, {opacity: 1, transform: 'none'}],
+    {duration: UI_MS, delay: delay || 0, easing: UI_EASE, fill: 'backwards'});
+}
+
+function applyState(st, animate){
+  var oldView = curView, wasCatRow = curCatRow, wasExtras = curExtras;
+  if (oldView === st.view && wasCatRow === st.catRow && wasExtras === st.extras) return;
+  var anim = animate && oldView !== null && !sheetOpen && motionOk();
+  var ghosts = [], first = null;
+  if (anim) {
+    first = {search: searchWrapEl.getBoundingClientRect().top,
+             list: listWrapEl.getBoundingClientRect().top};
+    if (oldView === 'landing' && st.view === 'list') {
+      ghosts.push(ghostOf(heroBlock)); ghosts.push(ghostOf(landingBelow));
+    } else if (oldView === 'list' && st.view === 'landing') {
+      ghosts.push(ghostOf(listEl2, 'list'));
+      if (wasCatRow) ghosts.push(ghostOf(catRowEl));
+    } else if (wasCatRow && !st.catRow) {
+      ghosts.push(ghostOf(catRowEl));
+    }
+    if (wasExtras && !st.extras) ghosts.push(ghostOf(extrasSlotB));
+  }
+  pageMenu.setAttribute('data-view', st.view);
+  pageMenu.setAttribute('data-catrow', st.catRow ? '1' : '0');
+  pageMenu.setAttribute('data-extras', st.extras ? '1' : '0');
+  curView = st.view; curCatRow = st.catRow; curExtras = st.extras;
+  if (oldView !== st.view) menuScroll.scrollTop = 0;
+  // Ke landing: kosongkan baris daftar (ghost sudah menyalin yg terlihat).
+  // Baris basi yang disembunyikan akan di-layout ULANG saat mode daftar
+  // tampil lagi (ratusan objek, ~puluhan ms di HP lambat) sebelum sempat
+  // diganti isi baru.
+  if (st.view === 'landing' && oldView !== 'landing') clearListDom();
+  if (oldView !== null) renderList(); // render awal dilakukan init (render())
+  syncTbId();
+  if (oldView === 'landing' && st.view === 'list') pushListState();
+  else if (oldView === 'list' && st.view === 'landing') popListState();
+  if (!anim) return;
+
+  flipY(searchWrapEl, first.search);
+  if (oldView === 'list' && st.view === 'list') flipY(listWrapEl, first.list);
+  if (oldView === 'landing' && st.view === 'list') {
+    enterAnim(listWrapEl, 14, 40);
+    if (st.catRow) enterAnim(catRowEl, 8, 20);
+  } else if (oldView === 'list' && st.view === 'landing') {
+    enterAnim(heroBlock, 12, 40);
+    enterAnim(landingBelow, 14, 80);
+  } else {
+    if (st.catRow && !wasCatRow) enterAnim(catRowEl, 8, 0);
+    if (st.extras && !wasExtras) enterAnim(extrasSlotB, 8, 0);
+  }
+  ghosts.forEach(function(g){
+    if (!g) return;
+    pageMenu.appendChild(g);
+    var kill = function(){ if (g.parentNode) g.parentNode.removeChild(g); };
+    g.animate([{opacity: 1, transform: 'none'}, {opacity: 0, transform: 'translateY(-8px)'}],
+      {duration: 200, easing: 'ease-out', fill: 'forwards'}).onfinish = kill;
+    setTimeout(kill, 600);
+  });
+}
+
+function clearListDom(){
+  _fillToken++;
+  if (_moreBar && _moreBar.parentNode) _moreBar.parentNode.removeChild(_moreBar);
+  listEl2.innerHTML = '';
+  _renderedCount = 0;
+  _matches = [];
+  _lastKey = null;
+  _lastQ = null;
+  byId('listInfo').hidden = true;
+}
+function syncTbId(){
+  var link = curView === 'list';
+  tbId.classList.toggle('clickable', link);
+  if (link) tbId.setAttribute('aria-label', 'Kembali ke halaman awal');
+  else tbId.removeAttribute('aria-label');
+}
+tbId.addEventListener('click', function(){ if (curView === 'list') goLanding(); });
+
+function goLanding(noAnim){
+  selCat = null;
+  setSelChips();
+  qEl.value = '';
   clearTimeout(searchTimer);
-  searchTimer = setTimeout(renderList, 120);
+  syncQueryUi();
+  applyState(computeState(), !noAnim);
+}
+
+// Riwayat browser: masuk mode daftar dari landing memakai satu entri
+// history, jadi tombol Kembali HP kembali ke landing (bukan keluar dari
+// katalog). _popIgnore menelan popstate yg dipicu history.back() buatan sendiri.
+var _listPushed = false, _popIgnore = 0;
+function pushListState(){
+  if (_listPushed) return;
+  try { history.pushState({posList: 1}, ''); _listPushed = true; } catch (e) {}
+}
+function popListState(){
+  if (!_listPushed) return;
+  _listPushed = false;
+  _popIgnore++;
+  try { history.back(); } catch (e) { _popIgnore--; }
+}
+
+// ── Chip kategori. Dibangun SEKALI (dua set: di landing & di baris sticky);
+// pilihan hanya mengganti class (fokus keyboard tidak hilang).
+function buildChips(){
+  function mk(label, val, cls){
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'cat-chip' + (cls ? ' ' + cls : '');
+    b.textContent = label;
+    b.dataset.cat = val;
+    b.addEventListener('click', function(){ selectCat(val); });
+    return b;
+  }
+  catsHero.appendChild(mk('Semua produk', '*', 'all'));
+  if (!CATS_ON) return;   // kategori dimatikan: landing hanya punya chip "Semua produk"
+  CATS.forEach(function(c){ catsHero.appendChild(mk(c, c)); });
+  catRowEl.appendChild(mk('Semua produk', '*'));
+  CATS.forEach(function(c){ catRowEl.appendChild(mk(c, c)); });
+}
+function setSelChips(){
+  Array.prototype.forEach.call(catRowEl.children, function(b){
+    var on = selCat !== null && b.dataset.cat === selCat;
+    b.classList.toggle('sel', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+}
+function centerChip(val){
+  requestAnimationFrame(function(){
+    Array.prototype.forEach.call(catRowEl.children, function(b){
+      if (b.dataset.cat === val) {
+        catRowEl.scrollLeft = b.offsetLeft - (catRowEl.clientWidth - b.offsetWidth) / 2;
+      }
+    });
+  });
+}
+function selectCat(val){
+  if (selCat === val && curView === 'list') return;
+  var wasList = curView === 'list';
+  selCat = val;
+  setSelChips();
+  clearTimeout(searchTimer);
+  applyState(computeState(), true);   // landing -> daftar: daftar dibangun di dalam
+  if (wasList) {
+    renderList();
+    if (motionOk()) listWrapEl.animate([{opacity: .3}, {opacity: 1}], {duration: 200, easing: 'ease-out'});
+  }
+  centerChip(val);
+}
+
+// ── Kolom cari: placeholder saran terlaris bergantian ("Cari <b>Nama</b>").
+// Berhenti saat field fokus/terisi/tab tersembunyi; tanpa animasi bila
+// prefers-reduced-motion (teks langsung diganti). Tombol panah mengisi kolom
+// dgn saran yang SEDANG tampil lalu mencari (pencarian global biasa).
+var SUG = (DATA.topSellers || []).filter(function(s){ return typeof s === 'string' && s.trim(); });
+var sugIdx = 0, phTimer = null;
+var phLayer = byId('phLayer'), phCur = byId('phA'), phNext = byId('phB'), goBtn = byId('goBtn');
+// Format: "Cari <b>Nama</b>? Tekan →" — memberi tahu pelanggan bahwa tombol
+// panah di kanan (atau Enter) langsung mencari saran itu.
+var ARROW_SVG = '<svg class="ph-arr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>';
+function setPh(el, name){
+  el.textContent = '';
+  var i = document.createElement('i');
+  var a = document.createElement('em');
+  a.textContent = 'Cari ';
+  var b = document.createElement('b');
+  b.textContent = name;
+  var c = document.createElement('em');
+  c.textContent = '? Tekan';
+  var arr = document.createElement('em');
+  arr.innerHTML = ARROW_SVG;
+  i.appendChild(a); i.appendChild(b); i.appendChild(c); i.appendChild(arr);
+  el.appendChild(i);
+}
+function syncQueryUi(){
+  var has = qEl.value.length > 0;
+  searchBoxEl.classList.toggle('has-text', has);
+  phLayer.classList.toggle('off', has || !SUG.length);
+  goBtn.hidden = !has && !SUG.length;
+  goBtn.setAttribute('aria-label',
+    has ? 'Hapus pencarian' : (SUG.length ? 'Cari ' + SUG[sugIdx] : 'Cari'));
+}
+function phCanRun(){
+  // Tetap berjalan saat kolom fokus (kursor di dalam): Enter tetap mencari
+  // saran yang tampil. Berhenti begitu ada satu huruf diketik.
+  return SUG.length > 1 && !document.hidden && !qEl.value && !sheetOpen;
+}
+function phStep(){
+  var next = (sugIdx + 1) % SUG.length;
+  if (!motionOk()) {
+    setPh(phCur, SUG[next]);
+  } else {
+    setPh(phNext, SUG[next]);
+    phNext.className = 'noanim down';
+    void phNext.offsetWidth;
+    phNext.className = 'cur';
+    phCur.className = 'up';
+    var t = phCur; phCur = phNext; phNext = t;
+  }
+  sugIdx = next;
+  syncQueryUi();
+}
+function phLoop(){
+  clearTimeout(phTimer);
+  phTimer = setTimeout(function(){ if (phCanRun()) phStep(); phLoop(); }, 2800);
+}
+function initPlaceholder(){
+  if (SUG.length) {
+    qEl.placeholder = '';
+    setPh(phCur, SUG[0]);
+    phLoop();
+  }
+  syncQueryUi();
+}
+function fillSuggestion(){
+  if (!SUG.length) return;
+  qEl.value = SUG[sugIdx];
+  syncQueryUi();
+  immediateSearch();
+  qEl.blur();
+}
+// Landing + keyboard terbuka: kolom cari bisa tertutup keyboard / tombol
+// keranjang di bawah. Gulir halaman secukupnya (kolom cari menempel di bawah
+// header lewat sticky) supaya kolom cari TERLIHAT. Tidak melakukan apa pun
+// bila sudah terlihat penuh.
+var _revealTimer = null;
+function revealSearch(delay){
+  clearTimeout(_revealTimer);
+  _revealTimer = setTimeout(function(){
+    if (curView !== 'landing' || document.activeElement !== qEl) return;
+    var r = searchWrapEl.getBoundingClientRect();
+    var top = menuTopEl.getBoundingClientRect().bottom;
+    var wrap = byId('mainBtnWrap');
+    var lim = window.innerHeight;
+    if (window.visualViewport) lim = Math.min(lim, visualViewport.offsetTop + visualViewport.height);
+    if (!wrap.classList.contains('hidden') && wrap.offsetHeight) lim = Math.min(lim, wrap.getBoundingClientRect().top);
+    if (r.top >= top && r.bottom <= lim - 8) return;
+    var d = r.top - top - 8;
+    if (d > 0) menuScroll.scrollTo({top: menuScroll.scrollTop + d, behavior: motionOk() ? 'smooth' : 'auto'});
+  }, delay);
+}
+qEl.addEventListener('focus', function(){ revealSearch(380); });
+if (window.visualViewport) visualViewport.addEventListener('resize', function(){ revealSearch(120); });
+function immediateSearch(){
+  clearTimeout(searchTimer);
+  applyState(computeState(), true);
+  renderList();
+}
+
+// Debounce ~120ms — tiap huruf diketik memicu renderList(); tanpa debounce
+// ini kerja berulang di setiap huruf, dampaknya terbesar di HP low-end.
+// Pengecualian: huruf PERTAMA / terakhir-dihapus (keadaan tampilan berganti,
+// mis. landing <-> hasil) diproses langsung supaya transisinya responsif.
+var searchTimer = null;
+qEl.addEventListener('input', function(){
+  syncQueryUi();
+  clearTimeout(searchTimer);
+  var st = computeState();
+  if (st.view !== curView || st.catRow !== curCatRow || st.extras !== curExtras) {
+    applyState(st, true);
+    if (st.view === 'landing') revealSearch(400);   // hapus huruf terakhir -> landing
+    return;
+  }
+  searchTimer = setTimeout(function(){ renderList(); }, 120);
 });
+qEl.addEventListener('keydown', function(e){
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  if (!qEl.value.trim() && SUG.length) { fillSuggestion(); return; }
+  immediateSearch();
+  qEl.blur();
+});
+// Tombol (panah/X) tidak boleh mencuri fokus: kursor tetap di kolom cari &
+// keyboard HP tetap terbuka (pelanggan tak perlu mengetuk kolom lagi).
+['mousedown', 'pointerdown'].forEach(function(ev){
+  goBtn.addEventListener(ev, function(e){ if (document.activeElement === qEl) e.preventDefault(); });
+});
+goBtn.addEventListener('click', function(){
+  if (qEl.value.length > 0) {
+    qEl.value = '';
+    syncQueryUi();
+    immediateSearch();
+    qEl.focus();
+    revealSearch(400);
+  } else {
+    fillSuggestion();
+  }
+});
+
+// ── Stiker animasi (Lottie). JSON per slot tersemat di <script type=
+// application/json id="stk-<slot>"> (hanya bila ada stiker; pustaka lottie ikut
+// tersemat hanya saat itu). Animasi baru dibuat saat kotaknya TERLIHAT (idle),
+// dijeda saat keluar layar / tab disembunyikan, dan jadi gambar diam bila
+// pengguna memilih mengurangi gerakan. Gagal di langkah mana pun = kotak
+// disembunyikan, halaman tetap normal.
+var STK_EL = [];
+function stkJson(slot){
+  if (!window.lottie) return null;
+  var key = '_' + slot;
+  if (stkJson[key] !== undefined) return stkJson[key];
+  var node = document.getElementById('stk-' + slot), v = null;
+  if (node) { try { v = JSON.parse(node.textContent); } catch (e) {} }
+  return (stkJson[key] = v);
+}
+var stkIO = null;
+function stkApply(el){
+  var a = el._anim;
+  if (!a) return;
+  try {
+    if (!motionOk()) a.goToAndStop(Math.floor(a.totalFrames / 2), true);
+    else if (el._vis && !document.hidden) a.play();
+    else a.pause();
+  } catch (e) {}
+}
+function stkCreate(el){
+  if (el._anim || el._dead) return;
+  try {
+    el._anim = lottie.loadAnimation({container: el, renderer: 'svg', loop: true, autoplay: false,
+      animationData: stkJson(el.getAttribute('data-stk')),
+      rendererSettings: {preserveAspectRatio: 'xMidYMid meet'}});
+  } catch (e) { el._dead = true; el.hidden = true; return; }
+  stkApply(el);
+}
+function stkSeen(el, vis){
+  el._vis = vis;
+  if (vis && !el._anim) {
+    var go = function(){ if (el._vis) stkCreate(el); };
+    if (window.requestIdleCallback) requestIdleCallback(go, {timeout: 400}); else setTimeout(go, 60);
+  } else stkApply(el);
+}
+function stkMount(el){
+  if (el._stk) return;
+  if (!stkJson(el.getAttribute('data-stk'))) { el.hidden = true; return; }
+  el._stk = true;
+  el.hidden = false;
+  STK_EL.push(el);
+  if ('IntersectionObserver' in window) {
+    if (!stkIO) stkIO = new IntersectionObserver(function(es){
+      es.forEach(function(e){ stkSeen(e.target, e.isIntersecting); });
+    });
+    stkIO.observe(el);
+  } else stkSeen(el, true);
+}
+document.addEventListener('visibilitychange', function(){ STK_EL.forEach(stkApply); });
+
+// Halaman "Produk tidak ditemukan": satu node dipakai ulang (animasinya tidak
+// dibuat ulang tiap ketikan); hanya teks yang berganti.
+var _nfEl = null, _nfP = null;
+function notFoundNode(q){
+  if (!_nfEl) {
+    _nfEl = document.createElement('div');
+    _nfEl.className = 'nf';
+    var st = document.createElement('div');
+    st.className = 'stk';
+    st.setAttribute('data-stk', 'notFound');
+    st.hidden = true;
+    _nfP = document.createElement('p');
+    _nfEl.appendChild(st);
+    _nfEl.appendChild(_nfP);
+    stkMount(st);
+  }
+  _nfP.textContent = q ? 'Produk "' + q + '" tidak ditemukan' : 'Belum ada produk di sini';
+  return _nfEl;
+}
+
+// ── Status header (buka/tutup + jam) ──────────────────────────────────
+function renderStatus(){
+  var el = byId('storeSub'), h = DATA.hours, st = hoursState(), text, closed = false, warn = false;
+  if (h && (h.forced || h.enabled)) {
+    if (st.closed && !accessGranted) { closed = true; text = st.msg; }
+    else if (st.closed) { warn = true; text = 'Pesan titipan · toko tutup'; }
+    else text = (h.enabled && h.open !== h.close) ? 'Buka · sampai ' + fmtHHMM(h.close) : 'Buka';
+  } else {
+    text = null;
+  }
+  // Tanpa jam buka: baris 1 = "Katalog pesanan", baris 2 = "Diperbarui <waktu>"
+  // (waktu tak terputus di tengah). Dengan jam buka: satu teks, boleh membungkus.
+  var upd = null;
+  if (text === null) { text = 'Katalog pesanan'; upd = DATA.generatedAt; }
+  var key = (closed ? '1' : warn ? '2' : '0') + text + '|' + (upd || '');
+  if (el._k === key) return;
+  el._k = key;
+  el.textContent = '';
+  var dot = document.createElement('i');
+  dot.className = 'st-dot' + (closed ? ' closed' : warn ? ' warn' : '');
+  var sp = document.createElement('span');
+  sp.className = 'st-txt';
+  sp.appendChild(document.createTextNode(text));
+  if (upd) {
+    var u = document.createElement('span');
+    u.className = 'st-upd';
+    u.appendChild(document.createTextNode('Diperbarui '));
+    var nb = document.createElement('span');
+    nb.className = 'nb';
+    nb.textContent = upd;
+    u.appendChild(nb);
+    sp.appendChild(u);
+  }
+  el.appendChild(dot);
+  el.appendChild(sp);
+}
+
+// ── Pengumuman toko (teks dari owner => SELALU textContent, bukan innerHTML).
+// Otomatis muncul SEKALI tiap halaman dibuka (lama = clamp(3000 + 60ms x
+// huruf, 3000, 12000)), menciut ke tombol bila discroll / ketuk di luar;
+// diketuk manual = tanpa batas waktu sampai scroll/ketuk di luar/ketuk lagi.
+var ANN = (function(){
+  var a = DATA.announcement;
+  if (!a || a.enabled === false || typeof a.text !== 'string') return null;
+  var t = a.text.trim();
+  return t ? t : null;
+})();
+var annBtn = byId('annBtn'), annPop = byId('annPop'), annProg = byId('annProg');
+var annOpen = false, annTimer = null, annAutoShown = false, annScrollBase = 0;
+function annAutoMs(){ return Math.min(12000, Math.max(3000, 3000 + 60 * ANN.length)); }
+function openAnn(auto){
+  if (!ANN || annOpen) return;
+  annPop.style.top = (menuTopEl.offsetTop + menuTopEl.offsetHeight + 6) + 'px';
+  var br = annBtn.getBoundingClientRect(), pr = pageMenu.getBoundingClientRect();
+  var ax = (br.left + br.width / 2) - pr.left - annPop.offsetLeft;
+  ax = Math.max(18, Math.min(annPop.offsetWidth - 18, ax));
+  annPop.style.setProperty('--ax', ax + 'px');
+  annPop.classList.toggle('manual', !auto);
+  annOpen = true;
+  annScrollBase = menuScroll.scrollTop;
+  annBtn.setAttribute('aria-expanded', 'true');
+  annBtn.classList.add('seen');
+  clearTimeout(annTimer);
+  if (auto) {
+    var ms = annAutoMs();
+    annProg.style.transition = 'none';
+    annProg.style.transform = 'scaleX(1)';
+    void annProg.offsetWidth;
+    annProg.style.transition = 'transform ' + ms + 'ms linear';
+    annProg.style.transform = 'scaleX(0)';
+    annTimer = setTimeout(closeAnn, ms);
+  }
+  annPop.classList.add('show');
+}
+function closeAnn(){
+  clearTimeout(annTimer);
+  annTimer = null;
+  if (!annOpen) return;
+  annOpen = false;
+  annPop.classList.remove('show');
+  annBtn.setAttribute('aria-expanded', 'false');
+}
+function initAnn(){
+  if (!ANN) { annBtn.hidden = true; return; }
+  annBtn.hidden = false;
+  byId('annText').textContent = ANN;
+  annBtn.addEventListener('click', function(){ if (annOpen) closeAnn(); else openAnn(false); });
+  menuScroll.addEventListener('scroll', function(){
+    if (annOpen && Math.abs(menuScroll.scrollTop - annScrollBase) > 8) closeAnn();
+  }, {passive: true});
+  var ty = 0;
+  pageMenu.addEventListener('touchstart', function(e){ if (e.touches.length) ty = e.touches[0].clientY; }, {passive: true});
+  pageMenu.addEventListener('touchmove', function(e){
+    if (annOpen && e.touches.length && Math.abs(e.touches[0].clientY - ty) > 12) closeAnn();
+  }, {passive: true});
+  pageMenu.addEventListener('wheel', function(e){ if (annOpen && Math.abs(e.deltaY) > 4) closeAnn(); }, {passive: true});
+  document.addEventListener('pointerdown', function(e){
+    if (annOpen && !annPop.contains(e.target) && !annBtn.contains(e.target)) closeAnn();
+  }, true);
+  // Sekali per halaman dibuka — bukan tiap perubahan keadaan.
+  setTimeout(function(){
+    if (annAutoShown || sheetOpen || shopClosed) return;
+    annAutoShown = true;
+    openAnn(true);
+  }, 450);
+}
+
+// ── Pesan lagi: riwayat pesanan di localStorage HP pelanggan sendiri (kunci
+// TIDAK memuat generatedAt, jadi bertahan lintas Publish; SEMUA pesanan
+// disimpan, tanpa batas jumlah). Semua akses try/catch. Harga SELALU dari
+// katalog terkini — yang disimpan hanya unitId, qty, nama tampil, catatan.
+var HIST_KEY = 'posOrderHistory';
+var DUP_WINDOW_MS = 120000;
+var MONTHS_ID = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Ags','Sep','Okt','Nov','Des'];
+function loadHistory(){
+  var out = [];
+  try {
+    var raw = localStorage.getItem(HIST_KEY);
+    if (!raw) return out;
+    var arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return out;
+    arr.forEach(function(o){
+      if (!o || typeof o.t !== 'number' || !Array.isArray(o.items)) return;
+      var items = o.items.filter(function(it){ return it && typeof it.id === 'string' && it.q > 0; });
+      if (items.length) out.push({t: o.t, items: items});
+    });
+  } catch (e) {}
+  out.sort(function(a, b){ return b.t - a.t; });
+  return out;
+}
+function requestPersist(){
+  try {
+    if (navigator.storage && navigator.storage.persist) {
+      var r = navigator.storage.persist();
+      if (r && r.catch) r.catch(function(){});
+    }
+  } catch (e) {}
+}
+function orderSig(items){
+  return items.map(function(it){ return it.id + ':' + it.q + ':' + (it.note || ''); }).sort().join('|');
+}
+// Dipanggil tiap pelanggan menekan kirim. Isi identik < 2 menit dari
+// pesanan terakhir (dobel-ketuk) diabaikan.
+function recordOrder(){
+  if (!DATA.reorder) return;
+  var items = [];
+  Object.keys(cart).forEach(function(id){
+    var u = byUnit[id];
+    if (!u || !(cart[id] > 0)) return;
+    var it = {id: id, q: cart[id], n: u.name};
+    var note = (cartNotes[id] || '').trim();
+    if (note) it.note = note;
+    items.push(it);
+  });
+  if (!items.length) return;
+  var list = loadHistory();
+  var now = Date.now();
+  if (list.length && now - list[0].t < DUP_WINDOW_MS && orderSig(list[0].items) === orderSig(items)) return;
+  list.unshift({t: now, items: items});
+  try { localStorage.setItem(HIST_KEY, JSON.stringify(list)); } catch (e) { return; }
+  requestPersist();
+  renderExtras();
+}
+function p2(n){ return (n < 10 ? '0' : '') + n; }
+function fmtOrderDate(t, withYear, withTime){
+  var d = new Date(t);
+  return d.getDate() + ' ' + MONTHS_ID[d.getMonth()] + (withYear ? ' ' + d.getFullYear() : '') +
+    (withTime ? ' · ' + p2(d.getHours()) + '.' + p2(d.getMinutes()) : '');
+}
+function summarizeItems(items, withQty){
+  var parts = items.slice(0, 3).map(function(it){ return it.n + (withQty ? ' ×' + fmtQty(it.q) : ''); });
+  if (items.length > 3) parts.push('+' + (items.length - 3) + ' lagi');
+  return parts.join(', ');
+}
+var extrasEl = byId('extras');
+function renderExtras(){
+  var on = !!DATA.reorder;
+  extrasEl.hidden = !on;
+  if (!on) return;
+  var list = loadHistory();
+  byId('againWrap').hidden = list.length === 0;
+  byId('noHist').hidden = list.length > 0;
+  if (list.length) {
+    var o = list[0];
+    byId('againTitle').textContent = fmtOrderDate(o.t, false, false) + ' · ' + o.items.length + ' jenis barang';
+    byId('againSub').textContent = summarizeItems(o.items, false);
+    byId('histN').textContent = String(list.length);
+  }
+}
+// Masukkan item ke keranjang: qty = qty tersimpan (item lain tidak disentuh),
+// lewati unitId yg tak ada di katalog sekarang / produk habis.
+function applyOrderItems(items){
+  var added = 0, missing = [];
+  items.forEach(function(it){
+    var u = byUnit[it.id], p = u ? findProductForUnit(it.id) : null;
+    if (!u || !p || p.outOfStock) { missing.push(it.n || (u && u.name) || 'barang'); return; }
+    cart[it.id] = it.q;
+    dropDraft(it.id);
+    if (it.note) cartNotes[it.id] = it.note;
+    added++;
+  });
+  if (added) { render(); saveCart(); }
+  return {added: added, missing: missing};
+}
+function reorderMessage(res){
+  if (!res.added) {
+    return {text: res.missing.length ? 'Barang di pesanan ini sudah tidak tersedia' : 'Tidak ada barang untuk dimasukkan', err: true};
+  }
+  var t = res.added + ' barang dimasukkan';
+  if (res.missing.length) {
+    t += ' · ' + res.missing.length + ' tidak tersedia lagi (' +
+      res.missing.slice(0, 2).join(', ') + (res.missing.length > 2 ? ', dll' : '') + ')';
+  }
+  return {text: t, err: false};
+}
+function reorderFrom(items, inSheet){
+  try {
+    var res = applyOrderItems(items), m = reorderMessage(res);
+    showToast(m.text, {ms: 4500, error: m.err});
+    if (inSheet) byId('histMsg').textContent = (m.err ? '' : '✓ ') + m.text;
+  } catch (e) { showToast('Gagal memasukkan pesanan', {error: true}); }
+}
+byId('againBtn').addEventListener('click', function(){
+  var list = loadHistory();
+  if (list.length) reorderFrom(list[0].items, false);
+});
+function renderHistSheet(){
+  var list = loadHistory(), box = byId('histList');
+  byId('histCount').textContent = '(' + list.length + ')';
+  box.textContent = '';
+  list.forEach(function(o, idx){
+    var row = document.createElement('div');
+    row.className = 'hist-it';
+    var tx = document.createElement('div');
+    tx.className = 'hi-t';
+    var t = document.createElement('div');
+    t.className = 't';
+    t.textContent = fmtOrderDate(o.t, true, true);
+    var s = document.createElement('div');
+    s.className = 's';
+    s.textContent = summarizeItems(o.items, true);
+    tx.appendChild(t);
+    tx.appendChild(s);
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'btn' + (idx === 0 ? '' : ' o');
+    b.textContent = 'Pesan lagi';
+    b.addEventListener('click', function(){ reorderFrom(o.items, true); });
+    row.appendChild(tx);
+    row.appendChild(b);
+    box.appendChild(row);
+  });
+}
+function openHist(){
+  renderHistSheet();
+  byId('histMsg').textContent = '';
+  byId('histScrim').classList.add('show');
+  byId('histSheet').classList.add('show');
+  document.documentElement.classList.add('modal-open');
+}
+function closeHist(){
+  byId('histScrim').classList.remove('show');
+  byId('histSheet').classList.remove('show');
+  document.documentElement.classList.remove('modal-open');
+}
+byId('histOpen').addEventListener('click', openHist);
+byId('histClose').addEventListener('click', closeHist);
+byId('histScrim').addEventListener('click', closeHist);
+attachSheetSwipe(byId('histSheet'), closeHist);
+
+// Pemulihan: tempel teks WhatsApp -> ambil kode `#PSN:` / `PSN:` (teks lain
+// diabaikan), format `unitId=qty[:catatanEncoded];...`. Tidak boleh melempar.
+function parsePsn(text){
+  var items = [], re = /#?PSN:(\S+)/gi, m;
+  var src = String(text == null ? '' : text);
+  while ((m = re.exec(src)) !== null) {
+    m[1].split(';').forEach(function(part){
+      var eq = part.indexOf('=');
+      if (eq <= 0) return;
+      var id = part.slice(0, eq), rest = part.slice(eq + 1), ci = rest.indexOf(':');
+      var q = parseFloat(ci >= 0 ? rest.slice(0, ci) : rest);
+      if (!id || !(q > 0) || !isFinite(q)) return;
+      var it = {id: id, q: q};
+      if (ci >= 0) {
+        var raw = rest.slice(ci + 1), note = raw;
+        try { note = decodeURIComponent(raw); } catch (e) { note = raw; }
+        note = note.trim();
+        if (note) it.note = note;
+      }
+      items.push(it);
+    });
+  }
+  return items;
+}
+function loadPasted(){
+  var msg = byId('pasteMsg');
+  try {
+    var items = parsePsn(byId('pasteIn').value);
+    if (!items.length) { msg.textContent = 'Kode pesanan tidak ditemukan di teks ini'; return; }
+    msg.textContent = '';
+    var res = applyOrderItems(items), m = reorderMessage(res);
+    showToast(m.text, {ms: 4500, error: m.err});
+    if (res.added) byId('pasteIn').value = '';
+    else msg.textContent = m.text;
+  } catch (e) {
+    msg.textContent = 'Kode pesanan tidak ditemukan di teks ini';
+  }
+}
+byId('pasteBtn').addEventListener('click', loadPasted);
+byId('pasteIn').addEventListener('keydown', function(e){ if (e.key === 'Enter') { e.preventDefault(); loadPasted(); } });
+byId('pasteIn').addEventListener('input', function(){ byId('pasteMsg').textContent = ''; });
+// Slot "Pesan lagi": di landing (bawah chip) atau, tanpa kategori, di bawah kolom cari.
+byId('extrasSlotL').appendChild(extrasEl);
+
 
 // Blueprint §2/§6 — pindah mode, BUKAN pindah halaman: tidak ada reload,
 // tidak ada history baru, kedua section tetap hidup di DOM. `sheetOpen`
@@ -1974,12 +3573,16 @@ function closeSheet(fromPop){
   renderCartBar();
   if (_histPushed) {
     _histPushed = false;
-    if (!fromPop) { try { history.back(); } catch (e) {} }
+    if (!fromPop) { _popIgnore++; try { history.back(); } catch (e) { _popIgnore--; } }
   }
 }
 document.getElementById('backBtn').addEventListener('click', function(){ closeSheet(false); });
 window.addEventListener('popstate', function(){
-  if (sheetOpen) closeSheet(true);
+  if (_popIgnore > 0) { _popIgnore--; return; }
+  if (sentOpen) { closeSent(true); return; }
+  if (sheetOpen) { closeSheet(true); return; }
+  // Kembali dari mode daftar (masuk lewat landing) -> kembali ke landing.
+  if (_listPushed) { _listPushed = false; goLanding(); }
 });
 
 function esc(s){
@@ -2045,7 +3648,7 @@ function showToast(msg, opts){
   t.classList.add('show');
   clearTimeout(_toastTimer);
   if (!opts.persist) {
-    _toastTimer = setTimeout(function(){ t.classList.remove('show'); }, 2500);
+    _toastTimer = setTimeout(function(){ t.classList.remove('show'); }, opts.ms || 2500);
   }
 }
 document.getElementById('toast').addEventListener('click', function(){
@@ -2068,10 +3671,26 @@ function copyText(text){
   return ok;
 }
 
-function submitOrder(){
+// channel: 'wa' (WhatsApp, bawaan) atau 'tg' (Telegram). Dua jalur berbagi
+// teks pesanan (termasuk kode mesin #PSN: — SAMA PERSIS), salin ke clipboard,
+// dan simpan riwayat "Pesan lagi" (recordOrder sudah menolak dobel-ketuk
+// isi identik < 2 menit). copyText + window.open SINKRON di handler klik agar
+// lolos kebijakan browser.
+function submitOrder(channel){
   if (cartCount() === 0) return;
   var text = buildOrderText();
-  copyText(text);
+  var copied = copyText(text);
+  if (channel === 'tg') {
+    // Telegram TIDAK mendukung mengisi teks otomatis ke chat pengguna
+    // tertentu lewat tautan: salin dulu, pelanggan tempel sendiri.
+    if (!DATA.telegramUrl) return;
+    showToast(copied ? 'Pesanan disalin — tempel di chat Telegram'
+                     : 'Gagal menyalin — salin manual dari halaman Pesanan');
+    try { recordOrder(); } catch (e) {}
+    window.open(DATA.telegramUrl, '_blank');
+    showSent();
+    return;
+  }
   var num = (DATA.waNumber || '').replace(/[^0-9]/g, '');
   // Item 12 — direct: deep-link ke nomor WA toko. Non-direct: share WA
   // generik (tanpa nomor tujuan), pelanggan pilih sendiri kontaknya.
@@ -2079,19 +3698,51 @@ function submitOrder(){
     ? ('https://wa.me/' + num + '?text=' + encodeURIComponent(text))
     : ('https://api.whatsapp.com/send?text=' + encodeURIComponent(text));
   showToast('Teks pesanan disalin — tempel bila perlu');
+  try { recordOrder(); } catch (e) {}
   window.open(url, '_blank');
+  showSent();
 }
 
+// Halaman "Pesanan dikirim!": tampil SEGERA setelah Kirim (WhatsApp/Telegram
+// dibuka di tab/aplikasi lain). Keranjang dikosongkan sesudah halaman tampil;
+// riwayat "Pesan lagi" sudah tersimpan (recordOrder) sebelum ini. Memakai entri
+// history milik halaman Pesanan, jadi tombol Kembali HP -> halaman awal.
+var sentOpen = false;
+function showSent(){
+  if (sentOpen) return;
+  sentOpen = true;
+  document.getElementById('app').classList.add('sent-mode');
+  var btn = document.getElementById('sentBack');
+  try { btn.focus({preventScroll: true}); } catch (e) {}
+  setTimeout(function(){ if (sentOpen) doClearCart(); }, 350);
+}
+function closeSent(fromPop){
+  if (!sentOpen) return;
+  sentOpen = false;
+  document.getElementById('app').classList.remove('sent-mode');
+  closeSheet(!!fromPop);
+  // Tanpa animasi: halaman menu sendiri sedang muncul kembali (transisi CSS);
+  // WAAPI di atas itu (flipY kolom cari) pernah membuat kolom cari tetap
+  // 'visibility:hidden' di Chromium.
+  goLanding(true);
+  menuScroll.scrollTop = 0;
+}
+document.getElementById('sentBack').addEventListener('click', function(){ closeSent(false); });
+
 // Blueprint §5 — satu tombol, dua aksi tergantung mode: dari daftar produk
-// membuka ringkasan, dari ringkasan mengirim pesanan.
+// membuka ringkasan, dari ringkasan mengirim pesanan (WhatsApp).
 document.getElementById('mainBtn').addEventListener('click', function(){
   if (clearConfirm) { setClearConfirm(false); return; } // tombol "Tidak"
   if (cartCount() === 0) return;
   if (document.getElementById('app').classList.contains('order-mode')) {
-    submitOrder();
+    submitOrder('wa');
   } else {
     openSheet();
   }
+});
+document.getElementById('mainBtnTg').addEventListener('click', function(){
+  if (cartCount() === 0) return;
+  if (document.getElementById('app').classList.contains('order-mode')) submitOrder('tg');
 });
 
 document.getElementById('copyBtn').addEventListener('click', function(){
@@ -2107,8 +3758,391 @@ if (!DATA.products || DATA.products.length === 0) {
   document.getElementById('app').classList.add('closed');
 }
 
+// ── Game labirin
+(function(){
+  var card = document.getElementById('mazeCard'); if (!card) return;
+  // Dimatikan owner (Pengaturan > Katalog): buang kartu sama sekali.
+  if (!DATA.game) { var gs = document.getElementById('gameSlot'); if (gs && gs.parentNode) gs.parentNode.removeChild(gs); return; }
+  var stage = document.getElementById('mzStage'), cv = document.getElementById('mzCanvas');
+  var ctx = cv.getContext('2d'); if (!ctx) { card.style.display = 'none'; return; }
+  var elTime = document.getElementById('mzTime'), elBest = document.getElementById('mzBest');
+  var elWin = document.getElementById('mzWin'), elWinS = document.getElementById('mzWinS'), elWinR = document.getElementById('mzWinR');
+  var elHint = document.getElementById('mzHint'), elGyro = document.getElementById('mzGyro');
+  var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // Tingkat kesulitan: ukuran petak, jumlah "lorong tembus" (makin sedikit = makin sulit).
+  var LEVELS = {
+    mudah:  {n: 6,  loops: 6},
+    sedang: {n: 9,  loops: 3},
+    sulit:  {n: 13, loops: 0}
+  };
+  var level = 'mudah';
+  try { var sv = localStorage.getItem('posMazeLevel'); if (sv && LEVELS[sv]) level = sv; } catch (e) {}
+
+  var W = 320, DPR = 1, pad = 6, cs = 40, t = 5, r = 10;
+  var maze = null, rects = [], stat = null; // stat = kanvas statis (labirin)
+  var bx = 0, by = 0, vx = 0, vy = 0, sx = 0, sy = 0, gx = 0, gy = 0, holeR = 12;
+  var state = 'play';              // play | sink | win
+  var sinkT = 0, winTimer = 0;
+  var started = false, tStart = 0, elapsed = 0;
+  var trail = [], parts = [];
+  var touch = null, keys = {}, gyroVec = {x: 0, y: 0}, override = null;
+  var gyroOn = false, gBase = null;
+
+  function rnd(n) { return Math.floor(Math.random() * n); }
+  function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+  function fmt(s) { return s.toFixed(1).replace('.', ','); }
+
+  // ── Labirin (recursive backtracker) ──
+  function genMaze(n, loops) {
+    var h = [], v = [], vis = [], y, x;
+    for (y = 0; y <= n; y++) { h[y] = []; for (x = 0; x < n; x++) h[y][x] = true; }
+    for (y = 0; y < n; y++) { v[y] = []; for (x = 0; x <= n; x++) v[y][x] = true; vis[y] = []; for (x = 0; x < n; x++) vis[y][x] = false; }
+    var stack = [[0, 0]]; vis[0][0] = true;
+    while (stack.length) {
+      var c = stack[stack.length - 1], cx = c[0], cy = c[1], nb = [];
+      if (cy > 0 && !vis[cy - 1][cx]) nb.push([cx, cy - 1, 'u']);
+      if (cy < n - 1 && !vis[cy + 1][cx]) nb.push([cx, cy + 1, 'd']);
+      if (cx > 0 && !vis[cy][cx - 1]) nb.push([cx - 1, cy, 'l']);
+      if (cx < n - 1 && !vis[cy][cx + 1]) nb.push([cx + 1, cy, 'r']);
+      if (!nb.length) { stack.pop(); continue; }
+      var p = nb[rnd(nb.length)];
+      if (p[2] === 'u') h[cy][cx] = false; else if (p[2] === 'd') h[cy + 1][cx] = false;
+      else if (p[2] === 'l') v[cy][cx] = false; else v[cy][cx + 1] = false;
+      vis[p[1]][p[0]] = true; stack.push([p[0], p[1]]);
+    }
+    for (var k = 0; k < loops; k++) { // buka beberapa dinding dalam: jalan pintas (level mudah)
+      if (rnd(2)) { var yy = 1 + rnd(n - 1), xx = rnd(n); h[yy][xx] = false; }
+      else { var y2 = rnd(n), x2 = 1 + rnd(n - 1); v[y2][x2] = false; }
+    }
+    return {n: n, h: h, v: v};
+  }
+  function solve(m) { // BFS: daftar petak dari start ke tujuan (untuk uji)
+    var n = m.n, prev = {}, q = [[0, 0]], seen = {'0,0': 1};
+    while (q.length) {
+      var c = q.shift(), x = c[0], y = c[1];
+      if (x === n - 1 && y === n - 1) break;
+      var cand = [];
+      if (y > 0 && !m.h[y][x]) cand.push([x, y - 1]);
+      if (y < n - 1 && !m.h[y + 1][x]) cand.push([x, y + 1]);
+      if (x > 0 && !m.v[y][x]) cand.push([x - 1, y]);
+      if (x < n - 1 && !m.v[y][x + 1]) cand.push([x + 1, y]);
+      for (var i = 0; i < cand.length; i++) {
+        var key = cand[i][0] + ',' + cand[i][1];
+        if (!seen[key]) { seen[key] = 1; prev[key] = x + ',' + y; q.push(cand[i]); }
+      }
+    }
+    var path = [], cur = (n - 1) + ',' + (n - 1);
+    while (cur) { var s = cur.split(','); path.unshift([+s[0], +s[1]]); cur = prev[cur]; }
+    return path;
+  }
+  function cellCenter(cx, cy) { return [pad + (cx + 0.5) * cs, pad + (cy + 0.5) * cs]; }
+
+  function buildRects() {
+    rects = []; var n = maze.n, x, y;
+    for (y = 0; y <= n; y++) for (x = 0; x < n; x++) if (maze.h[y][x]) {
+      var yy = pad + y * cs; rects.push([pad + x * cs - t / 2, yy - t / 2, pad + (x + 1) * cs + t / 2, yy + t / 2]);
+    }
+    for (y = 0; y < n; y++) for (x = 0; x <= n; x++) if (maze.v[y][x]) {
+      var xx = pad + x * cs; rects.push([xx - t / 2, pad + y * cs - t / 2, xx + t / 2, pad + (y + 1) * cs + t / 2]);
+    }
+  }
+
+  // ── Ukuran & lapisan statis ──
+  function cssVar(name, fb) { var v = getComputedStyle(document.documentElement).getPropertyValue(name).trim(); return v || fb; }
+  function drawStatic() {
+    if (!maze) return;
+    stat = document.createElement('canvas'); stat.width = cv.width; stat.height = cv.height;
+    var c = stat.getContext('2d'); c.scale(DPR, DPR);
+    var field = cssVar('--field', '#f1eee7'), wall = cssVar('--ink-2', '#6c685f'), acc = cssVar('--accent', '#c96442'), line = cssVar('--line', '#e7e2d7');
+    // lantai
+    c.fillStyle = field; c.fillRect(0, 0, W, W);
+    var g = c.createLinearGradient(0, 0, W, W); g.addColorStop(0, 'rgba(255,255,255,.10)'); g.addColorStop(1, 'rgba(0,0,0,.06)');
+    c.fillStyle = g; c.fillRect(0, 0, W, W);
+    // tanda start
+    var s = cellCenter(0, 0);
+    c.fillStyle = acc; c.globalAlpha = .16; c.beginPath(); c.arc(s[0], s[1], r * 1.5, 0, 6.2832); c.fill(); c.globalAlpha = 1;
+    // lubang tujuan
+    var gl = cellCenter(maze.n - 1, maze.n - 1); gx = gl[0]; gy = gl[1]; holeR = r * 1.2;
+    var hg = c.createRadialGradient(gx, gy, holeR * .15, gx, gy, holeR * 1.25);
+    hg.addColorStop(0, 'rgba(0,0,0,.92)'); hg.addColorStop(.72, 'rgba(0,0,0,.7)'); hg.addColorStop(1, 'rgba(0,0,0,0)');
+    c.fillStyle = hg; c.beginPath(); c.arc(gx, gy, holeR * 1.25, 0, 6.2832); c.fill();
+    c.strokeStyle = acc; c.lineWidth = Math.max(2, r * .22); c.beginPath(); c.arc(gx, gy, holeR, 0, 6.2832); c.stroke();
+    // dinding (bayangan lalu isi)
+    c.fillStyle = 'rgba(0,0,0,.18)';
+    rects.forEach(function(q){ rr(c, q[0] + 1.2, q[1] + 1.8, q[2] - q[0], q[3] - q[1], Math.min(t / 2, 3)); });
+    c.fillStyle = wall;
+    rects.forEach(function(q){ rr(c, q[0], q[1], q[2] - q[0], q[3] - q[1], Math.min(t / 2, 3)); });
+    c.fillStyle = 'rgba(255,255,255,.18)';
+    rects.forEach(function(q){ var hgt = Math.min(1.2, (q[3] - q[1]) / 3); c.fillRect(q[0] + 1, q[1], Math.max(0, q[2] - q[0] - 2), hgt); });
+    c.strokeStyle = line; c.lineWidth = 1; c.strokeRect(.5, .5, W - 1, W - 1);
+  }
+  function rr(c, x, y, w, h, rad) { c.beginPath(); c.moveTo(x + rad, y); c.arcTo(x + w, y, x + w, y + h, rad); c.arcTo(x + w, y + h, x, y + h, rad); c.arcTo(x, y + h, x, y, rad); c.arcTo(x, y, x + w, y, rad); c.closePath(); c.fill(); }
+
+  function resize() {
+    var cw = Math.round(stage.clientWidth);
+    if (!cw && cv.width) return; // tersembunyi: pertahankan ukuran terakhir
+    var w = cw || 320;
+    if (w === W && cv.width) return;
+    // Ukuran papan berubah (mis. awalnya 320 bawaan saat kartu masih tersembunyi,
+    // lalu lebar asli): geometri labirin HARUS dibangun ulang & posisi bola
+    // diskalakan — kalau tidak dinding tetap berukuran lama sedangkan lubang
+    // tujuan memakai ukuran baru (lubang "melayang" di luar labirin).
+    var oldW = W, oldPad = pad, oldSpan = W - 2 * pad;
+    var nbx = (bx - oldPad) / oldSpan, nby = (by - oldPad) / oldSpan;
+    var nsx = (sx - oldPad) / oldSpan, nsy = (sy - oldPad) / oldSpan;
+    W = w; DPR = Math.min(window.devicePixelRatio || 1, 2);
+    cv.width = Math.round(W * DPR); cv.height = Math.round(W * DPR);
+    layout();
+    if (maze) {
+      buildRects();
+      var span = W - 2 * pad, k = W / oldW;
+      bx = pad + nbx * span; by = pad + nby * span;
+      sx = pad + nsx * span; sy = pad + nsy * span;
+      vx *= k; vy *= k; trail = [];
+    }
+    drawStatic(); draw();
+  }
+  function layout() {
+    var n = LEVELS[level].n; pad = Math.max(5, Math.round(W * .018)); cs = (W - 2 * pad) / n;
+    t = Math.max(3.5, cs * .13); r = Math.max(6, cs * .28);
+  }
+
+  // ── Mulai labirin baru ──
+  function newMaze(keepWin) {
+    clearTimeout(winTimer); var cfg = LEVELS[level];
+    maze = genMaze(cfg.n, cfg.loops); layout(); buildRects();
+    var s = cellCenter(0, 0); bx = s[0]; by = s[1]; vx = vy = 0; sx = sy = 0;
+    state = 'play'; started = false; elapsed = 0; trail = []; parts = [];
+    elTime.textContent = '0,0'; elWin.classList.remove('show');
+    drawStatic(); showBest(); draw(); kick();
+  }
+  function showBest() {
+    var b = getBest(); elBest.textContent = b ? 'Rekor ' + fmt(b) + ' dtk' : 'Rekor —';
+  }
+  function getBest() { try { var o = JSON.parse(localStorage.getItem('posMazeBest') || '{}'); return o[level] || 0; } catch (e) { return 0; } }
+  function setBest(sec) {
+    try { var o = JSON.parse(localStorage.getItem('posMazeBest') || '{}'); o[level] = sec; localStorage.setItem('posMazeBest', JSON.stringify(o)); } catch (e) {}
+  }
+
+  // ── Input ──
+  function inputVec() {
+    if (override) return {x: override[0], y: override[1]};
+    var x = 0, y = 0;
+    if (touch) { x += touch.x; y += touch.y; }
+    if (keys.ArrowLeft || keys.a) x -= 1; if (keys.ArrowRight || keys.d) x += 1;
+    if (keys.ArrowUp || keys.w) y -= 1; if (keys.ArrowDown || keys.s) y += 1;
+    if (gyroOn) { x += gyroVec.x; y += gyroVec.y; }
+    var m = Math.sqrt(x * x + y * y); if (m > 1) { x /= m; y /= m; }
+    return {x: x, y: y};
+  }
+  stage.addEventListener('pointerdown', function(e){
+    if (state === 'win' && elWin.classList.contains('show')) { clearTimeout(winTimer); newMaze(); return; }
+    var b = stage.getBoundingClientRect();
+    touch = {ox: e.clientX - b.left, oy: e.clientY - b.top, x: 0, y: 0, cx: e.clientX - b.left, cy: e.clientY - b.top};
+    try { stage.setPointerCapture(e.pointerId); } catch (er) {}
+    kick(); e.preventDefault();
+  });
+  stage.addEventListener('pointermove', function(e){
+    if (!touch) return;
+    var b = stage.getBoundingClientRect(), px = e.clientX - b.left, py = e.clientY - b.top, R = W * .2;
+    touch.cx = px; touch.cy = py;
+    var dx = (px - touch.ox) / R, dy = (py - touch.oy) / R, m = Math.sqrt(dx * dx + dy * dy);
+    if (m > 1) { dx /= m; dy /= m; m = 1; }
+    // kurva halus: gerakan kecil = pelan, gerakan penuh = kencang
+    var k = m * m * (3 - 2 * m) / (m || 1); touch.x = dx * k; touch.y = dy * k;
+    kick();
+  });
+  function endTouch() { touch = null; kick(); }
+  stage.addEventListener('pointerup', endTouch);
+  stage.addEventListener('pointercancel', endTouch);
+  stage.addEventListener('lostpointercapture', endTouch);
+  window.addEventListener('keydown', function(e){
+    if (!visible) return;
+    var tg = e.target && e.target.tagName; if (tg === 'INPUT' || tg === 'TEXTAREA') return;
+    var k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'a', 'd', 'w', 's'].indexOf(k) < 0) return;
+    if (k.length > 1) e.preventDefault();
+    keys[k] = true; kick();
+  });
+  window.addEventListener('keyup', function(e){ var k = e.key.length === 1 ? e.key.toLowerCase() : e.key; delete keys[k]; });
+
+  // ── Gyro ──
+  function onOrient(e) {
+    if (e.gamma == null || e.beta == null) return;
+    if (!gBase) gBase = {g: e.gamma, b: e.beta};
+    var a = (screen.orientation && screen.orientation.angle) || window.orientation || 0;
+    var g = e.gamma - gBase.g, b = e.beta - gBase.b, x, y;
+    if (a === 90) { x = b; y = -g; } else if (a === 180) { x = -g; y = -b; } else if (a === 270 || a === -90) { x = -b; y = g; } else { x = g; y = b; }
+    gyroVec.x = clamp(x / 22, -1, 1); gyroVec.y = clamp(y / 22, -1, 1);
+    if (Math.abs(gyroVec.x) + Math.abs(gyroVec.y) > .04) kick();
+  }
+  function setGyro(on) {
+    gyroOn = on; gBase = null; gyroVec.x = gyroVec.y = 0;
+    elGyro.setAttribute('aria-pressed', on ? 'true' : 'false');
+    elHint.textContent = on ? 'Miringkan HP untuk menggulirkan bola (ketuk ikon lagi untuk mengkalibrasi ulang)' : 'Geser jari di papan untuk menggerakkan bola';
+    try { localStorage.setItem('posMazeGyro', on ? '1' : '0'); } catch (e) {}
+    window.removeEventListener('deviceorientation', onOrient);
+    if (on) window.addEventListener('deviceorientation', onOrient);
+  }
+  elGyro.addEventListener('click', function(){
+    if (gyroOn) { setGyro(false); return; }
+    var DOE = window.DeviceOrientationEvent;
+    if (!DOE) { elHint.textContent = 'Perangkat ini tidak mendukung gyro'; return; }
+    if (typeof DOE.requestPermission === 'function') { // iOS: izin harus dari ketukan pengguna
+      DOE.requestPermission().then(function(s){
+        if (s === 'granted') setGyro(true); else elHint.textContent = 'Izin gyro ditolak — kontrol sentuh tetap bisa dipakai';
+      }).catch(function(){ elHint.textContent = 'Gyro tidak bisa diaktifkan'; });
+    } else { setGyro(true); }
+  });
+  try { // Android/Chrome: pulihkan pilihan gyro tanpa izin tambahan
+    if (localStorage.getItem('posMazeGyro') === '1' && window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission !== 'function') setGyro(true);
+  } catch (e) {}
+
+  // ── Fisika ──
+  var ACC = 3.1, VMAX = 1.7, DAMP = 2.0, REST = .42, STEP = 1 / 180;
+  function physics(h) {
+    var inp = inputVec(), a = ACC * W;
+    vx += inp.x * a * h; vy += inp.y * a * h;
+    var d = Math.exp(-DAMP * h); vx *= d; vy *= d;
+    var sp = Math.sqrt(vx * vx + vy * vy), mx = VMAX * W; if (sp > mx) { vx *= mx / sp; vy *= mx / sp; }
+    bx += vx * h; by += vy * h;
+    var hit = 0;
+    for (var i = 0; i < rects.length; i++) {
+      var q = rects[i];
+      if (bx + r < q[0] || bx - r > q[2] || by + r < q[1] || by - r > q[3]) continue;
+      var cx = clamp(bx, q[0], q[2]), cy = clamp(by, q[1], q[3]), dx = bx - cx, dy = by - cy, dd = dx * dx + dy * dy;
+      if (dd >= r * r) continue;
+      var nx, ny, pen;
+      if (dd > 1e-6) { var dl = Math.sqrt(dd); nx = dx / dl; ny = dy / dl; pen = r - dl; }
+      else { var l = bx - q[0], rr2 = q[2] - bx, tp = by - q[1], bt = q[3] - by, mn = Math.min(l, rr2, tp, bt);
+        if (mn === l) { nx = -1; ny = 0; pen = r + l; } else if (mn === rr2) { nx = 1; ny = 0; pen = r + rr2; } else if (mn === tp) { nx = 0; ny = -1; pen = r + tp; } else { nx = 0; ny = 1; pen = r + bt; } }
+      bx += nx * pen; by += ny * pen;
+      var vn = vx * nx + vy * ny;
+      if (vn < 0) { vx -= (1 + REST) * vn * nx; vy -= (1 + REST) * vn * ny; if (-vn > hit) hit = -vn; }
+    }
+    if (hit > W * .45 && navigator.vibrate && !reduce) { try { navigator.vibrate(8); } catch (e) {} }
+    // tarikan lubang tujuan
+    var gdx = gx - bx, gdy = gy - by, gd = Math.sqrt(gdx * gdx + gdy * gdy);
+    if (gd < holeR * 1.6) { var pull = (1 - gd / (holeR * 1.6)) * W * 1.3; vx += gdx / (gd || 1) * pull * h; vy += gdy / (gd || 1) * pull * h; }
+    if (gd < holeR * .55) { state = 'sink'; sinkT = 0; sx = bx; sy = by; finish(); }
+  }
+  function finish() {
+    var sec = elapsed || (started ? (performance.now() - tStart) / 1000 : 0);
+    var best = getBest(), rec = !best || sec < best;
+    if (rec && sec > 0) setBest(sec);
+    elTime.textContent = fmt(sec);
+    elWinS.textContent = 'Waktu ' + fmt(sec) + ' dtk';
+    elWinR.hidden = !rec; showBest();
+    for (var i = 0; i < (reduce ? 0 : 36); i++) {
+      var an = Math.random() * 6.2832, sp = (.25 + Math.random() * .7) * W;
+      parts.push({x: gx, y: gy, vx: Math.cos(an) * sp, vy: Math.sin(an) * sp - W * .25, life: 1, c: i % 3});
+    }
+    winTimer = setTimeout(function(){ newMaze(); }, 3200);
+  }
+
+  // ── Gambar ──
+  function draw() {
+    if (!stat) return;
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(stat, 0, 0);
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    var acc = cssVar('--accent', '#c96442');
+    if (!reduce) for (var i = 0; i < trail.length; i++) {
+      var p = trail[i], f = (i + 1) / trail.length;
+      ctx.globalAlpha = f * .18; ctx.fillStyle = acc; ctx.beginPath(); ctx.arc(p[0], p[1], r * (.45 + f * .4), 0, 6.2832); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    var scale = 1, x = bx, y = by;
+    if (state === 'sink' || state === 'win') { var k = clamp(sinkT / .35, 0, 1); x = sx + (gx - sx) * k; y = sy + (gy - sy) * k; scale = 1 - .8 * k; }
+    var rad = r * scale;
+    // bayangan
+    var sh = ctx.createRadialGradient(x + rad * .25, y + rad * .4, rad * .2, x + rad * .25, y + rad * .4, rad * 1.25);
+    sh.addColorStop(0, 'rgba(0,0,0,.34)'); sh.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = sh; ctx.beginPath(); ctx.arc(x + rad * .25, y + rad * .4, rad * 1.25, 0, 6.2832); ctx.fill();
+    // bola logam
+    var bg = ctx.createRadialGradient(x - rad * .38, y - rad * .42, rad * .08, x, y, rad);
+    bg.addColorStop(0, '#ffffff'); bg.addColorStop(.28, '#d9dde2'); bg.addColorStop(.7, '#8a9098'); bg.addColorStop(1, '#4a4f56');
+    ctx.fillStyle = bg; ctx.beginPath(); ctx.arc(x, y, rad, 0, 6.2832); ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = 1; ctx.stroke();
+    // serpihan konfeti
+    for (var j = 0; j < parts.length; j++) {
+      var q = parts[j]; ctx.globalAlpha = clamp(q.life, 0, 1);
+      ctx.fillStyle = q.c === 0 ? acc : (q.c === 1 ? '#f2b84b' : '#6fa380');
+      ctx.fillRect(q.x - 2, q.y - 2, 4, 4);
+    }
+    ctx.globalAlpha = 1;
+    // penunjuk geser (joystick halus)
+    if (touch) {
+      ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(touch.ox, touch.oy, W * .2, 0, 6.2832); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.beginPath(); ctx.arc(touch.cx, touch.cy, W * .035, 0, 6.2832); ctx.fill();
+    }
+  }
+
+  // ── Loop (berhenti saat diam / tak terlihat) ──
+  var running = false, last = 0, acc = 0, visible = false, lastLabel = 0;
+  function kick() {
+    if (running || !visible || document.hidden) return;
+    running = true; last = performance.now(); requestAnimationFrame(frame);
+  }
+  function frame(now) {
+    var dt = Math.min(.05, (now - last) / 1000); last = now;
+    if (state === 'play') {
+      acc += dt;
+      var inp = inputVec();
+      if (!started && (Math.abs(inp.x) + Math.abs(inp.y) > .05)) { started = true; tStart = now; }
+      while (acc >= STEP) { physics(STEP); acc -= STEP; if (state !== 'play') break; }
+      if (started && state === 'play') elapsed = (now - tStart) / 1000;
+      if (!reduce) { trail.push([bx, by]); if (trail.length > 10) trail.shift(); }
+    } else { acc = 0; sinkT += dt; if (sinkT > .35 && state === 'sink') state = 'win'; if (state === 'win' && !elWin.classList.contains('show')) elWin.classList.add('show'); }
+    for (var i = parts.length - 1; i >= 0; i--) { var p = parts[i]; p.vy += W * 1.6 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt * .7; if (p.life <= 0) parts.splice(i, 1); }
+    if (now - lastLabel > 100) { lastLabel = now; if (started && state === 'play') elTime.textContent = fmt(elapsed); }
+    draw();
+    var sp = vx * vx + vy * vy, inp2 = inputVec();
+    var idle = state === 'play' && sp < 4 && Math.abs(inp2.x) + Math.abs(inp2.y) < .02 && !touch && !parts.length;
+    if (idle || (state === 'win' && !parts.length)) { running = false; return; }
+    requestAnimationFrame(frame);
+  }
+  if ('IntersectionObserver' in window) {
+    new IntersectionObserver(function(es){ visible = es[es.length - 1].isIntersecting; if (visible) { resize(); kick(); } }, {threshold: .2}).observe(card);
+  } else { visible = true; }
+  document.addEventListener('visibilitychange', function(){ if (!document.hidden) kick(); });
+  if ('ResizeObserver' in window) new ResizeObserver(function(){ resize(); }).observe(stage); else window.addEventListener('resize', resize);
+  // Ganti tema (terang/gelap) -> gambar ulang lapisan statis.
+  new MutationObserver(function(){ drawStatic(); draw(); }).observe(document.documentElement, {attributes: true, attributeFilter: ['data-theme']});
+
+  // Tingkat kesulitan.
+  var seg = document.getElementById('mzSeg');
+  function setLevel(lv) {
+    level = lv; try { localStorage.setItem('posMazeLevel', lv); } catch (e) {}
+    [].forEach.call(seg.querySelectorAll('button'), function(b){ b.setAttribute('aria-selected', b.getAttribute('data-lv') === lv ? 'true' : 'false'); });
+    newMaze();
+  }
+  seg.addEventListener('click', function(e){ var b = e.target.closest('button'); if (b) setLevel(b.getAttribute('data-lv')); });
+  document.getElementById('mzNew').addEventListener('click', function(){ newMaze(); });
+  [].forEach.call(seg.querySelectorAll('button'), function(b){ b.setAttribute('aria-selected', b.getAttribute('data-lv') === level ? 'true' : 'false'); });
+
+  // Pengait uji (tidak dipakai UI).
+  window.__maze = {
+    state: function(){ return {state: state, level: level, n: maze.n, bx: bx, by: by, vx: vx, vy: vy, r: r, cs: cs, gx: gx, gy: gy, started: started, elapsed: elapsed, running: running, W: W}; },
+    solve: function(){ return solve(maze).map(function(c){ return cellCenter(c[0], c[1]); }); },
+    drive: function(x, y){ override = (x == null) ? null : [x, y]; kick(); },
+    newMaze: newMaze, setLevel: setLevel
+  };
+
+  resize(); newMaze();
+})();
+
+Array.prototype.forEach.call(document.querySelectorAll('.stk'), stkMount);
 loadCart();
 loadAccess();
+buildChips();
+initPlaceholder();
+renderExtras();
+if (DATA.reorder && loadHistory().length) requestPersist();
+initAnn();
+applyState(computeState(), false);
+setSelChips();
+syncTbId();
 applyOpenState();
 render();
 // Jadwal dicek ulang berkala (halaman yang dibiarkan terbuka melewati jam

@@ -20,9 +20,12 @@ import '../../../core/providers/device_provider.dart';
 import '../../../core/providers/laci_meja_provider.dart';
 import '../../../core/providers/theme_provider.dart';
 import '../../../core/services/order_parser_service.dart';
+import '../../../core/services/pick_list_renderer.dart';
 import '../../../core/services/price_service.dart';
+import '../../../core/services/printer_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/item_count_badge.dart';
+import '../../../core/widgets/marquee_text.dart';
 import '../cart_debt_settlement_provider.dart';
 import '../cart_meta_provider.dart';
 import '../cart_prabayar_provider.dart';
@@ -927,6 +930,93 @@ class _CartSheetState extends ConsumerState<CartSheet> {
     }
   }
 
+  bool _isPrintingPickList = false;
+
+  /// Cetak "struk ambil barang" (lihat tombol di header). Hanya baris dengan
+  /// qty efektif > 0 (induk placeholder yang qty-nya habis dipakai varian
+  /// dilewati; variannya sendiri tetap tercetak).
+  Future<void> _printPickList(BuildContext ctx, WidgetRef ref) async {
+    if (_isPrintingPickList) return;
+    setState(() => _isPrintingPickList = true);
+    final messenger = ScaffoldMessenger.of(ctx);
+    void snack(String msg, {bool error = false, bool settings = false}) {
+      if (!mounted) return;
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+          content: Text(msg),
+          backgroundColor: error ? Theme.of(ctx).colorScheme.error : null,
+          action: settings
+              ? SnackBarAction(
+                  label: 'Pengaturan',
+                  onPressed: () => ctx.push('/pengaturan/printer'),
+                )
+              : null,
+        ));
+    }
+
+    try {
+      final notifier = ref.read(cartProvider(widget.cartId).notifier);
+      final lines = <PickLine>[];
+      for (final item in notifier.current) {
+        final q = notifier.effectiveQtyFor(item);
+        if (q <= 0) continue;
+        lines.add(PickLine(
+          qty: q,
+          name: item.productName,
+          unit: item.unitName,
+          note: item.itemNote,
+          checked: item.checked,
+          isVariant: item.isVariant,
+        ));
+      }
+      if (lines.isEmpty) {
+        snack('Tidak ada barang untuk dicetak');
+        return;
+      }
+      final mac = await PrinterService.getSavedMac();
+      if (mac == null || mac.isEmpty) {
+        snack('Printer belum dikonfigurasi', settings: true);
+        return;
+      }
+      final granted = await PrinterService.ensurePermissions();
+      if (!granted) {
+        snack('Izin Bluetooth ditolak', settings: true);
+        return;
+      }
+      final db = ref.read(databaseProvider);
+      final storeName = await db.getSetting('store_name') ?? '';
+      // Pelanggan keranjang: ad-hoc = nama saja; pelanggan tetap (punya
+      // customerId) + alamat dari DB. Dibaca & di-await di sini (bukan
+      // mengandalkan nilai widget yang mungkin belum termuat).
+      final meta = ref.read(cartMetaProvider(widget.cartId));
+      final custName = meta.hasCustomer ? meta.customerName! : '';
+      var custAddress = '';
+      final cid = meta.customerId;
+      if (custName.trim().isNotEmpty && cid != null && cid.isNotEmpty) {
+        try {
+          custAddress = await ref.read(_cartCustomerAddressProvider(cid).future);
+        } catch (_) {
+          custAddress = ''; // alamat gagal dimuat -> cetak nama saja
+        }
+      }
+      final ok = await PrinterService.printPickList(
+          storeName: storeName,
+          at: DateTime.now(),
+          lines: lines,
+          customerName: custName,
+          customerAddress: custAddress);
+      snack(ok ? 'Struk ambil barang tercetak' : 'Gagal mencetak struk',
+          error: !ok);
+    } finally {
+      if (mounted) {
+        setState(() => _isPrintingPickList = false);
+      } else {
+        _isPrintingPickList = false;
+      }
+    }
+  }
+
   /// Susulan (permintaan user): sheet "Pengaturan Keranjang" — posisi
   /// checkbox verifikasi (`CartCheckboxPosition`), toggle konfirmasi tombol
   /// minus stepper (`cartMinusConfirmProvider`, mencegah missclick qty
@@ -941,13 +1031,25 @@ class _CartSheetState extends ConsumerState<CartSheet> {
       context: ctx,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (sheetCtx) => Consumer(
+      // Terbuka 3/4 layar; bisa ditarik naik sampai penuh & TETAP bisa di-swipe
+      // turun untuk menutup (isi dibungkus DraggableScrollableSheet — dulu
+      // SingleChildScrollView biasa menelan gestur turun sehingga sheet tak
+      // bisa ditutup dengan swipe).
+      builder: (sheetCtx) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.75,
+        minChildSize: 0.4,
+        maxChildSize: 0.95,
+        builder: (_, settingsScroll) => Consumer(
         builder: (context, dialogRef, _) {
           final sheetScheme = Theme.of(sheetCtx).colorScheme;
           final current = dialogRef.watch(cartCheckboxPositionProvider);
           final minusConfirm = dialogRef.watch(cartMinusConfirmProvider);
           final showCategoryChips =
               dialogRef.watch(cartPriceCategoryChipsProvider);
+          final chipsBesideName = dialogRef.watch(cartChipsBesideNameProvider);
+          final subtotalBeside =
+              dialogRef.watch(cartSubtotalBesidePriceProvider);
           return Material(
             color: sheetScheme.surface,
             shape: const RoundedRectangleBorder(
@@ -956,6 +1058,7 @@ class _CartSheetState extends ConsumerState<CartSheet> {
             child: SafeArea(
               top: false,
               child: SingleChildScrollView(
+                controller: settingsScroll,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1073,12 +1176,65 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                             .set(v),
                       ),
                     ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                      child: SwitchListTile(
+                        key: const ValueKey('cart-setting-chips-beside-name'),
+                        contentPadding: EdgeInsets.zero,
+                        secondary: CircleAvatar(
+                          radius: 18,
+                          backgroundColor:
+                              sheetScheme.tertiary.withOpacity(0.12),
+                          child: Icon(Icons.view_agenda_outlined,
+                              color: sheetScheme.tertiary, size: 20),
+                        ),
+                        value: chipsBesideName,
+                        activeColor: AppTheme.accent,
+                        title: const Text('Chip kategori di samping nama'),
+                        subtitle: const Text(
+                          'Chip Kategori Harga sejajar dengan nama produk '
+                          '(bisa digeser ke samping); nama panjang jadi teks '
+                          'berjalan. Hanya berlaku bila chip kategori '
+                          'ditampilkan',
+                          style: TextStyle(fontSize: 11.5),
+                        ),
+                        onChanged: (v) => dialogRef
+                            .read(cartChipsBesideNameProvider.notifier)
+                            .set(v),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      child: SwitchListTile(
+                        key: const ValueKey('cart-setting-subtotal-beside'),
+                        contentPadding: EdgeInsets.zero,
+                        secondary: CircleAvatar(
+                          radius: 18,
+                          backgroundColor: AppTheme.accent.withOpacity(0.12),
+                          child: const Icon(Icons.price_change_outlined,
+                              color: AppTheme.accent, size: 20),
+                        ),
+                        value: subtotalBeside,
+                        activeColor: AppTheme.accent,
+                        title: const Text('Subtotal di samping harga'),
+                        subtitle: const Text(
+                          'Nominal total per produk ditaruh sejajar dengan '
+                          '"satuan · harga", rata kanan — bukan di baris '
+                          'sendiri di bawahnya',
+                          style: TextStyle(fontSize: 11.5),
+                        ),
+                        onChanged: (v) => dialogRef
+                            .read(cartSubtotalBesidePriceProvider.notifier)
+                            .set(v),
+                      ),
+                    ),
                   ],
                 ),
               ),
             ),
           );
         },
+        ),
       ),
     );
   }
@@ -1236,7 +1392,15 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                     minimumSize: const Size(36, 36),
                   ),
                 ),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Baris 1 (tetap, tidak ikut scroll): judul + nomor +
+                    // Kosongkan. Baris 2: ikon aksi lain (scroll horizontal
+                    // bila tak muat) — header jadi 2 baris krn ikon bertambah
+                    // (cetak ambil barang, tandai semua) di samping nama
+                    // pelanggan/alamat yang juga memakai tinggi header.
+                    Row(
                   children: [
                     Text('Keranjang',
                         style: Theme.of(context).textTheme.titleMedium),
@@ -1248,13 +1412,29 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                               fontWeight: FontWeight.w700,
                               color: scheme.onSurfaceVariant)),
                     ],
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: SingleChildScrollView(
+                    const Spacer(),
+                    IconButton(
+                      tooltip: 'Kosongkan',
+                      onPressed:
+                          cart.isEmpty ? null : () => _confirmClear(ctx, ref),
+                      icon: Icon(Icons.delete_outline, color: scheme.error),
+                    ),
+                  ],
+                ),
+                      // Baris ikon aksi: arah KANAN-ke-KIRI (rtl) — "Tahan Pesanan"
+                      // paling kanan, sisanya berurutan ke kiri; `reverse: true`
+                      // membuat blok menempel di tepi kanan.
+                      LayoutBuilder(
+                        builder: (context, box) => SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         reverse: true,
+                        // minWidth = lebar tersedia -> Row rtl (start = kanan)
+                        // menempel tepi kanan bila muat; bila tak muat, tetap
+                        // bisa digeser.
+                        child: ConstrainedBox(
+                        constraints: BoxConstraints(minWidth: box.maxWidth),
                         child: Row(
-                          mainAxisSize: MainAxisSize.min,
+                          textDirection: ui.TextDirection.rtl,
                           children: [
                     // Susulan (permintaan user): "Tahan Pesanan" langsung dari
                     // header keranjang, di SAMPING KIRI "Tempel Pesanan" —
@@ -1320,6 +1500,42 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                     // (lihat `CartCheckboxPosition`), tapi dibuat generik
                     // ("Pengaturan Keranjang") supaya opsi lain bisa ditambah
                     // ke dialog yang sama nanti tanpa tombol baru lagi.
+                    // Struk ambil barang: cetak daftar pengambilan (TANPA harga)
+                    // ke printer thermal Bluetooth supaya pegawai bisa
+                    // menyiapkan barang sebelum pembeli checkout. Kotak
+                    // centang di kanan tiap baris; yang sudah dicentang di
+                    // keranjang ikut tercentang di cetakan.
+                    if (widget.cartId != kCatalogCartId)
+                      IconButton(
+                        tooltip: 'Cetak Struk Ambil Barang',
+                        onPressed: (cart.isEmpty || _isPrintingPickList)
+                            ? null
+                            : () => _printPickList(ctx, ref),
+                        icon: const Icon(Icons.print_outlined),
+                      ),
+                    // Tandai / hapus tanda SEMUA baris (sama dgn tombol di
+                    // struk in-app). Aktif bila ada baris; ikon berganti
+                    // sesuai keadaan.
+                    IconButton(
+                      tooltip: cart.isNotEmpty && cart.every((c) => c.checked)
+                          ? 'Hapus Tanda'
+                          : 'Tandai Semua',
+                      onPressed: cart.isEmpty
+                          ? null
+                          : () => notifier.setAllChecked(
+                              !cart.every((c) => c.checked)),
+                      // Hijau = aksi "tandai semua"; merah (warna error tema,
+                      // sama dgn Kosongkan) = aksi "hapus tanda" — aksi yang
+                      // membuang centang harus terlihat beda dari yang menambah.
+                      icon: Icon(
+                        cart.isNotEmpty && cart.every((c) => c.checked)
+                            ? Icons.remove_done
+                            : Icons.done_all,
+                        color: cart.isNotEmpty && cart.every((c) => c.checked)
+                            ? Theme.of(ctx).colorScheme.error
+                            : AppTheme.payGreen,
+                      ),
+                    ),
                     IconButton(
                       tooltip: 'Pengaturan Keranjang',
                       onPressed: () => _showCartSettingsDialog(ctx),
@@ -1333,16 +1549,11 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                             : () => _showHandoffQr(ctx, ref, cart),
                         icon: const _QrTransferIcon(),
                       ),
-                    IconButton(
-                      tooltip: 'Kosongkan',
-                      onPressed:
-                          cart.isEmpty ? null : () => _confirmClear(ctx, ref),
-                      icon: Icon(Icons.delete_outline, color: scheme.error),
-                    ),
                           ],
                         ),
+                        ),
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -1978,6 +2189,11 @@ class _CartItemTileState extends ConsumerState<_CartItemTile>
     // SELURUH baris ikut bergetar (lihat `_handleMinusTap`), lebih kentara
     // walau jempol/fokus mata sedang di area manapun pada baris ini.
     final minusConfirm = ref.watch(cartMinusConfirmProvider);
+    // Opsi layout (Pengaturan Keranjang): subtotal di samping "satuan ·
+    // harga", dan chip Kategori Harga di samping nama. Keduanya default OFF.
+    final subtotalBeside = ref.watch(cartSubtotalBesidePriceProvider);
+    final chipsBesideName = ref.watch(cartChipsBesideNameProvider) &&
+        ref.watch(cartPriceCategoryChipsProvider);
     final checkbox = Checkbox(
       value: item.checked,
       visualDensity: VisualDensity.compact,
@@ -2055,7 +2271,20 @@ class _CartItemTileState extends ConsumerState<_CartItemTile>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Row(
+                        _wrapNameRow(
+                          chipsBesideName: chipsBesideName,
+                          item: item,
+                          effectiveQty: effectiveQty,
+                          cartId: cartId,
+                          isVariant: isVariant,
+                          nameStyle: TextStyle(
+                              fontSize: isVariant ? 15 : 17,
+                              color:
+                                  isVariant ? scheme.onSurfaceVariant : null),
+                          checkbox: position == CartCheckboxPosition.kananNama
+                              ? checkbox
+                              : null,
+                          plain: Row(
                           children: [
                             if (isVariant)
                               Padding(
@@ -2124,12 +2353,16 @@ class _CartItemTileState extends ConsumerState<_CartItemTile>
                             ],
                           ],
                         ),
+                        ),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Row(
                               children: [
+                                Expanded(
+                                    child: Row(
+                                  children: [
                                 Flexible(
                                   child: Text.rich(
                                     TextSpan(
@@ -2176,12 +2409,32 @@ class _CartItemTileState extends ConsumerState<_CartItemTile>
                                       style: TextStyle(
                                           fontSize: 12, color: scheme.primary)),
                                 ],
+                                  ],
+                                )),
+                                // Opsi "subtotal di samping": nominal rata
+                                // kanan di baris yang sama; grup kiri
+                                // (satuan · harga) yang menyusut/ellipsis
+                                // lebih dulu, nominal tidak pernah terpotong.
+                                if (subtotalBeside) ...[
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    formatRupiah(subtotal),
+                                    maxLines: 1,
+                                    style: AppTheme.numStyle(context,
+                                        size: 14,
+                                        weight: FontWeight.w700,
+                                        color: isZeroed
+                                            ? scheme.onSurfaceVariant
+                                            : scheme.primary),
+                                  ),
+                                ],
                               ],
                             ),
                             // Susulan (permintaan user): nominal subtotal taruh PERSIS di
                             // bawah baris satuan+harga ("Karung · Rp 65.000") — bukan di
                             // blok kanan (dulu sempat dicoba di bawah qty badge kiri, lalu
                             // di bawah stepper; keduanya BUKAN yang dimaksud user).
+                            if (!subtotalBeside)
                             Padding(
                               padding: const EdgeInsets.only(top: 2),
                               child: Text(
@@ -2204,7 +2457,8 @@ class _CartItemTileState extends ConsumerState<_CartItemTile>
                             // opsi + tap langsung terapkan, TIDAK termasuk
                             // toggle header "Normal"/kategori yg SUDAH ADA
                             // & tidak berubah sama sekali.
-                            if (ref.watch(cartPriceCategoryChipsProvider))
+                            if (ref.watch(cartPriceCategoryChipsProvider) &&
+                                !chipsBesideName)
                               _ItemPriceCategoryChips(
                                 item: item,
                                 effectiveQty: effectiveQty,
@@ -2370,11 +2624,15 @@ class _ItemPriceCategoryChips extends ConsumerWidget {
     required this.item,
     required this.effectiveQty,
     required this.cartId,
+    this.inline = false,
   });
 
   final CartItem item;
   final double effectiveQty;
   final String cartId;
+
+  /// true = dipakai di SAMPING nama (tanpa jarak atas; tinggi lebih rapat).
+  final bool inline;
 
   Future<void> _apply(WidgetRef ref, String? categoryId) async {
     final priceService = PriceService(ref.read(databaseProvider));
@@ -2411,7 +2669,7 @@ class _ItemPriceCategoryChips extends ConsumerWidget {
         final scheme = Theme.of(context).colorScheme;
         final activeCategoryId = item.priceFromCategoryId;
         return Padding(
-          padding: const EdgeInsets.only(top: 4),
+          padding: EdgeInsets.only(top: inline ? 0 : 4),
           child: SizedBox(
             height: 26,
             child: SingleChildScrollView(
@@ -2477,6 +2735,118 @@ class _ItemPriceCategoryChips extends ConsumerWidget {
         ),
       ),
     );
+  }
+}
+
+/// Baris nama produk: mode biasa = [plain]; mode "chip di samping nama" =
+/// [_NameChipsRow] (nama berjalan + chip scroll horizontal).
+Widget _wrapNameRow({
+  required bool chipsBesideName,
+  required CartItem item,
+  required double effectiveQty,
+  required String cartId,
+  required bool isVariant,
+  required TextStyle nameStyle,
+  required Widget? checkbox,
+  required Widget plain,
+}) {
+  if (!chipsBesideName) return plain;
+  final titip = (item.depositQty != null && item.depositQty! > 0)
+      ? ' · Titip ${item.depositQty! % 1 == 0 ? item.depositQty!.toInt() : item.depositQty}'
+      : '';
+  return _NameChipsRow(
+    label: '${item.productName}$titip',
+    style: nameStyle,
+    leading: isVariant
+        ? const Padding(
+            padding: EdgeInsets.only(right: 4),
+            child: Icon(Icons.subdirectory_arrow_right, size: 15),
+          )
+        : null,
+    checkbox: checkbox,
+    plain: plain,
+    item: item,
+    effectiveQty: effectiveQty,
+    cartId: cartId,
+  );
+}
+
+/// Nama produk (teks berjalan bila tak muat, 1 baris) + chip Kategori Harga
+/// di sebelah kanannya. Lebar nama dibatasi maks. 50% ruang baris supaya chip
+/// selalu kebagian tempat; chip yang tak muat digeser horizontal. Kalau
+/// produk ini tidak punya chip (tak ada kategori / tanpa izin override),
+/// jatuh ke [plain] (nama sampai 2 baris seperti biasa).
+class _NameChipsRow extends ConsumerWidget {
+  const _NameChipsRow({
+    required this.label,
+    required this.style,
+    required this.leading,
+    required this.checkbox,
+    required this.plain,
+    required this.item,
+    required this.effectiveQty,
+    required this.cartId,
+  });
+
+  final String label;
+  final TextStyle style;
+  final Widget? leading;
+  final Widget? checkbox;
+  final Widget plain;
+  final CartItem item;
+  final double effectiveQty;
+  final String cartId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final canOverrideHarga =
+        ref.watch(canOverrideHargaProvider).valueOrNull ?? false;
+    final cats = canOverrideHarga
+        ? (ref
+                .watch(priceCategoriesForProductUnitProvider(
+                    item.productUnitId))
+                .valueOrNull ??
+            const [])
+        : const [];
+    if (cats.isEmpty) return plain;
+    final scheme = Theme.of(context).colorScheme;
+    return LayoutBuilder(builder: (context, c) {
+      final tp = TextPainter(
+        text: TextSpan(text: label, style: style),
+        maxLines: 1,
+        textDirection: ui.TextDirection.ltr,
+      )..layout();
+      // Sisihkan ruang leading + checkbox (perkiraan) dari batas 50%.
+      final reserved = (leading != null ? 19.0 : 0.0) +
+          (checkbox != null ? 34.0 : 0.0);
+      final maxName = max(60.0, c.maxWidth * 0.5 - reserved);
+      final nameW = min(tp.width + 2, maxName);
+      return Row(
+        children: [
+          if (leading != null)
+            IconTheme(
+                data: IconThemeData(color: scheme.onSurfaceVariant),
+                child: leading!),
+          SizedBox(
+            width: nameW,
+            child: MarqueeText(text: label, style: style),
+          ),
+          if (checkbox != null) ...[
+            const SizedBox(width: 2),
+            checkbox!,
+          ],
+          const SizedBox(width: 8),
+          Expanded(
+            child: _ItemPriceCategoryChips(
+              item: item,
+              effectiveQty: effectiveQty,
+              cartId: cartId,
+              inline: true,
+            ),
+          ),
+        ],
+      );
+    });
   }
 }
 

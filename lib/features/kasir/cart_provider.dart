@@ -325,6 +325,12 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
     }
   }
 
+  /// Centang / hapus centang SEMUA baris sekaligus (tombol "Tandai Semua" di
+  /// header keranjang — setara tombol di struk in-app).
+  void setAllChecked(bool checked) {
+    state = [for (final c in state) c.copyWith(checked: checked)];
+  }
+
   /// Set / ganti item berdasarkan productUnitId (dipakai modal edit item).
   /// Berbeda dari [addItem] yang menambah qty; ini menimpa.
   void setItem(CartItem item) {

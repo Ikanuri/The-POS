@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../database/app_database.dart';
 import '../utils/change_display.dart';
 import '../utils/preorder_calc.dart';
+import 'pick_list_renderer.dart';
 
 /// Nomor urut nota saja, tanpa kode kasir & tanggal. localId berformat
 /// "KASIR-YYYYMMDD-NNNN" → "5". Defensif untuk data lama tanpa format.
@@ -540,6 +541,161 @@ class PrinterService {
     );
 
     return _writeBytes(bytes, settings);
+  }
+
+  // ── Struk ambil barang (daftar pengambilan, TANPA harga) ─────────────────
+
+  /// Cetak daftar pengambilan barang dari keranjang (sebelum checkout) —
+  /// tanpa harga, qty & nama besar, kotak centang persegi tumpul di kanan
+  /// tiap baris (digambar sbg raster, lihat [PickListRenderer]). Header
+  /// hanya nama toko + waktu cetak, plus nama (tebal) & alamat pelanggan
+  /// bila keranjang punya pelanggan.
+  static Future<bool> printPickList({
+    required String storeName,
+    required DateTime at,
+    required List<PickLine> lines,
+    String customerName = '',
+    String customerAddress = '',
+  }) async {
+    final mac = await getSavedMac();
+    if (mac == null || mac.isEmpty) return false;
+
+    final connected = await connect(mac);
+    if (!connected) return false;
+
+    final settings = await loadSettings();
+    final parts = await buildPickListParts(
+        storeName: storeName,
+        at: at,
+        lines: lines,
+        settings: settings,
+        customerName: customerName,
+        customerAddress: customerAddress);
+    // Dikirim BERTAHAP (header, tiap strip raster, penutup) dgn jeda singkat:
+    // printer thermal murah punya buffer kecil — satu tulis puluhan KB raster
+    // membuatnya kehilangan sinkron & mencetak sisa data mentah sbg teks
+    // sampah (laporan user, struk ambil barang dgn banyak item).
+    var ok = true;
+    for (final part in parts) {
+      try {
+        final res = await _channel.invokeMapMethod<String, dynamic>(
+          'write',
+          {'bytes': part},
+        ).timeout(const Duration(seconds: 10), onTimeout: () => null);
+        ok = res?['ok'] as bool? ?? false;
+      } catch (_) {
+        ok = false;
+      }
+      if (!ok) break;
+      await Future<void>.delayed(const Duration(milliseconds: 40));
+    }
+    if (settings.autoDisconnectAfterPrint) await disconnect();
+    return ok;
+  }
+
+  /// Tinggi maks. satu perintah raster (dot). Sengaja kecil — lihat
+  /// [printPickList]. 96 dot x 48 byte = ~4,6 KB per perintah (kertas 58mm).
+  static const int pickListStripRows = 96;
+
+  /// Test-only seam: seluruh byte struk ambil barang jadi satu buffer.
+  @visibleForTesting
+  static Future<Uint8List> buildPickListBytes({
+    required String storeName,
+    required DateTime at,
+    required List<PickLine> lines,
+    required PrinterSettings settings,
+    String customerName = '',
+    String customerAddress = '',
+  }) async {
+    final parts = await buildPickListParts(
+        storeName: storeName,
+        at: at,
+        lines: lines,
+        settings: settings,
+        customerName: customerName,
+        customerAddress: customerAddress);
+    return Uint8List.fromList([for (final p in parts) ...p]);
+  }
+
+  /// Struk ambil barang dipecah jadi bagian-bagian kecil yang dikirim
+  /// berurutan: [header, strip raster..., penutup].
+  @visibleForTesting
+  static Future<List<Uint8List>> buildPickListParts({
+    required String storeName,
+    required DateTime at,
+    required List<PickLine> lines,
+    required PrinterSettings settings,
+    String customerName = '',
+    String customerAddress = '',
+  }) async {
+    final profile = await CapabilityProfile.load();
+    final paperSize =
+        settings.paperSize == '80' ? PaperSize.mm80 : PaperSize.mm58;
+    final gen = Generator(paperSize, profile);
+    final paperDots = paperSize == PaperSize.mm80 ? 576 : 384;
+    final parts = <Uint8List>[];
+
+    String two(int n) => n.toString().padLeft(2, '0');
+    final stamp = '${two(at.day)}/${two(at.month)}/${at.year} '
+        '${two(at.hour)}:${two(at.minute)}';
+
+    final head = <int>[];
+    if (storeName.isNotEmpty) {
+      head.addAll(gen.text(_toAscii(storeName),
+          styles: const PosStyles(
+              bold: true,
+              align: PosAlign.center,
+              height: PosTextSize.size2,
+              width: PosTextSize.size2)));
+    }
+    head.addAll(gen.text('AMBIL BARANG',
+        styles: const PosStyles(bold: true, align: PosAlign.center)));
+    head.addAll(
+        gen.text(stamp, styles: const PosStyles(align: PosAlign.center)));
+    // Pelanggan (opsional): nama TEBAL, alamat (hanya pelanggan tetap) biasa.
+    // Tanpa nama (kosong/spasi/non-ASCII semua) -> tidak ada baris sama
+    // sekali, header identik dgn sebelum fitur ini. Alamat tanpa nama
+    // diabaikan. Dipecah per kata ke lebar kertas supaya tidak terpotong.
+    final custLines = _wrapAscii(customerName, settings.charWidth);
+    if (custLines.isNotEmpty) {
+      for (final l in custLines) {
+        head.addAll(gen.text(l,
+            styles: const PosStyles(bold: true, align: PosAlign.center)));
+      }
+      for (final l in _wrapAscii(customerAddress, settings.charWidth)) {
+        head.addAll(
+            gen.text(l, styles: const PosStyles(align: PosAlign.center)));
+      }
+    }
+    head.addAll(gen.hr());
+    parts.add(Uint8List.fromList(head));
+
+    final safe = [
+      for (final l in lines)
+        PickLine(
+          qty: l.qty,
+          name: _toAscii(l.name),
+          unit: _toAscii(l.unit),
+          note: l.note == null ? null : _toAscii(l.note!),
+          checked: l.checked,
+          isVariant: l.isVariant,
+        ),
+    ];
+    for (final chunk in PickListRenderer.render(safe, paperDots)) {
+      // Potong jadi strip <= pickListStripRows baris per perintah raster.
+      for (var y = 0; y < chunk.height; y += pickListStripRows) {
+        final h = (chunk.height - y) < pickListStripRows
+            ? chunk.height - y
+            : pickListStripRows;
+        final strip =
+            img.copyCrop(chunk, x: 0, y: y, width: chunk.width, height: h);
+        parts.add(Uint8List.fromList(
+            gen.imageRaster(strip, align: PosAlign.center)));
+      }
+    }
+
+    parts.add(Uint8List.fromList([...gen.feed(2), ...gen.cut()]));
+    return parts;
   }
 
   // ── Item ordering helpers ────────────────────────────────────────────────
@@ -1538,6 +1694,40 @@ class PrinterService {
   }
 
   // ── ASCII sanitizer ──────────────────────────────────────────────────────
+
+  /// Pecah teks (boleh multi-baris) jadi baris ASCII selebar <= [width]
+  /// karakter, per kata; kata yang lebih panjang dari [width] dipotong
+  /// paksa. Baris kosong dibuang. Newline diproses SEBELUM [_toAscii]
+  /// (yang membuang karakter kontrol).
+  static List<String> _wrapAscii(String text, int width) {
+    final out = <String>[];
+    for (final raw in text.split(RegExp(r'\r\n|\r|\n'))) {
+      final line = _toAscii(raw).replaceAll(RegExp(r'\s+'), ' ').trim();
+      if (line.isEmpty) continue;
+      var cur = '';
+      for (var word in line.split(' ')) {
+        while (word.length > width) {
+          if (cur.isNotEmpty) {
+            out.add(cur);
+            cur = '';
+          }
+          out.add(word.substring(0, width));
+          word = word.substring(width);
+        }
+        if (word.isEmpty) continue;
+        if (cur.isEmpty) {
+          cur = word;
+        } else if (cur.length + 1 + word.length <= width) {
+          cur = '$cur $word';
+        } else {
+          out.add(cur);
+          cur = word;
+        }
+      }
+      if (cur.isNotEmpty) out.add(cur);
+    }
+    return out;
+  }
 
   static String _toAscii(String s) {
     const map = {

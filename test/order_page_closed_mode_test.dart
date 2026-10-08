@@ -53,13 +53,13 @@ void main() {
     expect(html, contains('"forced":true'));
   });
 
-  test('struktur HTML: banner, dialog kode, cek berkala, harga disembunyikan',
+  test('struktur HTML: halaman tutup, dialog kode, cek berkala, harga disembunyikan',
       () async {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(() async => db.close());
     final html =
         (await OrderPageService.generateHtml(db: db, storeName: 'Toko')).html;
-    expect(html, contains('id="closedBanner"'));
+    expect(html, contains('id="closedPage"'));
     expect(html, contains('Pelanggan langganan? Masukkan kode'));
     expect(html, contains('id="codeOverlay"'));
     expect(html, contains('function hoursState()'));

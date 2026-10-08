@@ -378,6 +378,23 @@ class AppDatabase extends _$AppDatabase {
     'receipt_show_employee',
     // Perilaku katalog pesanan.
     'katalog_wa_direct',
+    // Tampilan katalog HTML (halaman awal, kategori, terlaris, pengumuman,
+    // Pesan lagi) — daftar yang sama dgn `CatalogDisplayService.allKeys`.
+    'katalog_show_categories',
+    'katalog_top_days',
+    'katalog_top_from',
+    'katalog_top_to',
+    'katalog_top_count',
+    'katalog_announce_enabled',
+    'katalog_announce_text',
+    'katalog_reorder_enabled',
+    'katalog_game_enabled',
+    // Stiker animasi katalog HTML (.tgs unggahan owner, base64) — daftar yang
+    // sama dgn `CatalogStickerService.allKeys`.
+    'katalog_sticker_home',
+    'katalog_sticker_notfound',
+    'katalog_sticker_closed',
+    'katalog_sticker_sent',
     // Kuota antrian pre-order per produk — ditetapkan owner, dibaca kasir
     // saat memutuskan siapa yang diprioritaskan di dashboard Laci Meja.
     // BEDA dari `saved_catalogs` (scratchpad pribadi per device, sengaja
@@ -389,7 +406,14 @@ class AppDatabase extends _$AppDatabase {
     kPurchaseTaxTreatmentKey,
     kPurchaseTaxRateKey,
     kPurchaseCostWarnPctKey,
+    // Registri perangkat (kode -> nama + role) — dipelajari host dari
+    // payload sync tiap klien; ikut turun ke klien supaya riwayat Laci Meja
+    // bisa menampilkan "oleh <nama perangkat> (<role>)" di semua device.
+    knownDevicesKey,
   };
+
+  /// Key setting registri perangkat (JSON `{kode: {name, role}}`).
+  static const knownDevicesKey = 'known_devices';
 
   /// Indeks performa — dipakai filter laporan, riwayat, JOIN produk, dan audit
   /// stok. Idempotent (IF NOT EXISTS) agar aman dijalankan di onCreate maupun
@@ -6633,6 +6657,53 @@ class AppDatabase extends _$AppDatabase {
     }).toList();
   }
 
+  /// Peringkat produk INDUK terlaris untuk saran di kolom cari katalog HTML
+  /// — satu query agregat (JOIN + GROUP BY, tanpa N+1).
+  ///
+  /// - Varian digabung ke induknya (`COALESCE(parent_product_id, id)`).
+  /// - Skor = jumlah NOTA berbeda yang memuat produk itu (bukan jumlah baris
+  ///   / qty), tie-break total qty lalu nama (urutan stabil).
+  /// - Nota `void` dikecualikan; baris retur (qty <= 0) tidak dihitung.
+  /// - Hanya induk AKTIF yang tidak ditandai habis manual. Filter "ada di
+  ///   katalog" (punya harga) & stok riil dilakukan pemanggil terhadap
+  ///   daftar produk katalog; [limit] sengaja longgar untuk itu.
+  Future<List<({String productId, int txCount, double qty})>>
+      getTopSellingParentProducts(
+    DateTime from,
+    DateTime to, {
+    int limit = 200,
+  }) async {
+    final rows = await customSelect(
+      'SELECT par.id AS pid, '
+      '  COUNT(DISTINCT ti.transaction_id) AS tx_count, '
+      '  SUM(ti.qty) AS qty '
+      'FROM transaction_items ti '
+      'JOIN transactions t ON t.id = ti.transaction_id '
+      'JOIN products p ON p.id = ti.product_id '
+      'JOIN products par ON par.id = COALESCE(p.parent_product_id, p.id) '
+      "WHERE t.status != 'void' "
+      '  AND ti.qty > 0 '
+      '  AND t.created_at >= ? AND t.created_at <= ? '
+      '  AND par.is_active = 1 AND par.marked_out_of_stock = 0 '
+      'GROUP BY par.id '
+      'ORDER BY tx_count DESC, qty DESC, par.name ASC '
+      'LIMIT ?',
+      variables: [
+        Variable.withDateTime(from),
+        Variable.withDateTime(to),
+        Variable.withInt(limit),
+      ],
+      readsFrom: {transactionItems, transactions, products},
+    ).get();
+    return rows
+        .map((r) => (
+              productId: r.read<String>('pid'),
+              txCount: r.read<int>('tx_count'),
+              qty: r.read<double>('qty'),
+            ))
+        .toList();
+  }
+
   /// Top pelanggan terdaftar berdasarkan total belanja — satu query JOIN.
   Future<List<CustomerRevenueStat>> getTopCustomersByRevenue(
     DateTime from,
@@ -9709,6 +9780,71 @@ class AppDatabase extends _$AppDatabase {
     return {
       for (final r in rows)
         r.read(laciMejaEvents.entryId)!: r.read(laciMejaEvents.qty.sum()) ?? 0,
+    };
+  }
+
+  // ── Registri perangkat & riwayat pre-order ────────────────────────────────
+
+  /// Kode perangkat -> nama + role (lihat [knownDevicesKey]). Kosong bila belum
+  /// ada yang tercatat.
+  Future<Map<String, ({String name, String role})>> getKnownDevices() async {
+    final raw = await getSetting(knownDevicesKey);
+    if (raw == null || raw.isEmpty) return {};
+    try {
+      final m = jsonDecode(raw) as Map<String, dynamic>;
+      return {
+        for (final e in m.entries)
+          e.key: (
+            name: ((e.value as Map)['name'] as String?) ?? '',
+            role: ((e.value as Map)['role'] as String?) ?? '',
+          ),
+      };
+    } catch (_) {
+      return {};
+    }
+  }
+
+  /// Catat/perbarui identitas satu perangkat. Hanya menulis (dan men-stamp
+  /// `updated_at`, supaya ikut sync) bila isinya benar-benar berubah.
+  Future<void> rememberKnownDevice({
+    required String code,
+    required String name,
+    required String role,
+  }) async {
+    final c = code.trim();
+    if (c.isEmpty || (name.trim().isEmpty && role.trim().isEmpty)) return;
+    final cur = await getKnownDevices();
+    final prev = cur[c];
+    if (prev != null && prev.name == name.trim() && prev.role == role.trim()) {
+      return;
+    }
+    cur[c] = (name: name.trim(), role: role.trim());
+    await setSetting(
+      knownDevicesKey,
+      jsonEncode({
+        for (final e in cur.entries)
+          e.key: {'name': e.value.name, 'role': e.value.role},
+      }),
+    );
+  }
+
+  /// Semua kejadian pre-order (penuhi/batal), terbaru dulu — sumber tampilan
+  /// "Pemenuhan" di Riwayat Laci Meja.
+  Stream<List<LaciMejaEvent>> watchPreorderEvents() => (select(laciMejaEvents)
+        ..where((t) => t.entityType.equals('preorder'))
+        ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
+      .watch();
+
+  /// Pencatat nota: nama pegawai + kode perangkat kasir per nota (satu query
+  /// IN, bukan N+1) — dipakai riwayat pre-order utk "dicatat oleh".
+  Future<Map<String, ({String? employeeName, String? kasirId})>>
+      getTransactionActors(List<String> txIds) async {
+    if (txIds.isEmpty) return {};
+    final rows = await (select(transactions)
+          ..where((t) => t.id.isIn(txIds)))
+        .get();
+    return {
+      for (final r in rows) r.id: (employeeName: r.employeeName, kasirId: r.kasirId),
     };
   }
 

@@ -225,6 +225,14 @@ void main() {
   });
 
   test(
+      'total halaman Pesanan: aturan ukuran label hanya untuk label "Total", '
+      'bukan semua span (digit roll adalah span -> dulu mengecil jadi 12px)',
+      () {
+    expect(html, contains('.paper-total > span{font-size:12px;'));
+    expect(html, isNot(contains('.paper-total span{font-size:12px;')));
+  });
+
+  test(
       'redesign halaman Pesanan (Mockup B): kertas struk, baris titik-titik, TOTAL',
       () {
     expect(html, contains('class="paper-wrap"'));

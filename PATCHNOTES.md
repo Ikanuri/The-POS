@@ -8,6 +8,122 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 8 Oktober 2026 (Jumlah Saran & Salin Link)
+
+- **Jumlah saran terlaris kini diatur dengan tombol − / +** (3 sampai 12), lebih mudah ditekan daripada daftar pilihan lama.
+- **Ada tombol Salin di samping link hasil "Publish ke Web"**, sekali tekan link langsung tersalin.
+- **Saran di kolom cari katalog kini berbunyi "Cari <produk>? Tekan →"** dan tetap berganti saat kolom diketuk; tombol X berbentuk lingkaran garis, setelah dihapus kursor tetap di kolom dan keyboard tidak menutup. (Perlu Publish ulang katalog.)
+
+---
+
+## 8 Oktober 2026 (Kolom Cari & Pengaturan Jumlah Saran)
+
+> **Perlu Publish ulang katalog** untuk perbaikan kolom cari.
+
+- **Kolom cari tidak lagi tertutup keyboard.** Setelah menghapus pencarian dan kembali ke halaman awal, halaman otomatis bergeser sedikit supaya kolom cari tetap kelihatan di atas keyboard dan tombol keranjang.
+- **Jumlah saran di pengaturan kini berupa dropdown dengan tampilan sendiri** (pilih 3 sampai 12), bukan stepper.
+
+---
+
+## 8 Oktober 2026 (Katalog Tanpa Kategori)
+
+> **Perlu Publish ulang katalog.**
+
+- **Walau kategori dimatikan, katalog tetap dibuka di halaman awal** (stiker, kolom cari, Pesan lagi, game), bukan langsung daftar semua produk. Pelanggan menjelajah lewat satu tombol "Semua produk" atau mengetik di kolom cari.
+
+---
+
+## 8 Oktober 2026 (Perbaikan Game Labirin)
+
+- **Lubang tujuan game labirin kini selalu tepat di ujung labirin.** Di sebagian HP, saat link baru dibuka, lubangnya sempat tampak melayang di pojok luar labirin (dindingnya lebih kecil dari papan). Perlu Publish ulang katalog.
+
+---
+
+## 7 Oktober 2026 (Katalog Pesanan: Game Labirin)
+
+> **Perlu Publish ulang katalog** agar game muncul di HP pelanggan.
+
+- **Game labirin di katalog.** Di bawah halaman awal (dan di halaman "Toko sedang tutup") pelanggan bisa main bola-di-labirin sambil menunggu: 3 tingkat (Mudah/Sedang/Sulit), digeser dengan jari atau dengan memiringkan HP, lengkap dengan waktu dan rekor pribadi. Bawaannya nyala; bisa dimatikan lewat saklar "Tampilkan game labirin" di Katalog Pesanan.
+
+---
+
+## 7 Oktober 2026 (Katalog Pesanan: Stiker Animasi, Halaman Toko Tutup & Pesanan Terkirim)
+
+> **Perlu Publish ulang katalog** agar perubahan di bawah muncul di HP pelanggan.
+
+- **Stiker animasi di katalog.** Halaman awal kini disambut stiker bergerak di atas "Mau pesan apa hari ini?". Pencarian yang tidak ketemu menampilkan stiker dan tulisan `Produk "xxx" tidak ditemukan`. Stiker bisa diganti dengan stiker sendiri (berkas .tgs) di Katalog Pesanan > "Stiker animasi", atau dikembalikan ke bawaan. Bila gerakan dimatikan di HP pelanggan, stiker tampil diam.
+- **Halaman "Toko sedang tutup" yang baru.** Saat toko tutup, pelanggan hanya melihat stiker, jam buka berikutnya ("Buka lagi hari ini pukul 08.00"), pengumuman toko, dan tautan kecil "Pelanggan langganan? Masukkan kode". Pelanggan langganan yang memasukkan kode kembali ke halaman awal biasa, dengan keterangan oranye "Pesan titipan - toko tutup" di bagian atas.
+- **Halaman "Pesanan dikirim!"** muncul seketika setelah pelanggan menekan kirim (WhatsApp atau Telegram), dengan satu tombol "Kembali ke halaman awal". Keranjang dikosongkan setelahnya, pesanan tetap tersimpan di "Pesan lagi", dan tombol Kembali di HP juga membawa ke halaman awal.
+- **Tombol WhatsApp (hijau) kini selalu di kanan**, Telegram di sebelah kirinya.
+
+---
+
+## 7 Oktober 2026 (Logo Katalog)
+
+- **Logo di header katalog kini persik The POS** (garis putih di kotak oranye), bukan lagi huruf awal nama toko. Perlu Publish ulang katalog.
+
+---
+
+## 7 Oktober 2026 (Katalog Pesanan: Kirim ke Telegram + Perapian Tampilan)
+
+> **Perlu Publish ulang katalog** (tekan "Publish ke Web" atau "Buat & Bagikan") agar semua perubahan di bawah muncul di HP pelanggan.
+
+- **Tombol "Kirim ke Telegram" di halaman Pesanan.** Bila kolom Telegram di Informasi Toko diisi (mis. `@namatoko`, `t.me/namatoko`, atau `t.me/namatoko?direct`), tombol kirim terbagi dua: WhatsApp (hijau) dan Telegram (biru), masing-masing menampilkan total belanja. Karena Telegram tidak bisa mengisi pesan otomatis, tombol Telegram menyalin pesanan lalu membuka chat toko; pelanggan tinggal menempel (tahan lalu "Tempel") dan kirim. Bila kolom Telegram kosong, tombolnya tetap satu seperti biasa.
+- **Angka total tidak lagi bergeser** saat berputar: tulisan "Rp" di tombol bawah dan di total halaman Pesanan dulu bergeser sedikit tiap angka berubah. Sekarang diam di tempat, dan saat angkanya bertambah digit (9.999 ke 10.000) bergeser dengan mulus.
+- **Info di bagian atas katalog tidak lagi terpotong.** Nama toko panjang turun ke baris kedua, keterangan "Diperbarui ..." tampil utuh, dan tombol ikon tidak ada yang keluar layar di HP berlayar sempit. Ringkasan pesanan di "Pesan lagi" dan tulisan tombol kirim di layar kecil juga tampil penuh.
+- **Tombol pengalih tampilan daftar/kotak disembunyikan di halaman awal** (di sana memang tidak berfungsi); tetap ada di daftar produk.
+- **Titik status buka/tutup lebih besar dan jelas**, tidak lagi terpotong di sisi kiri.
+
+---
+
+## 7 Oktober 2026 (Katalog Pesanan: Halaman Awal Baru)
+
+> **Perlu Publish ulang katalog** (tekan "Publish ke Web" atau "Buat & Bagikan") agar semua perubahan di bawah muncul di HP pelanggan.
+
+- **Halaman awal katalog yang baru:** pelanggan disambut nama toko, status buka/tutup, dan kolom cari besar "Mau pesan apa hari ini?". Daftar produk tidak langsung menumpuk di layar; pelanggan mengetik nama barang atau memilih kategori. Perpindahan antar tampilan dibuat halus.
+- **Kategori produk di katalog:** chip "Semua produk" dan tiap kategori. Ketuk kategori untuk menelusuri produknya; mengetik di kolom cari tetap mencari di SELURUH produk. Tiap produk menampilkan label kategorinya. Bisa dimatikan di Pengaturan > Katalog Pesanan (bila dimatikan, katalog langsung menampilkan daftar produk seperti biasa).
+- **Saran produk terlaris di kolom cari:** nama barang yang paling sering dibeli tampil bergantian di kolom cari ("Cari Minyak Goreng 2L"); ketuk panah untuk langsung mencarinya. Periode (7/30/90 hari atau rentang tanggal sendiri) dan jumlah saran bisa diatur.
+- **Pengumuman toko:** tulis pengumuman singkat (maks. 280 karakter) yang muncul otomatis sekali saat katalog dibuka lalu bisa dibuka lagi lewat tombol megafon. Cocok untuk info libur atau tutup lebih awal.
+- **"Pesan lagi" untuk pelanggan langganan:** pesanan yang pernah dikirim tersimpan di HP pelanggan sendiri; di halaman awal ada kartu pesanan terakhir dan daftar semua pesanan sebelumnya, tinggal ketuk "Pesan lagi" (harga selalu mengikuti harga terbaru, barang yang sudah habis dilewati). Bila riwayat hilang, pelanggan bisa menempel pesan lama dari WhatsApp lalu menekan "Muat".
+- Tombol "Tambah" di daftar produk sedikit lebih tinggi supaya lebih mudah diketuk.
+
+---
+
+## 7 Oktober 2026 (Katalog Lebih Cepat + Pelanggan di Struk Ambil Barang)
+
+- **Pencarian di katalog pesanan jauh lebih cepat**, terutama untuk toko dengan ribuan produk (dulu bisa tersendat beberapa detik di HP biasa). Daftar kini menampilkan 60 produk dulu; ketik nama barang untuk mencari, atau tekan **Tampilkan 60 lagi** untuk melihat lebih banyak. Perlu Publish ulang katalog.
+- **Tombol Hapus Tanda di keranjang kini berwarna merah** (Tandai Semua tetap hijau), supaya tidak tertukar.
+- **Struk Ambil Barang memuat nama pelanggan** (tebal) dan, untuk pelanggan tetap yang punya alamat, alamatnya, tepat di bawah waktu cetak. Tanpa pelanggan, struk sama seperti biasa.
+
+---
+
+## 7 Oktober 2026 (Perbaikan Cetak Struk Ambil Barang)
+
+- **Cetak Struk Ambil Barang tidak lagi mengeluarkan huruf acak:** pada keranjang dengan banyak barang, struk sempat tercetak sebagian lalu berubah jadi deretan simbol tak terbaca. Kini data dikirim ke printer sedikit demi sedikit.
+
+---
+
+## 7 Oktober 2026 (Riwayat Pre-order)
+
+- **Riwayat Pre-order punya filter:** Semua, Terbuka, Pemenuhan, dan Dibatalkan.
+- **Ringkasan di atas daftar** (mengikuti filter tanggal/produk/pencarian): berapa pre-order ditambahkan dan berapa qty-nya, berapa pemenuhan dan berapa qty-nya, plus rincian **per pelanggan** dan **per produk**.
+- **Siapa yang mencatat dan memenuhi:** tiap pre-order menampilkan perangkat pencatatnya, dan tab Pemenuhan menampilkan setiap kejadian pemenuhan (tanggal, pelanggan, produk, jumlah, dan perangkat yang memenuhi, lengkap dengan role). Nama perangkat lain muncul setelah perangkat itu pernah sinkron.
+
+---
+
+## 7 Oktober 2026 (Keranjang Lebih Fleksibel)
+
+- **Total di halaman Pesanan katalog tetap besar** saat angkanya berputar (dulu sempat mengecil sebentar). Perlu Publish ulang katalog.
+- **Menu Pengaturan Keranjang kini bisa ditutup dengan swipe turun** (dulu tidak bisa), terbuka 3/4 layar dan bisa ditarik sampai penuh.
+- **Struk Ambil Barang dirapikan:** jumlah lebih kecil, nama produk tebal, dan kotak centang langsung di sebelah nama (tidak jauh di kanan).
+- **Tombol-tombol di header keranjang dibalik urutannya:** "Tahan Pesanan" kini paling kanan.
+- **Dua opsi tata letak baris keranjang** (Pengaturan Keranjang): total per produk bisa ditaruh **di samping harga**, dan chip kategori harga bisa ditaruh **di samping nama produk** (digeser ke samping bila banyak; nama panjang jadi teks berjalan). Tidak menimpa centang atau stepper, apa pun letak centangnya.
+- **Cetak Struk Ambil Barang:** satu tombol di header keranjang mencetak daftar barang (tanpa harga) ke printer thermal Bluetooth, dengan tulisan lebih besar dan kotak centang di kanan tiap barang, supaya pegawai bisa mengambilkan barang sebelum pembeli bayar. Barang yang sudah dicentang di keranjang ikut tercentang di cetakan.
+- **Tombol Tandai Semua** di header keranjang (centang/hapus centang semua barang sekaligus).
+- Header keranjang kini dua baris: judul + Kosongkan di atas, tombol aksi lainnya di bawah.
+
+---
+
 ## 6 Oktober 2026 (Revolver Qty)
 
 - **Input jumlah cepat dengan geser:** geser tombol **+** ke **kiri** (di daftar produk kasir maupun keranjang) dan muncul pita bertanda seperti tuner radio. Geser pelan = naik satu-satu, geser cepat = meloncat lebih jauh; geser balik ke kanan untuk menurunkan. Angka besar tampil di kiri sehingga tidak tertutup jari. Tap biasa pada + tetap menambah 1.

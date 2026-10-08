@@ -183,3 +183,57 @@ final cartPriceCategoryChipsProvider =
     StateNotifierProvider<CartPriceCategoryChipsNotifier, bool>((ref) {
   return CartPriceCategoryChipsNotifier();
 });
+
+/// Opsi layout baris keranjang: nominal subtotal item ditaruh di SAMPING
+/// "satuan · harga" (satu baris, rata kanan) alih-alih di baris sendiri di
+/// bawahnya. Default OFF = perilaku lama.
+class CartSubtotalBesidePriceNotifier extends StateNotifier<bool> {
+  CartSubtotalBesidePriceNotifier() : super(false) {
+    _load();
+  }
+
+  static const _prefKey = 'cart_subtotal_beside_price_v1';
+
+  Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    state = prefs.getBool(_prefKey) ?? false;
+  }
+
+  Future<void> set(bool value) async {
+    state = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_prefKey, value);
+  }
+}
+
+final cartSubtotalBesidePriceProvider =
+    StateNotifierProvider<CartSubtotalBesidePriceNotifier, bool>((ref) {
+  return CartSubtotalBesidePriceNotifier();
+});
+
+/// Opsi layout baris keranjang: chip Kategori Harga per-item ditaruh di
+/// SAMPING nama produk (scroll horizontal bila banyak; nama panjang jadi
+/// teks berjalan) alih-alih di baris sendiri di bawah. Default OFF.
+class CartChipsBesideNameNotifier extends StateNotifier<bool> {
+  CartChipsBesideNameNotifier() : super(false) {
+    _load();
+  }
+
+  static const _prefKey = 'cart_chips_beside_name_v1';
+
+  Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    state = prefs.getBool(_prefKey) ?? false;
+  }
+
+  Future<void> set(bool value) async {
+    state = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_prefKey, value);
+  }
+}
+
+final cartChipsBesideNameProvider =
+    StateNotifierProvider<CartChipsBesideNameNotifier, bool>((ref) {
+  return CartChipsBesideNameNotifier();
+});

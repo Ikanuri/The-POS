@@ -400,7 +400,7 @@ void main() {
         .firstMatch(result.html)!
         .group(1)!;
     expect(setQtyBody.contains('refreshProwControls(p)'), isTrue);
-    expect(setQtyBody.contains('else renderList()'), isTrue,
+    expect(setQtyBody.contains('else renderList(true)'), isTrue,
         reason: 'fallback tetap ada utk kasus produk tidak ketemu');
     expect(RegExp(r'^\s*renderList\(\);\s*$', multiLine: true).hasMatch(setQtyBody),
         isFalse,
@@ -882,15 +882,17 @@ void main() {
     expect(html.contains('id="mbBadge"'), isTrue);
     expect(html.contains("classList.toggle('hidden', n === 0 || shopClosed)"), isTrue,
         reason: 'tombol sembunyi total saat belum ada barang dipilih');
-    expect(html.contains("orderMode ? 'Kirim via WhatsApp' : 'Lihat Pesanan'"),
-        isTrue);
+    // Label kini diatur setSendLabels() (tunggal 'Kirim via WhatsApp'; dgn
+    // Telegram dipecah 2 tombol) — lihat order_page_telegram_test.dart.
+    expect(html.contains("wa.textContent = 'Lihat Pesanan'"), isTrue);
+    expect(html.contains("wa.textContent = 'Kirim via WhatsApp'"), isTrue);
     expect(html.contains('.mainbtn.wa{background:#25D366;}'), isTrue);
     // Bar keranjang lama (label+total terpisah dari tombol) sudah TIDAK ada.
     expect(html.contains('class="cartbar"'), isFalse);
     expect(html.contains('id="cbView"'), isFalse);
 
     // Logika kirim pesanan tidak berubah: kode mesin & deep-link WA tetap.
-    expect(html.contains('function submitOrder()'), isTrue);
+    expect(html.contains('function submitOrder(channel)'), isTrue);
     expect(html.contains("'https://wa.me/'"), isTrue);
     expect(html.contains('DATA.machinePrefix'), isTrue);
 
@@ -910,7 +912,7 @@ void main() {
     expect(html.contains('.pc-add{position:relative;width:84px'), isTrue);
     expect(html.contains('.prow-controls.selected .pc-add{width:40px'), isTrue);
     expect(html.contains('.pc-minus{width:0;'), isTrue);
-    expect(html.contains('.prow-controls.selected .pc-minus{width:38px'), isTrue);
+    expect(html.contains('.prow-controls.selected .pc-minus{width:40px'), isTrue);
     expect(html.contains('transition:width .26s'), isTrue);
 
     // Mutate-in-place: refreshProwControls TIDAK boleh lagi replaceWith().

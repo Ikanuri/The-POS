@@ -45,7 +45,10 @@ void main() {
     installFakeSecureStorage();
     final db = AppDatabase(NativeDatabase.memory());
 
-    await pumpWithFakeApp(tester, db: db, child: const OrderShareScreen());
+    await pumpWithFakeApp(tester,
+        db: db,
+        child: const OrderShareScreen(),
+        surfaceSize: const Size(430, 4200));
 
     expect(find.text('Publish ke Web'), findsOneWidget);
     await tester.tap(find.text('Publish ke Web'));
@@ -63,7 +66,10 @@ void main() {
     installFakeSecureStorage();
     final db = AppDatabase(NativeDatabase.memory());
 
-    await pumpWithFakeApp(tester, db: db, child: const OrderShareScreen());
+    await pumpWithFakeApp(tester,
+        db: db,
+        child: const OrderShareScreen(),
+        surfaceSize: const Size(430, 4200));
 
     await tester.tap(find.byIcon(Icons.cloud_outlined));
     await tester.pumpAndSettle();
