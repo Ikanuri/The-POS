@@ -497,4 +497,51 @@ void main() {
       await db.close();
     });
   });
+
+  group('list tile & chip gaya Baru', () {
+    final tileCard = find.byWidgetPredicate(
+        (w) => w.runtimeType.toString() == '_ModernTileCard');
+
+    testWidgets(
+        'produk = kartu lembut di landing & daftar; Klasik tidak '
+        'dibungkus', (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      final a = await _addProduct(db, 'Gula Pasir');
+      await _addProduct(db, 'Gula Merah');
+      await _sale(db, DateTime.now(), [(a, 1)]);
+      await _pumpKasir(tester, db,
+          prefs: {...modern, 'kasir_grid_view': false});
+      expect(tileCard, findsOneWidget, reason: 'landing: 1 produk terakhir');
+
+      await tester.enterText(find.byKey(const Key('modern-search')), 'gula');
+      await tester.pumpAndSettle();
+      expect(tileCard, findsNWidgets(2));
+      await _drain(tester);
+
+      await _pumpKasir(tester, db, prefs: {'kasir_grid_view': false});
+      await tester.enterText(find.byType(TextField).first, 'gula');
+      await tester.pumpAndSettle();
+      expect(tileCard, findsNothing);
+      await _drain(tester);
+      await db.close();
+    });
+
+    testWidgets('chip kategori aktif = pil terracotta penuh', (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      await db.into(db.productGroups).insert(ProductGroupsCompanion.insert(
+          id: const Value(700), name: const Value('Minuman')));
+      await _addProduct(db, 'Teh Botol');
+      await _pumpKasir(tester, db, prefs: modern);
+      await tester.tap(find.byKey(const Key('landing-cat-700')));
+      await tester.pumpAndSettle();
+      final chip =
+          tester.widget<FilterChip>(find.widgetWithText(FilterChip, 'Minuman'));
+      expect(chip.selected, isTrue);
+      expect(chip.selectedColor, AppTheme.accent);
+      expect(chip.shape, isA<StadiumBorder>());
+      expect(chip.showCheckmark, isFalse);
+      await _drain(tester);
+      await db.close();
+    });
+  });
 }

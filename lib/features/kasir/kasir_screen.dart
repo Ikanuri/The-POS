@@ -2301,7 +2301,8 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
 
   /// Hasil produk (grid/list/kosong/memuat) — dipakai tampilan Klasik & Baru.
   Widget _buildProductResults(BuildContext context,
-      AsyncValue<List<Product>> productsAsync, String query, bool isGrid) {
+      AsyncValue<List<Product>> productsAsync, String query, bool isGrid,
+      {bool modern = false}) {
     final cs = Theme.of(context).colorScheme;
     return StepperActiveScope(
                         child: productsAsync.when(
@@ -2352,7 +2353,9 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
                             }
                             if (isGrid) {
                               return GridView.builder(
-                                padding: const EdgeInsets.all(12),
+                                // Gaya Baru: ruang bawah untuk tombol pojok.
+                                padding: EdgeInsets.fromLTRB(
+                                    12, 12, 12, modern ? 96 : 12),
                                 gridDelegate:
                                     const SliverGridDelegateWithMaxCrossAxisExtent(
                                   maxCrossAxisExtent: 180,
@@ -2375,6 +2378,28 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
                                 ),
                               );
                             }
+                            Widget tile(Product p) => _ProductListTile(
+                                  product: p,
+                                  cartId: _cartId,
+                                  onTapBody: () => _openEntry(p),
+                                  onQuickAdd: _quickAdd,
+                                  onOpenEntry: () => _openEntry(p),
+                                  onBeforeTap: _markSkipSearchCollapse,
+                                  onAfterQtyChange: _highlightSearchIfActive,
+                                );
+                            if (modern) {
+                              // Gaya Baru: tiap produk = kartu lembut
+                              // (tanpa garis pemisah), isi/aksi tile sama.
+                              return ListView.separated(
+                                padding:
+                                    const EdgeInsets.fromLTRB(12, 6, 12, 96),
+                                itemCount: prods.length,
+                                separatorBuilder: (_, __) =>
+                                    const SizedBox(height: 8),
+                                itemBuilder: (_, i) =>
+                                    _ModernTileCard(child: tile(prods[i])),
+                              );
+                            }
                             return ListView.separated(
                               padding: const EdgeInsets.symmetric(vertical: 6),
                               itemCount: prods.length,
@@ -2382,15 +2407,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
                                   height: 1,
                                   indent: 62,
                                   color: cs.outlineVariant),
-                              itemBuilder: (_, i) => _ProductListTile(
-                                product: prods[i],
-                                cartId: _cartId,
-                                onTapBody: () => _openEntry(prods[i]),
-                                onQuickAdd: _quickAdd,
-                                onOpenEntry: () => _openEntry(prods[i]),
-                                onBeforeTap: _markSkipSearchCollapse,
-                                onAfterQtyChange: _highlightSearchIfActive,
-                              ),
+                              itemBuilder: (_, i) => tile(prods[i]),
                             );
                           },
                           loading: () => const SkeletonList(),
@@ -2807,7 +2824,11 @@ class _LandingSectionTitle extends StatelessWidget {
 /// (tersimpan ke `sortOrder` via [AppDatabase.reorderProductGroups]).
 /// Kosong total (tidak ada kategori bernama) → tidak render apa pun.
 class _KasirCategoryChipRow extends ConsumerWidget {
-  const _KasirCategoryChipRow({this.showHome = false, this.onHome});
+  const _KasirCategoryChipRow(
+      {this.showHome = false, this.onHome, this.modern = false});
+
+  /// Gaya Baru: chip berbentuk pil (aktif = terracotta penuh).
+  final bool modern;
 
   /// Landing aktif: tampilkan chip "Beranda" di depan untuk kembali ke landing.
   final bool showHome;
@@ -2848,15 +2869,31 @@ class _KasirCategoryChipRow extends ConsumerWidget {
                   depth: 0.05,
                   child: FilterChip(
                   label: Text(groups[i].name!,
-                      style: const TextStyle(fontSize: 12)),
+                      style: TextStyle(
+                          fontSize: 12,
+                          // Gaya Baru: chip aktif terracotta penuh, teks putih.
+                          color: modern && selected == groups[i].id
+                              ? Colors.white
+                              : null,
+                          fontWeight: modern && selected == groups[i].id
+                              ? FontWeight.w600
+                              : null)),
                   selected: selected == groups[i].id,
                   onSelected: (_) => ref
                       .read(_kasirSelectedGroupProvider.notifier)
                       .state = selected == groups[i].id ? null : groups[i].id,
                   visualDensity: VisualDensity.compact,
-                  selectedColor: scheme.primaryContainer,
+                  selectedColor:
+                      modern ? AppTheme.accent : scheme.primaryContainer,
                   checkmarkColor: scheme.onPrimaryContainer,
-                  side: BorderSide.none,
+                  showCheckmark: !modern,
+                  shape: modern ? const StadiumBorder() : null,
+                  side: modern
+                      ? BorderSide(
+                          color: selected == groups[i].id
+                              ? AppTheme.accent
+                              : scheme.outlineVariant)
+                      : BorderSide.none,
                   padding: EdgeInsets.zero,
                 ),
                 ),  // PressScale
@@ -2881,7 +2918,10 @@ class _KasirCategoryChipRow extends ConsumerWidget {
                 label: const Text('Beranda', style: TextStyle(fontSize: 12)),
                 onPressed: onHome,
                 visualDensity: VisualDensity.compact,
-                side: BorderSide.none,
+                shape: modern ? const StadiumBorder() : null,
+                side: modern
+                    ? BorderSide(color: scheme.outlineVariant)
+                    : BorderSide.none,
                 padding: EdgeInsets.zero,
               ),
             ),

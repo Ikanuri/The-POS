@@ -79,7 +79,8 @@ extension _KasirModernX on _KasirScreenState {
                   onScan: _openScanner,
                 ),
                 if (!isLanding)
-                  _KasirCategoryChipRow(showHome: true, onHome: goHome),
+                  _KasirCategoryChipRow(
+                      showHome: true, onHome: goHome, modern: true),
                 Expanded(
                   // Tap/scroll di bawah kolom cari keluar dari fokus cari
                   // (teks tetap) — sama dengan Klasik; Listener (bukan
@@ -132,7 +133,8 @@ extension _KasirModernX on _KasirScreenState {
                                     ),
                                   )
                                 : _buildProductResults(
-                                    context, productsAsync, query, isGrid),
+                                    context, productsAsync, query, isGrid,
+                                    modern: true),
                           ),
                         ],
                       ),
@@ -542,10 +544,11 @@ class _ModernLanding extends ConsumerWidget {
           const SkeletonRow(nameFactor: 0.4),
         ] else if (items.isNotEmpty) ...[
           _LandingSectionTitle(title),
-          for (var i = 0; i < items.length; i++) ...[
-            if (i > 0) Divider(height: 1, indent: 62, color: cs.outlineVariant),
-            tileBuilder(items[i]),
-          ],
+          for (var i = 0; i < items.length; i++)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+              child: _ModernTileCard(child: tileBuilder(items[i])),
+            ),
         ],
       ],
     );
@@ -1759,6 +1762,38 @@ class _ModernHeldRow extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Pembungkus kartu lembut untuk baris produk gaya Baru: latar kartu, sudut
+/// 16, garis tipis + bayangan hangat; isi (avatar, nama, stepper, varian)
+/// TIDAK diubah — logikanya tetap di `_ProductListTile`.
+class _ModernTileCard extends StatelessWidget {
+  const _ModernTileCard({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: cs.outlineVariant, width: 0.6),
+        boxShadow: [
+          BoxShadow(
+            color: dark ? const Color(0x40000000) : const Color(0x155A3C1E),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Material(type: MaterialType.transparency, child: child),
       ),
     );
   }
