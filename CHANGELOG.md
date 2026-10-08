@@ -7,6 +7,14 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-10-08 (redesain Kasir gaya Baru ala katalog HTML)
+
+- feat(kasir): `4d12afc` — langkah E: produk kartu lembut, chip pil
+- feat(kasir): `8f8c944` — langkah D: cart bar kartu melayang + lembar Antrian bergaya struk
+- feat(kasir): `af73d01` — langkah C: saran bergilir dari produk yang sering dibeli pelanggan
+- feat(kasir): `8ebfbc8` — langkah B: tombol pojok, Sync LAN cepat, sakelar terang/gelap
+- feat(kasir): `7d34496` — langkah A: gaya Kasir Baru (kode terpisah), kolom cari berpindah, pilihan Klasik|Baru
+
 ## 2026-10-08 (marathon animasi Telegram, branch redesign)
 
 - feat(motion): `2da6e8a` — PressScale: tombol memantul (tekan 80ms, lepas 350ms overshoot)

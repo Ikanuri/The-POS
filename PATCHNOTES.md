@@ -8,6 +8,18 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 8 Oktober 2026 (Kasir Gaya Baru, uji di build beta)
+
+- **Pilihan "Gaya Kasir" di Pengaturan: Klasik atau Baru.** Tampilan lama tetap ada dan tidak berubah; pindah kapan saja.
+- **Gaya Baru terinspirasi katalog online kita**: layar dibuka dengan sapaan dan stiker, kolom cari besar dengan tombol scan, dan kategori. Begitu Anda mengetik, kolom cari naik ke atas dengan mulus.
+- **Kolom cari memberi saran bergilir**: bila keranjang punya pelanggan, saran berisi barang yang sering ia beli ("Cari Gula Pasir"). Ketuk panah untuk langsung mencarinya, berguna saat pelanggan lupa mau beli apa.
+- **Header diganti tombol di pojok kanan bawah**: Riwayat Transaksi, Antrian Pesanan, Tempel Pesanan, dan **Sync LAN cepat** (pop-up kecil, tidak perlu masuk Pengaturan). Ada juga pilihan tampilan grid/daftar dan **sakelar terang/gelap**.
+- **Cart bar baru berbentuk kartu melayang**: pelanggan dan pegawai sebagai chip, total besar, tombol Tahan dan Bayar. **Antrian Pesanan** kini lembar bergaya struk.
+- **Daftar produk berupa kartu lembut**, chip kategori berbentuk pil.
+- Di gaya Baru, tombol Mode Gelap pindah dari Pengaturan ke layar Kasir.
+
+---
+
 ## 8 Oktober 2026 (Landing Kasir, uji di build beta)
 
 - **Layar Kasir kini dibuka dengan halaman awal ala katalog online**: kolom cari besar dengan tombol scan, kategori, daftar **Terlaris**, dan **Terakhir dijual** (atau **Sering dibeli** pelanggan yang sedang dipilih). Ketuk **Semua produk**, pilih kategori, atau mulai mengetik untuk membuka daftar seperti biasa; tombol **Beranda** membawa Anda kembali.
