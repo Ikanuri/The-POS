@@ -86,10 +86,11 @@ void main() {
   });
 
   group('saran terlaris', () {
-    test('placeholder bergantian, berhenti saat fokus/terisi/tab hidden', () {
+    test('placeholder bergantian; tetap jalan saat fokus, berhenti saat terisi/tab hidden', () {
       final run = fn('function phCanRun(){', 'function phStep');
       expect(run, contains('document.hidden'));
-      expect(run, contains('document.activeElement !== qEl'));
+      // Fokus TIDAK lagi menghentikan putaran (Enter tetap mencari saran tampil).
+      expect(run, isNot(contains('document.activeElement')));
       expect(run, contains('!qEl.value'));
       expect(html, contains('Cari barang…'));
       expect(html, contains('id="goBtn"'));
