@@ -63,3 +63,74 @@ class _EnterAnimationState extends State<EnterAnimation>
     );
   }
 }
+
+/// Kebalikan [EnterAnimation]: memutar animasi KELUAR sekali (tinggi menutup +
+/// memudar + bergeser sedikit ke kanan, 180 ms decelerate seperti item
+/// animator daftar Telegram). Dipakai utk "hantu" baris yang baru dihapus dari
+/// daftar: induk mempertahankan salinan beku baris itu sampai animasi selesai,
+/// lalu melepasnya. Animasi dimatikan bila pengguna memilih "kurangi animasi"
+/// (induk sebaiknya tidak membuat hantu sama sekali).
+class ExitAnimation extends StatefulWidget {
+  const ExitAnimation({super.key, required this.child});
+
+  final Widget child;
+
+  /// Durasi keluar (item animator Telegram = 180 ms).
+  static const duration = Duration(milliseconds: 180);
+
+  @override
+  State<ExitAnimation> createState() => _ExitAnimationState();
+}
+
+class _ExitAnimationState extends State<ExitAnimation>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: ExitAnimation.duration,
+    value: 1,
+  );
+  late final CurvedAnimation _curved = CurvedAnimation(
+    parent: _c,
+    curve: AppMotion.easeOut,
+    reverseCurve: AppMotion.easeOut.flipped,
+  );
+  bool _started = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
+    if (AppMotion.reduced(context)) {
+      _c.value = 0;
+    } else {
+      _c.reverse();
+    }
+  }
+
+  @override
+  void dispose() {
+    _curved.dispose();
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _curved,
+      child: widget.child,
+      builder: (context, child) => SizeTransition(
+        sizeFactor: _curved,
+        axisAlignment: -1,
+        child: FadeTransition(
+          opacity: _curved,
+          child: Transform.translate(
+            offset: Offset(24 * (1 - _curved.value), 0),
+            child: child,
+          ),
+        ),
+      ),
+    );
+  }
+}

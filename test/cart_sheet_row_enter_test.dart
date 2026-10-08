@@ -91,4 +91,111 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));
   });
+
+  Future<(ProviderContainer, CartNotifier)> openSheet(WidgetTester tester,
+      {bool reduced = false}) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(() async => db.close());
+    final container = ProviderContainer(overrides: [
+      databaseProvider.overrideWithValue(db),
+      deviceProvider.overrideWith((ref) => DeviceNotifier()
+        ..state = const DeviceIdentity(
+          storeUuid: 'u',
+          storeKey: 'k',
+          storeName: 'Toko Uji',
+          deviceName: 'Kasir Uji',
+          deviceCode: 'K1',
+          deviceRole: 'owner',
+        )),
+    ]);
+    addTearDown(container.dispose);
+    final notifier = container.read(cartProvider(kMainCartId).notifier);
+    notifier.addItem(item('1', 'Gula'));
+    notifier.addItem(item('2', 'Kopi'));
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        theme: AppTheme.light(),
+        builder: (c, child) => MediaQuery(
+            data: MediaQuery.of(c).copyWith(disableAnimations: reduced),
+            child: child!),
+        home: Scaffold(
+            body: Builder(
+                builder: (ctx) => ElevatedButton(
+                    onPressed: () => showModalBottomSheet(
+                        context: ctx,
+                        isScrollControlled: true,
+                        builder: (_) => const CartSheet()),
+                    child: const Text('buka')))),
+      ),
+    ));
+    await tester.tap(find.text('buka'));
+    await tester.pumpAndSettle();
+    return (container, notifier);
+  }
+
+  testWidgets('baris dihapus: tetap tampil sbg hantu yang menutup + memudar, '
+      'lalu hilang; baris lain tetap', (tester) async {
+    final (_, notifier) = await openSheet(tester);
+    expect(find.text('Gula'), findsOneWidget);
+    expect(find.text('Kopi'), findsOneWidget);
+
+    notifier.removeItem('u1');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 60));
+    // Masih terlihat (sedang beranimasi keluar) dgn opasitas < 1.
+    expect(find.text('Gula'), findsOneWidget);
+    final fade = tester
+        .widget<FadeTransition>(find
+            .descendant(
+                of: find.byType(ExitAnimation),
+                matching: find.byType(FadeTransition))
+            .first)
+        .opacity
+        .value;
+    expect(fade, inExclusiveRange(0, 1));
+    // Hantu tidak bisa disentuh.
+    expect(
+        find.ancestor(
+            of: find.text('Gula'), matching: find.byType(IgnorePointer)),
+        findsWidgets);
+
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+    expect(find.text('Gula'), findsNothing);
+    expect(find.text('Kopi'), findsOneWidget);
+    expect(find.byType(ExitAnimation), findsNothing);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+  });
+
+  testWidgets('animasi dimatikan: baris yang dihapus langsung hilang',
+      (tester) async {
+    final (_, notifier) = await openSheet(tester, reduced: true);
+    notifier.removeItem('u1');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(find.text('Gula'), findsNothing);
+    expect(find.byType(ExitAnimation), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+  });
+
+  testWidgets('baris dihapus lalu ditambah lagi cepat: tidak ada hantu dobel',
+      (tester) async {
+    final (_, notifier) = await openSheet(tester);
+    notifier.removeItem('u1');
+    await tester.pump();
+    notifier.addItem(item('1', 'Gula'));
+    await tester.pump(const Duration(milliseconds: 30));
+    expect(find.text('Gula'), findsOneWidget);
+    await tester.pumpAndSettle();
+    expect(find.text('Gula'), findsOneWidget);
+    expect(find.byType(ExitAnimation), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+  });
 }

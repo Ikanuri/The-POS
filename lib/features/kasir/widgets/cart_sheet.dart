@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -44,6 +45,7 @@ import 'paste_order_sheet.dart';
 import 'payment_qris_view.dart';
 import '../../../core/theme/app_overlays.dart';
 import '../../../core/widgets/bump_on_change.dart';
+import '../../../core/theme/app_motion.dart';
 import '../../../core/widgets/enter_animation.dart';
 
 /// Susulan (permintaan user): posisi scroll TERAKHIR per keranjang (key:
@@ -99,6 +101,62 @@ class _CartSheetState extends ConsumerState<CartSheet> {
         ..addAll(keys);
       _rowsInitialized = true;
     });
+  }
+
+  // "Hantu" baris yang baru dihapus: salinan beku dipertahankan ~230 ms agar
+  // bisa beranimasi keluar (lihat `ExitAnimation`), sementara baris di bawahnya
+  // naik mulus mengikuti tinggi hantu yang menutup.
+  List<CartItem> _prevRows = const [];
+  final Map<String, double> _prevEff = {};
+  final Map<String, ({CartItem item, int index, double effQty})> _ghosts = {};
+  final Map<String, Timer> _ghostTimers = {};
+
+  List<({CartItem item, double effQty, bool ghost})> _displayRows(
+      List<CartItem> ordered, CartNotifier notifier, bool reduced) {
+    final keys = {for (final c in ordered) c.productUnitId};
+    // Baris yang dimasukkan kembali -> buang hantunya.
+    for (final k in keys) {
+      if (_ghosts.remove(k) != null) _ghostTimers.remove(k)?.cancel();
+    }
+    if (!reduced) {
+      for (var i = 0; i < _prevRows.length; i++) {
+        final prev = _prevRows[i];
+        final k = prev.productUnitId;
+        if (keys.contains(k) || _ghosts.containsKey(k)) continue;
+        _ghosts[k] =
+            (item: prev, index: i, effQty: _prevEff[k] ?? prev.qty);
+        _ghostTimers[k] = Timer(const Duration(milliseconds: 230), () {
+          _ghosts.remove(k);
+          _ghostTimers.remove(k);
+          if (mounted) setState(() {});
+        });
+      }
+    }
+    _prevRows = ordered;
+    _prevEff
+      ..clear()
+      ..addEntries(
+          [for (final c in ordered) MapEntry(c.productUnitId, notifier.effectiveQtyFor(c))]);
+
+    final rows = <({CartItem item, double effQty, bool ghost})>[
+      for (final c in ordered)
+        (item: c, effQty: _prevEff[c.productUnitId]!, ghost: false),
+    ];
+    final ghosts = _ghosts.values.toList()
+      ..sort((a, b) => a.index.compareTo(b.index));
+    for (final g in ghosts) {
+      rows.insert(g.index.clamp(0, rows.length),
+          (item: g.item, effQty: g.effQty, ghost: true));
+    }
+    return rows;
+  }
+
+  @override
+  void dispose() {
+    for (final t in _ghostTimers.values) {
+      t.cancel();
+    }
+    super.dispose();
   }
 
   int _prevCount = 0;
@@ -1720,6 +1778,8 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                   : Builder(builder: (_) {
                       final ordered = orderCartItems(cart);
                       _rememberRows(ordered);
+                      final rows = _displayRows(
+                          ordered, notifier, AppMotion.reduced(context));
                       // Fitur "Lunasi Hutang" — REDESAIN KEDUA: SETIAP nota
                       // yang dipilih di sheet (`showDebtSettlementSheet`)
                       // jadi SATU baris terpisah, ditempel di UJUNG daftar
@@ -1730,7 +1790,7 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                       // Pre-order" (susulan, arsitektur identik) ditempel
                       // SETELAH baris hutang — dua daftar independen, tidak
                       // pernah saling konflik.
-                      final itemCount = ordered.length +
+                      final itemCount = rows.length +
                           debtSettlementEntries.length +
                           preorderSettlementEntries.length;
                       return StepperActiveScope(
@@ -1742,9 +1802,9 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                               const Divider(height: 1, indent: 56),
                           itemBuilder: (ctx2, i) {
                             if (i >=
-                                ordered.length + debtSettlementEntries.length) {
+                                rows.length + debtSettlementEntries.length) {
                               final entry = preorderSettlementEntries[i -
-                                  ordered.length -
+                                  rows.length -
                                   debtSettlementEntries.length];
                               return _PreorderSettlementEntryRow(
                                 key: ValueKey(entry.id),
@@ -1752,18 +1812,35 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                                 entry: entry,
                               );
                             }
-                            if (i >= ordered.length) {
+                            if (i >= rows.length) {
                               final entry =
-                                  debtSettlementEntries[i - ordered.length];
+                                  debtSettlementEntries[i - rows.length];
                               return _DebtSettlementEntryRow(
                                 key: ValueKey(entry.id),
                                 cartId: widget.cartId,
                                 entry: entry,
                               );
                             }
-                            final item = ordered[i];
-                            final effQty = notifier.effectiveQtyFor(item);
+                            final item = rows[i].item;
+                            final effQty = rows[i].effQty;
                             final rowKey = item.productUnitId;
+                            if (rows[i].ghost) {
+                              // Baris yang baru dihapus: salinan beku, tak bisa
+                              // disentuh, beranimasi keluar.
+                              return ExitAnimation(
+                                key: ValueKey('ghost-$rowKey'),
+                                child: IgnorePointer(
+                                  child: _CartItemTile(
+                                    key: ValueKey('ghost-tile-$rowKey'),
+                                    index: i,
+                                    item: item,
+                                    isVariant: item.isVariant,
+                                    effectiveQty: effQty,
+                                    cartId: widget.cartId,
+                                  ),
+                                ),
+                              );
+                            }
                             // Baris BARU (muncul setelah sheet terbuka) masuk
                             // dgn animasi; baris awal & yang baru ter-scroll
                             // ke layar tidak.
