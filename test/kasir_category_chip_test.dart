@@ -1,3 +1,4 @@
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -11,6 +12,10 @@ import 'helpers/pump_app.dart';
 /// topbar, single-select (union kategori utama + tag tambahan), tap ulang
 /// chip yang sama = matikan filter ("Semua" implisit).
 void main() {
+  // Layar Kasir default = landing; test ini menguji DAFTAR produk langsung.
+  setUp(() =>
+      SharedPreferences.setMockInitialValues({'kasir_landing_view': false}));
+
   Future<String> seedProduct(AppDatabase db, String id, String name,
       {int? groupId}) async {
     await db.saveProduct(

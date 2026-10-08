@@ -1,3 +1,4 @@
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -16,9 +17,14 @@ import 'package:the_pos/features/kasir/cart_provider.dart' show kMainCartId;
 /// warna netral biasa. Sekarang teksnya IKUT terracotta juga, supaya
 /// pembedanya benar-benar kelihatan (bukan cuma ikon kecil di pinggir).
 void main() {
+  // Layar Kasir default = landing; test ini menguji DAFTAR produk langsung.
+  setUp(() =>
+      SharedPreferences.setMockInitialValues({'kasir_landing_view': false}));
+
   Future<void> seedProduct(AppDatabase db) async {
-    await db.into(db.products).insert(
-        ProductsCompanion.insert(id: 'p1', name: 'Gula Pasir'));
+    await db
+        .into(db.products)
+        .insert(ProductsCompanion.insert(id: 'p1', name: 'Gula Pasir'));
     await db.into(db.productUnits).insert(ProductUnitsCompanion.insert(
         id: 'u1', productId: 'p1', isBaseUnit: const Value(true)));
     await db.into(db.priceTiers).insert(PriceTiersCompanion.insert(
@@ -57,8 +63,8 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: MaterialApp.router(
-            theme: AppTheme.light(), routerConfig: router),
+        child:
+            MaterialApp.router(theme: AppTheme.light(), routerConfig: router),
       ),
     );
     await tester.pumpAndSettle();
@@ -81,13 +87,13 @@ void main() {
 
   testWidgets(
       'pelanggan TERDAFTAR (customerId terisi) -> nama di cart bar ikut '
-      'warna aksen terracotta, bukan cuma ikonnya',
-      (tester) async {
+      'warna aksen terracotta, bukan cuma ikonnya', (tester) async {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(() async => db.close());
     await seedProduct(db);
-    await db.into(db.customers).insert(
-        CustomersCompanion.insert(id: 'c1', name: 'Bu Ani Terdaftar'));
+    await db
+        .into(db.customers)
+        .insert(CustomersCompanion.insert(id: 'c1', name: 'Bu Ani Terdaftar'));
 
     await pumpKasir(tester, db,
         customerId: 'c1', customerName: 'Bu Ani Terdaftar');
@@ -101,8 +107,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 10));
   });
 
-  testWidgets(
-      'nama AD-HOC (customerId null) -> TIDAK ikut aksen terracotta',
+  testWidgets('nama AD-HOC (customerId null) -> TIDAK ikut aksen terracotta',
       (tester) async {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(() async => db.close());

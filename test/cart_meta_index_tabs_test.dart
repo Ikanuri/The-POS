@@ -53,7 +53,7 @@ void main() {
     required String deviceRole,
     String? customerName,
   }) async {
-    SharedPreferences.setMockInitialValues({});
+    SharedPreferences.setMockInitialValues({'kasir_landing_view': false});
     await tester.binding.setSurfaceSize(const Size(400, 700));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -68,8 +68,8 @@ void main() {
           deviceCode: 'K1',
           deviceRole: deviceRole,
         )),
-      licenseProvider.overrideWith(
-          (ref) => LicenseNotifier()..state = const LicenseState(exp: 'selamanya')),
+      licenseProvider.overrideWith((ref) =>
+          LicenseNotifier()..state = const LicenseState(exp: 'selamanya')),
     ]);
     addTearDown(container.dispose);
 

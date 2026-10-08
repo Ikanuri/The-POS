@@ -1,3 +1,4 @@
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -12,14 +13,19 @@ import 'package:the_pos/features/kasir/kasir_screen.dart';
 /// bisa tap tombol tambah (tidak dinonaktifkan) — beda dari katalog HTML
 /// yang benar-benar menonaktifkan tombolnya.
 void main() {
+  // Layar Kasir default = landing; test ini menguji DAFTAR produk langsung.
+  setUp(() =>
+      SharedPreferences.setMockInitialValues({'kasir_landing_view': false}));
+
   testWidgets(
       'produk ditandai stok habis → badge "Habis" tampil di kartu, tombol '
       '+ TETAP berfungsi normal', (tester) async {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(() async => db.close());
 
-    await db.into(db.products).insert(
-        ProductsCompanion.insert(id: 'p1', name: 'Sedap Goreng'));
+    await db
+        .into(db.products)
+        .insert(ProductsCompanion.insert(id: 'p1', name: 'Sedap Goreng'));
     await db.into(db.productUnits).insert(ProductUnitsCompanion.insert(
           id: 'u1',
           productId: 'p1',

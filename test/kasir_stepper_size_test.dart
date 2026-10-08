@@ -1,3 +1,4 @@
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -16,6 +17,10 @@ import 'package:the_pos/features/kasir/widgets/add_control.dart';
 /// SAMA spt stepper keranjang, supaya konsisten. mainAxisExtent grid
 /// (138->152) ikut ditambah supaya kartu tidak overflow.
 void main() {
+  // Layar Kasir default = landing; test ini menguji DAFTAR produk langsung.
+  setUp(() =>
+      SharedPreferences.setMockInitialValues({'kasir_landing_view': false}));
+
   late AppDatabase db;
   setUp(() => db = AppDatabase(NativeDatabase.memory()));
   tearDown(() async => db.close());

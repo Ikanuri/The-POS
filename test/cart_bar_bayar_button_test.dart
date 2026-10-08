@@ -1,3 +1,4 @@
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -17,6 +18,10 @@ import 'package:the_pos/features/kasir/cart_provider.dart' show kMainCartId;
 /// Disembunyikan utk pegawai TANPA izin (jalur mereka tetap "Kirim ke
 /// Owner/Asisten" via cart sheet, lihat kasir_handoff_qr_test.dart).
 void main() {
+  // Layar Kasir default = landing; test ini menguji DAFTAR produk langsung.
+  setUp(() =>
+      SharedPreferences.setMockInitialValues({'kasir_landing_view': false}));
+
   Future<AppDatabase> seedDb({bool terimaPembayaran = false}) async {
     final db = AppDatabase(NativeDatabase.memory());
     await (db.update(db.kasirPermissions)
@@ -30,7 +35,8 @@ void main() {
       ],
       tiersByUnitTempId: {
         'u1': [
-          PriceTiersCompanion.insert(id: 't1', productUnitId: 'u1', price: 15000),
+          PriceTiersCompanion.insert(
+              id: 't1', productUnitId: 'u1', price: 15000),
         ],
       },
       barcodesByUnitTempId: const {},
@@ -87,12 +93,12 @@ void main() {
             final ls = TextStyle(letterSpacing: ambientLetterSpacing);
             return base.copyWith(
               textTheme: base.textTheme.copyWith(
-                bodyMedium: (base.textTheme.bodyMedium ?? const TextStyle())
-                    .merge(ls),
-                bodySmall: (base.textTheme.bodySmall ?? const TextStyle())
-                    .merge(ls),
-                bodyLarge: (base.textTheme.bodyLarge ?? const TextStyle())
-                    .merge(ls),
+                bodyMedium:
+                    (base.textTheme.bodyMedium ?? const TextStyle()).merge(ls),
+                bodySmall:
+                    (base.textTheme.bodySmall ?? const TextStyle()).merge(ls),
+                bodyLarge:
+                    (base.textTheme.bodyLarge ?? const TextStyle()).merge(ls),
               ),
             );
           }(),
@@ -146,8 +152,7 @@ void main() {
     expect(find.text('Bayar'), findsNothing);
   });
 
-  testWidgets(
-      'pegawai DENGAN izin terima_pembayaran melihat segmen Bayar',
+  testWidgets('pegawai DENGAN izin terima_pembayaran melihat segmen Bayar',
       (tester) async {
     final db = await seedDb(terimaPembayaran: true);
     addTearDown(() async => db.close());
@@ -220,10 +225,12 @@ void main() {
     // Teks yang meluber dirender di dalam ClipRect+Transform (jalur marquee),
     // BUKAN sebagai Text ber-ellipsis biasa.
     Offset offsetOfName() {
-      final t = tester.widget<Transform>(find.ancestor(
-        of: find.textContaining('Sangat Panjang Sekali'),
-        matching: find.byType(Transform),
-      ).first);
+      final t = tester.widget<Transform>(find
+          .ancestor(
+            of: find.textContaining('Sangat Panjang Sekali'),
+            matching: find.byType(Transform),
+          )
+          .first);
       return Offset(t.transform.getTranslation().x, 0);
     }
 
@@ -257,8 +264,7 @@ void main() {
         .ancestor(of: find.text(text), matching: find.byType(OverflowBox))
         .evaluate()
         .isNotEmpty;
-    const base =
-        'Kartika Wulandari Setiawan Pratama Handayani Suherman Aminah';
+    const base = 'Kartika Wulandari Setiawan Pratama Handayani Suherman Aminah';
     String? name;
     for (var i = 1; i <= base.length; i++) {
       final candidate = base.substring(0, i);
@@ -277,14 +283,15 @@ void main() {
             'Pelanggan');
 
     Offset offsetOfName() {
-      final t = tester.widget<Transform>(
-          find.ancestor(of: find.text(name!), matching: find.byType(Transform))
-              .first);
+      final t = tester.widget<Transform>(find
+          .ancestor(of: find.text(name!), matching: find.byType(Transform))
+          .first);
       return Offset(t.transform.getTranslation().x, 0);
     }
 
     const step = Duration(milliseconds: 100);
-    const longRestThreshold = 1.5; // detik — di antara jeda baca (~0.72s) & _restPause (3s)
+    const longRestThreshold =
+        1.5; // detik — di antara jeda baca (~0.72s) & _restPause (3s)
     var moved = false;
     var zeroRunSeconds = 0.0;
     var longRestSeen = false;
@@ -362,7 +369,8 @@ void main() {
     String? fitting;
     for (var i = 1; i <= base.length; i++) {
       final candidate = base.substring(0, i);
-      c1.read(cartMetaProvider(kMainCartId).notifier)
+      c1
+          .read(cartMetaProvider(kMainCartId).notifier)
           .setCustomer('c1', candidate);
       await tester.pump();
       await tester.pump();
@@ -378,10 +386,8 @@ void main() {
     // `MarqueeText`, pengukuran tetap memakai skala 1.0 & keliru simpul
     // "masih muat" — nama terjebak di Text terpotong permanen, persis bug
     // yg dilaporkan user.
-    final c2 =
-        await pumpKasir(tester, db, deviceRole: 'owner', textScale: 1.4);
-    c2.read(cartMetaProvider(kMainCartId).notifier)
-        .setCustomer('c1', fitting!);
+    final c2 = await pumpKasir(tester, db, deviceRole: 'owner', textScale: 1.4);
+    c2.read(cartMetaProvider(kMainCartId).notifier).setCustomer('c1', fitting!);
     await tester.pump();
     await tester.pump();
     expect(marqueeActiveFor(fitting), isTrue,

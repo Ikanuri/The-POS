@@ -1,3 +1,4 @@
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -18,6 +19,10 @@ import 'package:the_pos/features/kasir/cart_provider.dart' show kMainCartId;
 /// - pengingat hutang akumulatif (berapa nota, total berapa) muncul DI BAWAH
 ///   nominal Total.
 void main() {
+  // Layar Kasir default = landing; test ini menguji DAFTAR produk langsung.
+  setUp(() =>
+      SharedPreferences.setMockInitialValues({'kasir_landing_view': false}));
+
   Future<AppDatabase> seedDb() async {
     final db = AppDatabase(NativeDatabase.memory());
     await db.saveProduct(
@@ -35,8 +40,9 @@ void main() {
       barcodesByUnitTempId: const {},
       altPricesByUnitTempId: const {},
     );
-    await db.into(db.customers).insert(
-        CustomersCompanion.insert(id: 'c1', name: 'Bu Artia'));
+    await db
+        .into(db.customers)
+        .insert(CustomersCompanion.insert(id: 'c1', name: 'Bu Artia'));
     return db;
   }
 
@@ -66,8 +72,8 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: MaterialApp.router(
-            theme: AppTheme.light(), routerConfig: router),
+        child:
+            MaterialApp.router(theme: AppTheme.light(), routerConfig: router),
       ),
     );
     await tester.pumpAndSettle();

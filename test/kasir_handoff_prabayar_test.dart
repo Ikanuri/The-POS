@@ -1,3 +1,4 @@
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 
 import 'package:drift/drift.dart' show Value;
@@ -82,6 +83,10 @@ Future<String> _seedProduct(AppDatabase db) async {
 }
 
 void main() {
+  // Layar Kasir default = landing; test ini menguji DAFTAR produk langsung.
+  setUp(() =>
+      SharedPreferences.setMockInitialValues({'kasir_landing_view': false}));
+
   late _FakeMobileScannerPlatform fake;
   final MobileScannerPlatform original = MobileScannerPlatform.instance;
 
@@ -114,7 +119,12 @@ void main() {
         ],
         employeeName: 'Budi',
         prabayar: const [
-          (amount: 25000, method: 'tunai', methodName: null, lockedAtMs: 1700000000000),
+          (
+            amount: 25000,
+            method: 'tunai',
+            methodName: null,
+            lockedAtMs: 1700000000000
+          ),
         ],
         prabayarChangeTaken: changeTaken,
       );

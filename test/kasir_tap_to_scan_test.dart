@@ -1,3 +1,4 @@
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 
 import 'package:drift/drift.dart' show Value;
@@ -88,7 +89,8 @@ Future<void> _pumpKasirWithScannerOpen(
   await tester.pumpWidget(ProviderScope(
     overrides: [
       databaseProvider.overrideWithValue(db),
-      deviceProvider.overrideWith((ref) => DeviceNotifier()..state = fakeDevice),
+      deviceProvider
+          .overrideWith((ref) => DeviceNotifier()..state = fakeDevice),
     ],
     child: MaterialApp(
       theme: AppTheme.light(),
@@ -102,6 +104,10 @@ Future<void> _pumpKasirWithScannerOpen(
 }
 
 void main() {
+  // Layar Kasir default = landing; test ini menguji DAFTAR produk langsung.
+  setUp(() =>
+      SharedPreferences.setMockInitialValues({'kasir_landing_view': false}));
+
   late _FakeMobileScannerPlatform fake;
   final MobileScannerPlatform original = MobileScannerPlatform.instance;
 
@@ -116,8 +122,9 @@ void main() {
 
   Future<AppDatabase> seedProduct(String barcode) async {
     final db = AppDatabase(NativeDatabase.memory());
-    await db.into(db.products).insert(
-        ProductsCompanion.insert(id: 'p1', name: 'Sedap Goreng'));
+    await db
+        .into(db.products)
+        .insert(ProductsCompanion.insert(id: 'p1', name: 'Sedap Goreng'));
     await db.into(db.productUnits).insert(ProductUnitsCompanion.insert(
           id: 'u1',
           productId: 'p1',

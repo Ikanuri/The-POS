@@ -46,7 +46,8 @@ Future<double> _searchFieldWidth(WidgetTester tester) async {
 Future<void> _pumpKasir(WidgetTester tester, AppDatabase db) async {
   await tester.binding.setSurfaceSize(const Size(430, 2400));
   addTearDown(() => tester.binding.setSurfaceSize(null));
-  SharedPreferences.setMockInitialValues({'kasir_swipe_hint_count': 3});
+  SharedPreferences.setMockInitialValues(
+      {'kasir_landing_view': false, 'kasir_swipe_hint_count': 3});
 
   await tester.pumpWidget(
     ProviderScope(
@@ -164,8 +165,8 @@ void main() {
     await _addProduct(db, name: 'Gula Pasir', price: 15000);
     await _pumpKasir(tester, db);
 
-    final g = await tester.startGesture(
-        tester.getCenter(find.byIcon(Icons.add_rounded).first));
+    final g = await tester
+        .startGesture(tester.getCenter(find.byIcon(Icons.add_rounded).first));
     await tester.pump(const Duration(milliseconds: 16));
     await tester.pump(const Duration(milliseconds: 70));
     await g.up();

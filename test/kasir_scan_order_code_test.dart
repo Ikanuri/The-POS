@@ -1,3 +1,4 @@
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 
 import 'package:drift/drift.dart' show Value;
@@ -93,7 +94,8 @@ Future<void> _pumpKasirWithScannerOpen(
   await tester.pumpWidget(ProviderScope(
     overrides: [
       databaseProvider.overrideWithValue(db),
-      deviceProvider.overrideWith((ref) => DeviceNotifier()..state = fakeDevice),
+      deviceProvider
+          .overrideWith((ref) => DeviceNotifier()..state = fakeDevice),
     ],
     child: MaterialApp(
       theme: AppTheme.light(),
@@ -107,6 +109,10 @@ Future<void> _pumpKasirWithScannerOpen(
 }
 
 void main() {
+  // Layar Kasir default = landing; test ini menguji DAFTAR produk langsung.
+  setUp(() =>
+      SharedPreferences.setMockInitialValues({'kasir_landing_view': false}));
+
   late _FakeMobileScannerPlatform fake;
   final MobileScannerPlatform original = MobileScannerPlatform.instance;
 
@@ -121,8 +127,9 @@ void main() {
 
   Future<AppDatabase> seedProduct() async {
     final db = AppDatabase(NativeDatabase.memory());
-    await db.into(db.products).insert(
-        ProductsCompanion.insert(id: 'p1', name: 'Sedap Goreng'));
+    await db
+        .into(db.products)
+        .insert(ProductsCompanion.insert(id: 'p1', name: 'Sedap Goreng'));
     await db.into(db.productUnits).insert(ProductUnitsCompanion.insert(
           id: 'u1',
           productId: 'p1',
@@ -150,8 +157,8 @@ void main() {
 
     expect(find.byIcon(Icons.arrow_back), findsNothing,
         reason: 'scanner harus tertutup setelah kode pesanan diproses');
-    expect(find.textContaining('Pesanan dari Budi masuk antrian'),
-        findsOneWidget);
+    expect(
+        find.textContaining('Pesanan dari Budi masuk antrian'), findsOneWidget);
 
     final rows = await db.select(db.heldOrders).get();
     expect(rows, hasLength(1));
@@ -192,7 +199,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Tempel Pesanan'), findsOneWidget,
-        reason: 'harus membuka sheet Tempel Pesanan, bukan langsung ke keranjang');
+        reason:
+            'harus membuka sheet Tempel Pesanan, bukan langsung ke keranjang');
     expect(find.text('Nama: Ani'), findsOneWidget);
     expect(find.text('Sedap Goreng'), findsWidgets,
         reason: 'muncul di preview Tempel Pesanan (grid produk di baliknya '
@@ -200,7 +208,8 @@ void main() {
 
     final rows = await db.select(db.heldOrders).get();
     expect(rows, isEmpty,
-        reason: 'pesanan pelanggan TIDAK masuk antrian, beda dari handoff pegawai');
+        reason:
+            'pesanan pelanggan TIDAK masuk antrian, beda dari handoff pegawai');
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));
@@ -338,8 +347,8 @@ void main() {
     fake.emitBarcode('#PSN:u1=2;\nPegawai: Budi');
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('ditambahkan ke keranjang aktif'),
-        findsOneWidget);
+    expect(
+        find.textContaining('ditambahkan ke keranjang aktif'), findsOneWidget);
 
     final rows = await db.select(db.heldOrders).get();
     expect(rows, isEmpty,

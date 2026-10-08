@@ -88,8 +88,9 @@ void main() {
 
   Future<AppDatabase> seedProduct(String barcode) async {
     final db = AppDatabase(NativeDatabase.memory());
-    await db.into(db.products).insert(
-        ProductsCompanion.insert(id: 'p1', name: 'Bawang Merah'));
+    await db
+        .into(db.products)
+        .insert(ProductsCompanion.insert(id: 'p1', name: 'Bawang Merah'));
     await db.into(db.productUnits).insert(ProductUnitsCompanion.insert(
           id: 'u1',
           productId: 'p1',
@@ -131,6 +132,7 @@ void main() {
       costPrice: 0,
     );
     SharedPreferences.setMockInitialValues({
+      'kasir_landing_view': false,
       'cart_v1_main': jsonEncode([existing.toJson()]),
       'scanner_continuous': true,
       // Matikan hint swipe-ke-atas (bug overflow TIDAK TERKAIT sudah ada di
@@ -154,7 +156,8 @@ void main() {
     await tester.pumpWidget(ProviderScope(
       overrides: [
         databaseProvider.overrideWithValue(db),
-        deviceProvider.overrideWith((ref) => DeviceNotifier()..state = fakeDevice),
+        deviceProvider
+            .overrideWith((ref) => DeviceNotifier()..state = fakeDevice),
       ],
       child: MaterialApp(
         theme: AppTheme.light(),

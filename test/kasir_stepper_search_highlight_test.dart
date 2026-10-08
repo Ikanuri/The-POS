@@ -1,3 +1,4 @@
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -18,6 +19,10 @@ import 'package:the_pos/features/kasir/widgets/add_control.dart';
 /// Dites di 3 mode widget (kartu grid, tile daftar, baris varian dropdown)
 /// supaya konsisten — itu inti dari laporan bug aslinya.
 void main() {
+  // Layar Kasir default = landing; test ini menguji DAFTAR produk langsung.
+  setUp(() =>
+      SharedPreferences.setMockInitialValues({'kasir_landing_view': false}));
+
   late AppDatabase db;
   setUp(() => db = AppDatabase(NativeDatabase.memory()));
   tearDown(() async => db.close());

@@ -1,3 +1,4 @@
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -21,6 +22,10 @@ import 'package:the_pos/features/kasir/cart_provider.dart' show kMainCartId;
 /// di `payment_screen.dart`), cuma dulu fix-nya tidak menyentuh cart bar
 /// layar ini.
 void main() {
+  // Layar Kasir default = landing; test ini menguji DAFTAR produk langsung.
+  setUp(() =>
+      SharedPreferences.setMockInitialValues({'kasir_landing_view': false}));
+
   Future<AppDatabase> seedDb() async {
     final db = AppDatabase(NativeDatabase.memory());
     await db.saveProduct(
@@ -31,7 +36,8 @@ void main() {
       ],
       tiersByUnitTempId: {
         'u1': [
-          PriceTiersCompanion.insert(id: 't1', productUnitId: 'u1', price: 15000),
+          PriceTiersCompanion.insert(
+              id: 't1', productUnitId: 'u1', price: 15000),
         ],
       },
       barcodesByUnitTempId: const {},
@@ -40,7 +46,8 @@ void main() {
     return db;
   }
 
-  Future<ProviderContainer> pumpKasir(WidgetTester tester, AppDatabase db) async {
+  Future<ProviderContainer> pumpKasir(
+      WidgetTester tester, AppDatabase db) async {
     await tester.binding.setSurfaceSize(const Size(420, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
