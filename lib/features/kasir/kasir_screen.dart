@@ -45,6 +45,7 @@ import 'widgets/item_entry_sheet.dart';
 import 'widgets/paste_order_sheet.dart';
 import 'widgets/tx_history_sheet.dart';
 import '../../core/theme/app_overlays.dart';
+import '../../core/widgets/bump_on_change.dart';
 
 const _kasirUuid = Uuid();
 
@@ -3582,10 +3583,14 @@ class _CartBar extends StatelessWidget {
                           color: cs.onSurfaceVariant,
                         ),
                       ),
-                      Text(
-                        formatRupiah(total),
-                        style: AppTheme.numStyle(context,
-                            size: 23, weight: FontWeight.w700),
+                      BumpOnChange(
+                        value: total,
+                        peak: 1.06,
+                        child: Text(
+                          formatRupiah(total),
+                          style: AppTheme.numStyle(context,
+                              size: 23, weight: FontWeight.w700),
+                        ),
                       ),
                     ],
                   ),

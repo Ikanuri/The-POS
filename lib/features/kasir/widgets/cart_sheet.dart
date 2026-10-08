@@ -43,6 +43,8 @@ import 'cart_preview_paper.dart';
 import 'paste_order_sheet.dart';
 import 'payment_qris_view.dart';
 import '../../../core/theme/app_overlays.dart';
+import '../../../core/widgets/bump_on_change.dart';
+import '../../../core/widgets/enter_animation.dart';
 
 /// Susulan (permintaan user): posisi scroll TERAKHIR per keranjang (key:
 /// `cartId`) — supaya kalau sheet ditutup (mis. misclick tap item yang
@@ -82,6 +84,23 @@ class CartSheet extends ConsumerStatefulWidget {
 }
 
 class _CartSheetState extends ConsumerState<CartSheet> {
+  // Baris keranjang yang sudah pernah tampil: baris yang BARU muncul sesudah
+  // sheet terbuka dianimasikan masuk (lihat `EnterAnimation`).
+  final Set<String> _seenRows = {};
+  bool _rowsInitialized = false;
+
+  void _rememberRows(List<CartItem> ordered) {
+    final keys = [for (final c in ordered) c.productUnitId];
+    // Diperbarui SETELAH frame ini supaya build yang sama masih bisa
+    // membedakan baris baru dari yang lama.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _seenRows
+        ..clear()
+        ..addAll(keys);
+      _rowsInitialized = true;
+    });
+  }
+
   int _prevCount = 0;
   bool _needsInitialScroll = false;
   bool _scrollRestoreAttached = false;
@@ -1700,6 +1719,7 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                     )
                   : Builder(builder: (_) {
                       final ordered = orderCartItems(cart);
+                      _rememberRows(ordered);
                       // Fitur "Lunasi Hutang" — REDESAIN KEDUA: SETIAP nota
                       // yang dipilih di sheet (`showDebtSettlementSheet`)
                       // jadi SATU baris terpisah, ditempel di UJUNG daftar
@@ -1743,7 +1763,16 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                             }
                             final item = ordered[i];
                             final effQty = notifier.effectiveQtyFor(item);
-                            return _CartItemTile(
+                            final rowKey = item.productUnitId;
+                            // Baris BARU (muncul setelah sheet terbuka) masuk
+                            // dgn animasi; baris awal & yang baru ter-scroll
+                            // ke layar tidak.
+                            final isNewRow =
+                                _rowsInitialized && !_seenRows.contains(rowKey);
+                            return EnterAnimation(
+                              key: ValueKey('enter-$rowKey'),
+                              enabled: isNewRow,
+                              child: _CartItemTile(
                               // Susulan (permintaan user, fitur getar+tap-lagi
                               // minus): key stabil PER-ITEM wajib supaya state
                               // "bersenjata" (`_armed`)/timer TIDAK bocor ke
@@ -1756,7 +1785,7 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                               isVariant: item.isVariant,
                               effectiveQty: effQty,
                               cartId: widget.cartId,
-                            );
+                            ));
                           },
                         ),
                       );
@@ -1805,21 +1834,27 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                           FittedBox(
                             fit: BoxFit.scaleDown,
                             alignment: Alignment.centerLeft,
-                            child: Text(
-                              // Fitur "Lunasi Hutang" — REDESAIN KEDUA: nominal
-                              // Total besar naik ikut SEMUA entri pelunasan
-                              // aktif (bukan cuma belanja baru), supaya kasir
-                              // langsung lihat total uang fisik yang perlu
-                              // diterima. Breakdown-nya di baris kecil
-                              // `_shrinkToFit` di bawah (pola sama Pra-Bayar).
-                              formatRupiah(total +
+                            child: BumpOnChange(
+                              value: total +
                                   debtSettlementTotal +
-                                  preorderSettlementTotal),
-                              maxLines: 1,
-                              style: AppTheme.numStyle(context,
-                                  size: 22,
-                                  weight: FontWeight.w700,
-                                  color: scheme.primary),
+                                  preorderSettlementTotal,
+                              peak: 1.05,
+                              child: Text(
+                                // Fitur "Lunasi Hutang" — REDESAIN KEDUA: nominal
+                                // Total besar naik ikut SEMUA entri pelunasan
+                                // aktif (bukan cuma belanja baru), supaya kasir
+                                // langsung lihat total uang fisik yang perlu
+                                // diterima. Breakdown-nya di baris kecil
+                                // `_shrinkToFit` di bawah (pola sama Pra-Bayar).
+                                formatRupiah(total +
+                                    debtSettlementTotal +
+                                    preorderSettlementTotal),
+                                maxLines: 1,
+                                style: AppTheme.numStyle(context,
+                                    size: 22,
+                                    weight: FontWeight.w700,
+                                    color: scheme.primary),
+                              ),
                             ),
                           ),
                           if (debtSettlementEntries.isNotEmpty)

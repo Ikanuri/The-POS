@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
+import 'bump_on_change.dart';
 
 /// Badge lingkaran berisi jumlah item — gaya yang sama dipakai di cart bar
 /// kasir (dulu private `_CartBar`), keranjang, dan struk in-app, supaya
@@ -39,12 +40,17 @@ class ItemCountBadge extends StatelessWidget {
             : null,
       ),
       child: Center(
-        child: Text(
-          '$count',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w700,
-            fontSize: size * 0.38,
+        // Angka berdenyut halus tiap jumlah berubah.
+        child: BumpOnChange(
+          value: count,
+          peak: 1.25,
+          child: Text(
+            '$count',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+              fontSize: size * 0.38,
+            ),
           ),
         ),
       ),
