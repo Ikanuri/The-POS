@@ -1,5 +1,6 @@
 import '../kasir/cart_provider.dart' show kasirLandingProvider;
 import 'kasir_sticker_sheet.dart';
+import '../kasir/kasir_style.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -444,6 +445,48 @@ class PengaturanScreen extends ConsumerWidget {
                           onTap: () => _showFontScaleDialog(context, ref),
                         );
                       }),
+                      Padding(
+                        key: const Key('setting-kasir-style'),
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Gaya Kasir',
+                                style: TextStyle(
+                                    fontSize: 14, fontWeight: FontWeight.w600)),
+                            const SizedBox(height: 2),
+                            Text(
+                              ref.watch(kasirStyleProvider) == KasirStyle.modern
+                                  ? 'Baru — landing, kolom cari berpindah, tombol aksi melayang'
+                                  : 'Klasik — header dan daftar produk langsung',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant),
+                            ),
+                            const SizedBox(height: 8),
+                            SizedBox(
+                              width: double.infinity,
+                              child: SegmentedButton<KasirStyle>(
+                                showSelectedIcon: false,
+                                segments: const [
+                                  ButtonSegment(
+                                      value: KasirStyle.classic,
+                                      label: Text('Klasik')),
+                                  ButtonSegment(
+                                      value: KasirStyle.modern,
+                                      label: Text('Baru')),
+                                ],
+                                selected: {ref.watch(kasirStyleProvider)},
+                                onSelectionChanged: (v) => ref
+                                    .read(kasirStyleProvider.notifier)
+                                    .set(v.first),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                       SwitchListTile(
                         key: const Key('setting-kasir-landing'),
                         secondary: const Icon(Icons.home_outlined),

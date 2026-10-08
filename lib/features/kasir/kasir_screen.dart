@@ -36,6 +36,7 @@ import 'cart_prabayar_provider.dart';
 import 'cart_preorder_settlement_provider.dart';
 import 'cart_price_category_provider.dart';
 import 'cart_provider.dart';
+import 'kasir_style.dart';
 import 'handoff_gate_provider.dart';
 import 'widgets/add_control.dart';
 import 'widgets/cart_meta_pickers.dart';
@@ -50,6 +51,8 @@ import '../../core/widgets/press_scale.dart';
 import '../../core/widgets/skeleton.dart';
 import '../../core/services/kasir_sticker_service.dart';
 import '../../core/widgets/app_sticker.dart';
+
+part 'kasir_modern.dart';
 
 const _kasirUuid = Uuid();
 
@@ -946,6 +949,9 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
       _searchCtrl.selection = TextSelection(baseOffset: 0, extentOffset: len);
     }
   }
+
+  /// Tutup banner info inline (dipakai tampilan Klasik & Baru).
+  void _clearBanner() => setState(() => _bannerMsg = null);
 
   bool _scannerOpen = false;
   MobileScannerController? _scannerCtrl;
@@ -2089,6 +2095,14 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
       );
     }
 
+    // Gaya Baru (kode terpisah di kasir_modern.dart) — hanya kasir biasa;
+    // mode katalog & tambah-belanjaan tetap memakai tata letak Klasik.
+    if (ref.watch(kasirStyleProvider) == KasirStyle.modern &&
+        !_isCatalogMode &&
+        !_isAddMode) {
+      return _buildModern(context);
+    }
+
     final cart = ref.watch(cartProvider(_cartId));
     final cartNotifier = ref.read(cartProvider(_cartId).notifier);
     // Item 55 — nomor nota (di-reserve `_CartMetaTab`) ditampilkan di cart
@@ -2109,7 +2123,6 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
         landingOn && query.isEmpty && selectedGroup == null && !showAll;
     final productsAsync =
         ref.watch(_kasirProductsProvider((query, selectedGroup)));
-    final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: _isCatalogMode
@@ -2260,7 +2273,35 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
                                 onAfterQtyChange: _highlightSearchIfActive,
                               ),
                             )
-                          : StepperActiveScope(
+                          : _buildProductResults(
+                              context, productsAsync, query, isGrid),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+      bottomNavigationBar: cart.isEmpty
+          ? null
+          : _isCatalogMode
+              ? _CatalogBar(
+                  count: cart.length,
+                  lastItem: cartNotifier.lastTouchedItem,
+                  onView: _openCatalogItemsSheet,
+                  onSave: _saveCatalog,
+                  onShare: _shareCatalog,
+                )
+              : _buildCartBottom(context, cart, cartNotifier, cartMeta),
+    );
+  }
+
+  /// Hasil produk (grid/list/kosong/memuat) — dipakai tampilan Klasik & Baru.
+  Widget _buildProductResults(BuildContext context,
+      AsyncValue<List<Product>> productsAsync, String query, bool isGrid) {
+    final cs = Theme.of(context).colorScheme;
+    return StepperActiveScope(
                         child: productsAsync.when(
                           data: (prods) {
                             if (prods.isEmpty) {
@@ -2353,26 +2394,15 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
                           loading: () => const SkeletonList(),
                           error: (e, _) => Center(child: Text('Error: $e')),
                         ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-      bottomNavigationBar: cart.isEmpty
-          ? null
-          : _isCatalogMode
-              ? _CatalogBar(
-                  count: cart.length,
-                  lastItem: cartNotifier.lastTouchedItem,
-                  onView: _openCatalogItemsSheet,
-                  onSave: _saveCatalog,
-                  onShare: _shareCatalog,
-                )
-              : Column(
+                      );
+  }
+
+  /// Bagian bawah layar kasir biasa: tab pelanggan/pegawai + tombol tahan/bayar
+  /// (`_CartMetaTab`) dan cart bar. Dipisah dari `build` supaya tampilan
+  /// Klasik & Baru memakai logika yang SAMA.
+  Widget _buildCartBottom(BuildContext context, List<CartItem> cart,
+      CartNotifier cartNotifier, CartMeta cartMeta) {
+    return Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     // Tab folder pelanggan & pegawai + tombol tahan — hanya di
@@ -2459,8 +2489,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
                       ),
                     ),
                   ],
-                ),
-    );
+                );
   }
 
   // ── Mode katalog: aksi simpan, bagikan, dan tinjau item ──────────────────
