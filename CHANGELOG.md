@@ -7,6 +7,11 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-10-08 (stepper jumlah saran + salin link publish)
+
+- feat(katalog): HASH_PLACEHOLDER
+- feat(katalog-html): saran cari "Cari <nama>? Tekan →" (ikon panah inline; hanya nama produk terpotong), saran tetap berputar saat kolom fokus (berhenti saat ada huruf), tombol X jadi lingkaran outline & tidak mencuri fokus (pointerdown/mousedown preventDefault) sehingga kursor+keyboard tetap terbuka setelah menghapus -> kembali landing
+
 ## 2026-10-08 (katalog tanpa kategori tetap punya halaman awal)
 
 - feat(katalog-html): kategori dimatikan -> tetap membuka halaman awal (stiker, cari, Pesan lagi, game) dengan satu chip 'Semua produk', tidak lagi langsung semua produk; tbId/Back/kirim selalu kembali ke landing; bump 2.93.0+190

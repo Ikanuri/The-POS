@@ -53,7 +53,7 @@ void main() {
             .widget<ChoiceChip>(find.byKey(const ValueKey('top-days-30')))
             .selected,
         isTrue);
-    expect(tester.widget<DropdownButton<int>>(find.byKey(const ValueKey('top-count'))).value, 8);
+    expect(tester.widget<Text>(find.byKey(const ValueKey('top-count-value'))).data, '8');
     expect(tester.takeException(), isNull);
     await drain(tester);
   });
@@ -68,10 +68,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('top-days-90')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('top-count')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('5').last);
-    await tester.pumpAndSettle();
+    for (var i = 0; i < 3; i++) {
+      await tester.tap(find.byKey(const ValueKey('top-count-dec')));
+      await tester.pumpAndSettle();
+    }
     await tester.tap(find.byKey(const ValueKey('display-reorder')));
     await tester.pumpAndSettle();
 
@@ -144,6 +144,32 @@ void main() {
             .widget<ChoiceChip>(find.byKey(const ValueKey('top-days-30')))
             .selected,
         isFalse);
+    await drain(tester);
+  });
+
+  testWidgets('stepper jumlah saran: batas 3..12, tombol >= 44px, tersimpan',
+      (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(() async => db.close());
+    await CatalogDisplayService.setTopCount(db, CatalogDisplay.topCountMax);
+    await pumpScreen(tester, db);
+
+    final inc = find.byKey(const ValueKey('top-count-inc'));
+    final dec = find.byKey(const ValueKey('top-count-dec'));
+    expect(tester.widget<IconButton>(inc).onPressed, isNull);
+    expect(tester.getSize(inc).height, greaterThanOrEqualTo(44));
+    expect(tester.getSize(inc).width, greaterThanOrEqualTo(44));
+
+    for (var i = 0; i < 20; i++) {
+      if (tester.widget<IconButton>(dec).onPressed == null) break;
+      await tester.tap(dec);
+      await tester.pumpAndSettle();
+    }
+    expect(tester.widget<IconButton>(dec).onPressed, isNull);
+    expect((await CatalogDisplayService.load(db)).topCount,
+        CatalogDisplay.topCountMin);
+    expect(find.text('${CatalogDisplay.topCountMin}'), findsWidgets);
+    expect(tester.takeException(), isNull);
     await drain(tester);
   });
 }

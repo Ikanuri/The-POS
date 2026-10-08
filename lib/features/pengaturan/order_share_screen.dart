@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -13,6 +14,7 @@ import '../../core/services/catalog_display_service.dart';
 import '../../core/services/catalog_sticker_service.dart';
 import '../../core/services/cloudflare_publish_service.dart';
 import '../../core/services/order_page_service.dart';
+import '../../core/theme/app_theme.dart';
 
 /// Generate & bagikan katalog pesanan HTML — file statis self-contained
 /// (tanpa server/hosting) yang bisa dibuka pelanggan dari WhatsApp untuk
@@ -27,7 +29,10 @@ import '../../core/services/order_page_service.dart';
 /// share manual di bawah (offline-first: ekspor katalog tidak boleh
 /// bergantung ke internet).
 class OrderShareScreen extends ConsumerStatefulWidget {
-  const OrderShareScreen({super.key});
+  const OrderShareScreen({super.key, this.cloudflare});
+
+  /// Layanan publish; null = bawaan. Hanya di-inject oleh test.
+  final CloudflarePublishService? cloudflare;
 
   @override
   ConsumerState<OrderShareScreen> createState() => _OrderShareScreenState();
@@ -87,7 +92,8 @@ class _OrderShareScreenState extends ConsumerState<OrderShareScreen> {
   int? _lastProductCount;
   DateTime? _lastGeneratedAt;
 
-  final _cloudflare = CloudflarePublishService();
+  late final CloudflarePublishService _cloudflare =
+      widget.cloudflare ?? CloudflarePublishService();
   bool _publishing = false;
   String? _publishedUrl;
 
@@ -316,21 +322,10 @@ class _OrderShareScreenState extends ConsumerState<OrderShareScreen> {
                 ),
               ),
               const SizedBox(width: 8),
-              DropdownButton<int>(
-                key: const ValueKey('top-count'),
+              _TopCountStepper(
                 value: d.topCount,
-                underline: const SizedBox.shrink(),
-                items: [
-                  for (var n = CatalogDisplay.topCountMin;
-                      n <= CatalogDisplay.topCountMax;
-                      n++)
-                    DropdownMenuItem(value: n, child: Text('$n')),
-                ],
-                onChanged: (v) {
-                  if (v == null) return;
-                  _saveDisplay(
-                      (db) => CatalogDisplayService.setTopCount(db, v));
-                },
+                onChanged: (n) => _saveDisplay(
+                    (db) => CatalogDisplayService.setTopCount(db, n)),
               ),
             ],
           ),
@@ -822,11 +817,28 @@ class _OrderShareScreenState extends ConsumerState<OrderShareScreen> {
           ),
           if (_publishedUrl != null) ...[
             const SizedBox(height: 10),
-            Center(
-              child: SelectableText(
-                _publishedUrl!,
-                style: TextStyle(fontSize: 12, color: scheme.primary),
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Flexible(
+                  child: SelectableText(
+                    _publishedUrl!,
+                    style: TextStyle(fontSize: 12, color: scheme.primary),
+                  ),
+                ),
+                IconButton(
+                  key: const ValueKey('copy-published-url'),
+                  tooltip: 'Salin link',
+                  icon: const Icon(Icons.copy_outlined, size: 18),
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: _publishedUrl!));
+                    ScaffoldMessenger.of(context)
+                      ..hideCurrentSnackBar()
+                      ..showSnackBar(
+                          const SnackBar(content: Text('Link disalin')));
+                  },
+                ),
+              ],
             ),
           ],
           const SizedBox(height: 8),
@@ -892,6 +904,63 @@ class _StepLine extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Expanded(child: Text(text, style: const TextStyle(fontSize: 12.5))),
+        ],
+      ),
+    );
+  }
+}
+
+/// Stepper pil (− angka +) untuk jumlah saran terlaris. Tombol 48 px
+/// (nyaman di HP), nilai di-clamp ke `topCountMin..topCountMax`.
+class _TopCountStepper extends StatelessWidget {
+  const _TopCountStepper({required this.value, required this.onChanged});
+
+  final int value;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final canDec = value > CatalogDisplay.topCountMin;
+    final canInc = value < CatalogDisplay.topCountMax;
+    return Container(
+      decoration: BoxDecoration(
+        color: scheme.primary.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: scheme.primary.withOpacity(0.35)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            key: const ValueKey('top-count-dec'),
+            tooltip: 'Kurangi',
+            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+            icon: const Icon(Icons.remove),
+            color: scheme.primary,
+            onPressed: canDec
+                ? () => onChanged(value - 1)
+                : null,
+          ),
+          SizedBox(
+            width: 32,
+            child: Text(
+              '$value',
+              key: const ValueKey('top-count-value'),
+              textAlign: TextAlign.center,
+              style: AppTheme.numStyle(context, size: 20, weight: FontWeight.w700),
+            ),
+          ),
+          IconButton(
+            key: const ValueKey('top-count-inc'),
+            tooltip: 'Tambah',
+            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+            icon: const Icon(Icons.add),
+            color: scheme.primary,
+            onPressed: canInc
+                ? () => onChanged(value + 1)
+                : null,
+          ),
         ],
       ),
     );

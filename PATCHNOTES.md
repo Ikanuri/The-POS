@@ -8,6 +8,14 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 8 Oktober 2026 (Jumlah Saran & Salin Link)
+
+- **Jumlah saran terlaris kini diatur dengan tombol − / +** (3 sampai 12), lebih mudah ditekan daripada daftar pilihan lama.
+- **Ada tombol Salin di samping link hasil "Publish ke Web"**, sekali tekan link langsung tersalin.
+- **Saran di kolom cari katalog kini berbunyi "Cari <produk>? Tekan →"** dan tetap berganti saat kolom diketuk; tombol X berbentuk lingkaran garis, setelah dihapus kursor tetap di kolom dan keyboard tidak menutup. (Perlu Publish ulang katalog.)
+
+---
+
 ## 8 Oktober 2026 (Katalog Tanpa Kategori)
 
 > **Perlu Publish ulang katalog.**
