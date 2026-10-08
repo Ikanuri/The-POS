@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -418,6 +420,78 @@ void main() {
       expect(find.text('Sabun Mandi'), findsNothing);
       expect(find.byKey(const Key('modern-suggest-go')), findsNothing,
           reason: 'saran/panah hilang begitu ada teks');
+
+      await _drain(tester);
+      await db.close();
+    });
+  });
+
+  group('cart bar & antrian gaya Baru', () {
+    testWidgets(
+        'cart bar baru muncul setelah item masuk: total, Tahan, '
+        'Bayar, chip Pelanggan/Pegawai; tanpa tab Klasik', (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      await _addProduct(db, 'Gula Pasir');
+      await _pumpKasir(tester, db, prefs: modern);
+      expect(find.byKey(const Key('modern-cart-bar')), findsNothing);
+
+      await tester.enterText(find.byKey(const Key('modern-search')), 'gula');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.add_rounded).first);
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('modern-cart-bar')), findsOneWidget);
+      expect(find.text(formatRupiah(10000)), findsWidgets);
+      expect(find.byKey(const Key('modern-hold')), findsOneWidget);
+      expect(find.byKey(const Key('modern-bayar')), findsOneWidget);
+      expect(find.byKey(const Key('pill-customer')), findsOneWidget);
+      expect(find.byKey(const Key('pill-employee')), findsOneWidget);
+      expect(find.text('Pelanggan'), findsOneWidget);
+      // Tab Klasik (Tahan/Bayar berlabel segmen) tidak dipakai.
+      expect(find.text('Tahan'), findsNothing);
+
+      // Pelanggan terpilih -> chip aktif + tombol hapus.
+      final container =
+          ProviderScope.containerOf(tester.element(find.byType(KasirScreen)));
+      container
+          .read(cartMetaProvider(kMainCartId).notifier)
+          .setCustomer('c1', 'Bu Rina');
+      await tester.pumpAndSettle();
+      expect(find.text('Bu Rina'), findsOneWidget);
+      await tester.tap(find.descendant(
+          of: find.byKey(const Key('pill-customer')),
+          matching: find.byIcon(Icons.close_rounded)));
+      await tester.pumpAndSettle();
+      expect(find.text('Pelanggan'), findsOneWidget);
+
+      await _drain(tester);
+      await db.close();
+    });
+
+    testWidgets(
+        'Antrian Pesanan: lembar bergaya struk menampilkan pesanan '
+        'ditahan; kosong -> pesan; tutup', (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      await _addProduct(db, 'Gula Pasir');
+      await _pumpKasir(tester, db, prefs: modern);
+
+      await tester.tap(find.byKey(const Key('fab-held')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('modern-held-sheet')), findsOneWidget);
+      expect(find.text('Tidak ada pesanan ditahan'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('modern-held-close')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('modern-held-sheet')), findsNothing);
+
+      await db.into(db.heldOrders).insert(HeldOrdersCompanion.insert(
+            id: 'h1',
+            label: 'Bu Sari',
+            cartJson: jsonEncode({'items': [], 'meta': {}}),
+          ));
+      await tester.tap(find.byKey(const Key('fab-held')));
+      await tester.pumpAndSettle();
+      expect(find.text('Bu Sari'), findsOneWidget);
+      expect(find.textContaining('Ditahan'), findsOneWidget);
 
       await _drain(tester);
       await db.close();

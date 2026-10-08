@@ -24,21 +24,17 @@ final _customerSuggestionsProvider = FutureProvider.autoDispose
 });
 
 extension _KasirModernX on _KasirScreenState {
-  /// Antrian pesanan ditahan (tombol pojok). Sementara memakai panel antrian
-  /// yang sama dengan Klasik di dalam lembar bawah.
+  /// Antrian pesanan ditahan (tombol pojok): lembar bawah bergaya struk.
   void _openHeldSheet() {
     showAppSheet(
       context: context,
       isScrollControlled: true,
-      builder: (sheetCtx) => SafeArea(
-        child: _HeldInlinePanel(
-          onResume: (o) {
-            Navigator.of(sheetCtx).pop();
-            _onHeldCardTap(o);
-          },
-          busy: _isSwitchingHeld,
-          onClose: () => Navigator.of(sheetCtx).pop(),
-        ),
+      builder: (sheetCtx) => _ModernHeldSheet(
+        busy: _isSwitchingHeld,
+        onResume: (o) {
+          Navigator.of(sheetCtx).pop();
+          _onHeldCardTap(o);
+        },
       ),
     );
   }
@@ -198,7 +194,7 @@ extension _KasirModernX on _KasirScreenState {
       backgroundColor: cs.surface,
       bottomNavigationBar: cart.isEmpty
           ? null
-          : _buildCartBottom(context, cart, cartNotifier, cartMeta),
+          : _buildModernCartBottom(context, cart, cartNotifier, cartMeta),
     );
   }
 }
@@ -1094,6 +1090,673 @@ class _RotatingHintState extends State<_RotatingHint> {
             key: ValueKey(name),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cart bar gaya Baru: kartu melayang (mengikuti pola 3/4 + 1/4 katalog HTML)
+// ─────────────────────────────────────────────────────────────────────────────
+
+extension _KasirModernCart on _KasirScreenState {
+  /// Cart bar baru. Semua data & aksi SAMA dengan Klasik (`_buildCartBottom`):
+  /// total (+ pelunasan hutang/pre-order), item terakhir, pengingat Laci Meja,
+  /// hutang pelanggan, gerbang pembayaran, tahan, geser-ke-atas buka keranjang.
+  Widget _buildModernCartBottom(BuildContext context, List<CartItem> cart,
+      CartNotifier cartNotifier, CartMeta cartMeta) {
+    final total = cartNotifier.totalAmount +
+        ref
+            .watch(cartDebtSettlementProvider(_cartId))
+            .fold<int>(0, (s, e) => s + e.amount) +
+        ref
+            .watch(cartPreorderSettlementProvider(_cartId))
+            .fold<int>(0, (s, e) => s + e.amount);
+    final last = cartNotifier.lastTouchedItem;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onVerticalDragEnd: (d) {
+        if (d.velocity.pixelsPerSecond.dy < -300) {
+          _incrementSwipeHint().ignore();
+          _openCartSheet();
+        }
+      },
+      child: _ModernCartBar(
+        cartId: _cartId,
+        total: total,
+        count: cart.length,
+        lastItem: last,
+        lastEffQty: last == null ? 0 : cartNotifier.effectiveQtyFor(last),
+        showSwipeHint: _swipeHintVisible,
+        orderNumber: cartMeta.displayOrderNumber,
+        laciMejaPending: ref
+            .watch(laciMejaPendingProvider(
+                (cartMeta.customerId, cartMeta.customerName)))
+            .valueOrNull,
+        customerDebt: ref
+            .watch(cartCustomerDebtProvider(cartMeta.customerId))
+            .valueOrNull,
+        onTapDebt:
+            (!(ref.watch(needsPaymentGateProvider).valueOrNull ?? false) &&
+                    cartMeta.customerId != null)
+                ? () => showDebtSettlementSheet(
+                      context,
+                      ref,
+                      cartId: _cartId,
+                      customerId: cartMeta.customerId!,
+                      customerName: cartMeta.customerName ?? 'Pelanggan',
+                    )
+                : null,
+        onHold: _isSwitchingHeld ? null : _holdCurrent,
+        onBayar: () => context.push('/kasir/bayar'),
+        onOpenCart: _openCartSheet,
+      ),
+    );
+  }
+}
+
+class _ModernCartBar extends ConsumerWidget {
+  const _ModernCartBar({
+    required this.cartId,
+    required this.total,
+    required this.count,
+    required this.lastItem,
+    required this.lastEffQty,
+    required this.showSwipeHint,
+    required this.orderNumber,
+    required this.laciMejaPending,
+    required this.customerDebt,
+    required this.onTapDebt,
+    required this.onHold,
+    required this.onBayar,
+    required this.onOpenCart,
+  });
+
+  final String cartId;
+  final int total;
+  final int count;
+  final CartItem? lastItem;
+  final double lastEffQty;
+  final bool showSwipeHint;
+  final String? orderNumber;
+  final LaciMejaPending? laciMejaPending;
+  final (int total, int count)? customerDebt;
+  final VoidCallback? onTapDebt;
+  final VoidCallback? onHold;
+  final VoidCallback onBayar;
+  final VoidCallback onOpenCart;
+
+  void _ensureReserved(WidgetRef ref) {
+    final device = ref.read(deviceProvider);
+    final db = ref.read(databaseProvider);
+    ref
+        .read(cartMetaProvider(cartId).notifier)
+        .ensureReservedLocalId(() => db.reserveLocalId(device.deviceCode));
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cs = Theme.of(context).colorScheme;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final meta = ref.watch(cartMetaProvider(cartId));
+    final notifier = ref.read(cartMetaProvider(cartId).notifier);
+    final needsGate = ref.watch(needsPaymentGateProvider).valueOrNull ?? false;
+    // Item 55: nomor nota di-reserve sekali begitu bar tampil dengan isi.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _ensureReserved(ref));
+
+    String? lastLine;
+    if (lastItem != null && lastEffQty > 0) {
+      final q =
+          lastEffQty % 1 == 0 ? lastEffQty.toInt().toString() : '$lastEffQty';
+      final unit = lastItem!.unitName.isEmpty ? '' : ' ${lastItem!.unitName}';
+      lastLine = '$q$unit · ${lastItem!.productName}';
+    }
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+          12, 0, 12, 10 + MediaQuery.of(context).padding.bottom),
+      child: Container(
+        key: const Key('modern-cart-bar'),
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+        decoration: BoxDecoration(
+          color: cs.surface,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: cs.outlineVariant, width: 0.6),
+          boxShadow: [
+            BoxShadow(
+              color: dark ? const Color(0x80000000) : const Color(0x2E5A3C1E),
+              blurRadius: 24,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Baris chip: pelanggan & pegawai (+ nomor nota).
+            Row(
+              children: [
+                Flexible(
+                  flex: 4,
+                  child: _ModernMetaPill(
+                    key: const Key('pill-customer'),
+                    icon: meta.customerId != null
+                        ? Icons.person_rounded
+                        : Icons.person_outline_rounded,
+                    label: meta.hasCustomer ? meta.customerName! : 'Pelanggan',
+                    active: meta.hasCustomer,
+                    accent: meta.customerId != null,
+                    onTap: () async {
+                      final pick = await showCustomerPickerSheet(context, ref,
+                          currentName: meta.customerName);
+                      if (pick == null) return;
+                      notifier.setCustomer(pick.id, pick.name);
+                    },
+                    onClear: meta.hasCustomer ? notifier.clearCustomer : null,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Flexible(
+                  flex: 3,
+                  child: _ModernMetaPill(
+                    key: const Key('pill-employee'),
+                    icon: Icons.badge_outlined,
+                    label: meta.hasEmployee ? meta.employeeName! : 'Pegawai',
+                    active: meta.hasEmployee,
+                    onTap: () async {
+                      final pick = await showEmployeePickerSheet(context, ref,
+                          currentId: meta.employeeId);
+                      if (pick == null) return;
+                      notifier.setEmployee(pick.id, pick.name);
+                    },
+                    onClear: meta.hasEmployee ? notifier.clearEmployee : null,
+                  ),
+                ),
+                if (orderNumber != null) ...[
+                  const SizedBox(width: 8),
+                  Text('#$orderNumber',
+                      style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                          color: cs.onSurfaceVariant)),
+                ],
+              ],
+            ),
+            const SizedBox(height: 4),
+            LaciMejaReminder.bar(context, laciMejaPending),
+            if (customerDebt != null && customerDebt!.$2 > 0)
+              InkWell(
+                onTap: onTapDebt,
+                borderRadius: BorderRadius.circular(6),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 3),
+                  child: Row(
+                    children: [
+                      Icon(Icons.account_balance_wallet_outlined,
+                          size: 13, color: cs.error),
+                      const SizedBox(width: 5),
+                      Flexible(
+                        child: Text(
+                          'Hutang ${formatRupiah(customerDebt!.$1)} '
+                          'di ${customerDebt!.$2} nota',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: cs.error),
+                        ),
+                      ),
+                      if (onTapDebt != null)
+                        Icon(Icons.chevron_right, size: 13, color: cs.error),
+                    ],
+                  ),
+                ),
+              ),
+            const SizedBox(height: 6),
+            // Total (ketuk = buka keranjang) | Tahan | Bayar -> pola 3/4 + 1/4.
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: InkWell(
+                    key: const Key('modern-cart-open'),
+                    borderRadius: BorderRadius.circular(14),
+                    onTap: onOpenCart,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Row(
+                        children: [
+                          ItemCountBadge(count: count),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                BumpOnChange(
+                                  value: total,
+                                  peak: 1.08,
+                                  child: Text(
+                                    formatRupiah(total),
+                                    style: AppTheme.numStyle(context,
+                                        size: 22, weight: FontWeight.w700),
+                                  ),
+                                ),
+                                if (lastLine != null)
+                                  Text(
+                                    lastLine,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                        fontSize: 11.5,
+                                        color: cs.onSurfaceVariant),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // 1/4: Tahan (ikon) — disabled saat `_isSwitchingHeld`.
+                Tooltip(
+                  message: 'Tahan',
+                  child: PressScale(
+                    depth: 0.05,
+                    child: Material(
+                      color: cs.surfaceContainerHigh,
+                      shape: const CircleBorder(),
+                      child: InkWell(
+                        key: const Key('modern-hold'),
+                        customBorder: const CircleBorder(),
+                        onTap: onHold,
+                        child: SizedBox(
+                          width: 46,
+                          height: 46,
+                          child: Icon(Icons.pause_rounded,
+                              color: onHold != null
+                                  ? cs.primary
+                                  : cs.onSurfaceVariant.withOpacity(0.4)),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                if (!needsGate) ...[
+                  const SizedBox(width: 8),
+                  // 3/4: Bayar — pil terracotta (warna tetap, teks putih).
+                  PressScale(
+                    depth: 0.04,
+                    child: Material(
+                      color: AppTheme.accent,
+                      borderRadius: BorderRadius.circular(999),
+                      child: InkWell(
+                        key: const Key('modern-bayar'),
+                        borderRadius: BorderRadius.circular(999),
+                        onTap: onBayar,
+                        child: const SizedBox(
+                          height: 46,
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 20),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text('Bayar',
+                                    style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w700,
+                                        color: Colors.white)),
+                                SizedBox(width: 6),
+                                Icon(Icons.arrow_forward_rounded,
+                                    size: 18, color: Colors.white),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            if (showSwipeHint) ...[
+              const SizedBox(height: 6),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.keyboard_arrow_up_rounded,
+                      size: 14, color: cs.onSurfaceVariant.withOpacity(0.5)),
+                  const SizedBox(width: 3),
+                  Text('Geser ke atas untuk lihat keranjang',
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: cs.onSurfaceVariant.withOpacity(0.5))),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Chip pil Pelanggan/Pegawai di cart bar baru (ketuk = pilih, x = hapus).
+class _ModernMetaPill extends StatelessWidget {
+  const _ModernMetaPill({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.active,
+    required this.onTap,
+    this.onClear,
+    this.accent = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool active;
+  final bool accent;
+  final VoidCallback onTap;
+  final VoidCallback? onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final showAccent = accent && active;
+    final fg = showAccent
+        ? AppTheme.accent
+        : (active ? cs.onSurface : cs.onSurfaceVariant);
+    return Material(
+      color: active
+          ? (showAccent
+              ? AppTheme.accent.withOpacity(0.12)
+              : cs.surfaceContainerHigh)
+          : cs.surfaceContainerLow,
+      shape: StadiumBorder(
+          side: BorderSide(
+              color: showAccent
+                  ? AppTheme.accent.withOpacity(0.4)
+                  : cs.outlineVariant,
+              width: 0.8)),
+      child: InkWell(
+        customBorder: const StadiumBorder(),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(10, 6, 6, 6),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 15, color: fg),
+              const SizedBox(width: 5),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: active ? FontWeight.w600 : FontWeight.w400,
+                      color: fg),
+                ),
+              ),
+              if (onClear != null)
+                InkWell(
+                  onTap: onClear,
+                  customBorder: const CircleBorder(),
+                  child: Padding(
+                    padding: const EdgeInsets.all(3),
+                    child: Icon(Icons.close_rounded, size: 14, color: fg),
+                  ),
+                )
+              else
+                const SizedBox(width: 4),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Lembar "Antrian Pesanan" gaya Baru (mengikuti sheet struk katalog HTML)
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _ModernHeldSheet extends ConsumerWidget {
+  const _ModernHeldSheet({required this.onResume, required this.busy});
+
+  final void Function(HeldOrder) onResume;
+  final bool busy;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cs = Theme.of(context).colorScheme;
+    final heldAsync = ref.watch(_heldOrdersListProvider);
+    final maxH = MediaQuery.of(context).size.height * 0.78;
+
+    return SafeArea(
+      child: ConstrainedBox(
+        key: const Key('modern-held-sheet'),
+        constraints: BoxConstraints(maxHeight: maxH),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 8, 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Antrian Pesanan',
+                      style: AppTheme.numStyle(context, size: 21),
+                    ),
+                  ),
+                  IconButton(
+                    key: const Key('modern-held-close'),
+                    tooltip: 'Tutup',
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: Text(
+                'Ketuk pesanan untuk melanjutkannya di keranjang.',
+                style: TextStyle(fontSize: 12.5, color: cs.onSurfaceVariant),
+              ),
+            ),
+            Flexible(
+              child: heldAsync.when(
+                data: (held) {
+                  if (held.isEmpty) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 36),
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.inbox_outlined,
+                                size: 34, color: cs.onSurfaceVariant),
+                            const SizedBox(height: 8),
+                            Text('Tidak ada pesanan ditahan',
+                                style: TextStyle(color: cs.onSurfaceVariant)),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
+                  return ListView.separated(
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                    itemCount: held.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    itemBuilder: (_, i) => Opacity(
+                      opacity: busy ? 0.5 : 1,
+                      child: _ModernHeldRow(
+                        order: held[i],
+                        onTap: busy ? null : () => onResume(held[i]),
+                      ),
+                    ),
+                  );
+                },
+                loading: () => const Padding(
+                  padding: EdgeInsets.all(28),
+                  child:
+                      Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                ),
+                error: (e, _) => Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Text('Error: $e', style: TextStyle(color: cs.error)),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Satu pesanan ditahan: kartu lebar bergaya struk (status di kiri atas,
+/// total serif di kanan). Info SAMA dengan `_HeldCard` Klasik.
+class _ModernHeldRow extends StatelessWidget {
+  const _ModernHeldRow({required this.order, required this.onTap});
+
+  final HeldOrder order;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final parsed = _parseHeldPayload(order.cartJson);
+    final itemCount = parsed.items.where((c) => !c.isVariant).length;
+    final total = cartTotalOf(parsed.items);
+    final time =
+        '${order.createdAt.hour.toString().padLeft(2, '0')}:${order.createdAt.minute.toString().padLeft(2, '0')}';
+    final isHandoff = parsed.awaitingPayment && parsed.employeeName != null;
+
+    return Material(
+      color: cs.surfaceContainerLow,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        key: Key('held-${order.id}'),
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+                color: isHandoff
+                    ? AppTheme.accent.withOpacity(0.4)
+                    : cs.outlineVariant),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: isHandoff
+                            ? AppTheme.accent
+                            : cs.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        isHandoff
+                            ? '${parsed.employeeName} · $time'
+                            : 'Ditahan · $time',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                          color: isHandoff ? Colors.white : cs.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            order.label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontSize: 15, fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                        if (parsed.meta.displayOrderNumber != null) ...[
+                          const SizedBox(width: 6),
+                          Text('#${parsed.meta.displayOrderNumber}',
+                              style: TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: cs.onSurfaceVariant)),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      isHandoff
+                          ? '$itemCount item · siap dibayarkan'
+                          : '$itemCount item',
+                      style:
+                          TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                    ),
+                    if (parsed.prabayar.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          Icon(Icons.lock_clock_outlined,
+                              size: 12, color: cs.primary),
+                          const SizedBox(width: 3),
+                          Flexible(
+                            child: Text(
+                              'Pra-Bayar ${formatRupiah(parsed.prabayar.fold<int>(0, (s, e) => s + e.amount))}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: cs.primary),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    formatRupiah(total),
+                    style: AppTheme.numStyle(context,
+                        size: 17, weight: FontWeight.w700, color: cs.primary),
+                  ),
+                  const SizedBox(height: 4),
+                  Icon(Icons.chevron_right_rounded,
+                      size: 20, color: cs.outline),
+                ],
+              ),
+            ],
           ),
         ),
       ),
