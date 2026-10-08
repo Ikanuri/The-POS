@@ -12,6 +12,10 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 - feat(katalog): `666181d` — feat(katalog): stepper jumlah saran terlaris + tombol Salin link hasil publish
 - feat(katalog-html): saran cari "Cari <nama>? Tekan →" (ikon panah inline; hanya nama produk terpotong), saran tetap berputar saat kolom fokus (berhenti saat ada huruf), tombol X jadi lingkaran outline & tidak mencuri fokus (pointerdown/mousedown preventDefault) sehingga kursor+keyboard tetap terbuka setelah menghapus -> kembali landing
 
+## 2026-10-08 (jalur build production vs beta)
+
+- ci/build: flavor Android `production` (ID asli) & `beta` (ID `.beta`, nama "The POS Beta", terpasang berdampingan dgn data terpisah); CI memilih otomatis main/tag -> production, branch lain -> beta (+ input manual); APK/rilis diberi nama flavor; aturan "Jalur Build" di CLAUDE.md (tanya/saran production vs beta tiap batch commit); test penjaga build_flavors_test
+
 ## 2026-10-08 (Prototype Redesign Flutter: animasi & transisi ala Telegram)
 
 - feat(motion): token gerak terpusat (durasi + kurva baku) di core/theme/app_motion.dart

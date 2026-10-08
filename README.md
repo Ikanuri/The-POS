@@ -194,7 +194,7 @@ Proyek menyertakan GitHub Actions (`.github/workflows/build-apk.yml`) yang:
 Build lokal:
 
 ```bash
-flutter build apk --release --target-platform android-arm64
+flutter build apk --release --flavor production --target-platform android-arm64
 ```
 
 > Penandatanganan rilis dibaca dari `android/key.properties`. Bila tidak ada,

@@ -24,7 +24,7 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
 
     <application
-        android:label="The POS"
+        android:label="${appName}"
         android:name=".CrashCatchingApplication"
         android:icon="@mipmap/ic_launcher"
         android:allowBackup="false"

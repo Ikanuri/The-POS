@@ -5,6 +5,12 @@ on:
     branches: [main, 'claude/**']
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      flavor:
+        description: 'Jalur build (auto = main/tag -> production, branch lain -> beta)'
+        type: choice
+        options: [auto, production, beta]
+        default: auto
 
 permissions:
   contents: write
@@ -48,15 +54,30 @@ jobs:
           storeFile=release-key.jks
           EOF
 
+      # Jalur build: main & tag v* = production (ID asli); branch lain = beta
+      # (ID .beta, terpasang berdampingan dgn produksi, data terpisah).
+      - name: Pilih jalur build (production / beta)
+        run: |
+          CHOICE="${{ github.event.inputs.flavor }}"
+          if [ -z "$CHOICE" ] || [ "$CHOICE" = "auto" ]; then
+            if [[ "$GITHUB_REF" == refs/tags/* || "$GITHUB_REF" == "refs/heads/main" ]]; then
+              CHOICE=production
+            else
+              CHOICE=beta
+            fi
+          fi
+          echo "FLAVOR=$CHOICE" >> "$GITHUB_ENV"
+          echo "Jalur build: $CHOICE"
+
       - name: Build APK (release, armeabi-v7a + arm64-v8a)
-        run: flutter build apk --release --target-platform android-arm,android-arm64
+        run: flutter build apk --release --flavor "$FLAVOR" --target-platform android-arm,android-arm64
 
       - name: Rename APK
         run: |
           VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //')
           SHORT_SHA=$(echo "$GITHUB_SHA" | cut -c1-7)
-          APK_NAME="the-pos-v${VERSION}-${SHORT_SHA}.apk"
-          mv build/app/outputs/flutter-apk/app-release.apk \
+          APK_NAME="the-pos-${FLAVOR}-v${VERSION}-${SHORT_SHA}.apk"
+          mv "build/app/outputs/flutter-apk/app-${FLAVOR}-release.apk" \
              "build/app/outputs/flutter-apk/${APK_NAME}"
           echo "APK_NAME=${APK_NAME}" >> "$GITHUB_ENV"
           echo "APK_PATH=build/app/outputs/flutter-apk/${APK_NAME}" >> "$GITHUB_ENV"
@@ -80,9 +101,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="dev-$(date +%Y%m%d-%H%M%S)"
+          TAG="${FLAVOR}-$(date +%Y%m%d-%H%M%S)"
           BRANCH="${GITHUB_REF#refs/heads/}"
-          NOTES="Automated dev build from \`${BRANCH}\` @ [\`${GITHUB_SHA::7}\`](https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA)"
+          NOTES="Automated ${FLAVOR} build from \`${BRANCH}\` @ [\`${GITHUB_SHA::7}\`](https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA)"
 
           # API GitHub sesekali balas 5xx sesaat — sudah kejadian nyata:
           # "error checking for existing release: HTTP 503" menggagalkan
@@ -97,7 +118,7 @@ jobs:
             fi
 
             if gh release create "$TAG" "$APK_PATH" \
-                 --title "Dev Build — ${BRANCH} (${GITHUB_SHA::7})" \
+                 --title "${FLAVOR^} Build — ${BRANCH} (${GITHUB_SHA::7})" \
                  --notes "$NOTES" \
                  --prerelease; then
               published=1

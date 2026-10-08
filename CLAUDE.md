@@ -208,6 +208,8 @@ tiap sesi tanpa pandang isi:
   ada di `/tmp/flutter/bin`; kalau preinstalled, biasanya di `/opt/flutter/bin`
   — jalankan tanpa root bila memungkinkan, peringatan root tidak menggagalkan).
 - Wajib `flutter analyze` bersih (0 issue) sebelum commit.
+- Build lokal/CI SELALU pakai `--flavor production|beta` (lihat §Jalur Build);
+  tanpa `--flavor` build Android gagal. Contoh: `flutter run --flavor beta`.
 - Build APK via GitHub Actions (`.github/`), fat APK armeabi-v7a +
   arm64-v8a (HP kelas bawah/lama masih banyak yang 32-bit murni — crash
   nyata pernah terjadi di Infinix Smart 8 saat APK cuma arm64-v8a, lihat
@@ -250,6 +252,24 @@ sesuai apa yang disentuh, jangan lompat ke widget test kalau cukup test DB:
 5. Setelah semua test baru hijau: jalankan **seluruh** `flutter test` (bukan
    cuma file baru) untuk pastikan tidak ada regresi di tempat lain, plus
    `flutter analyze` bersih — baru commit.
+
+## Jalur Build — production vs beta (WAJIB ditanyakan/disarankan)
+
+- Dua flavor di `android/app/build.gradle`: **production** (ID `com.thepos.the_pos`,
+  nama "The POS" — dipakai toko sungguhan) dan **beta** (ID `.beta`, nama
+  "The POS Beta"). Keduanya TERPASANG BERDAMPINGAN dgn data/DB/kunci terpisah,
+  jadi mencoba beta tidak pernah menimpa atau merusak aplikasi produksi.
+- CI (`build-apk.yml`) memilih otomatis: **main & tag `v*` → production**,
+  **branch lain (`claude/**`) → beta**. `workflow_dispatch` bisa memaksa salah
+  satu. Tidak perlu membuat branch khusus untuk beta — cukup push ke branch kerja.
+- **Aturan Claude:** di tiap batch commit/push, SEBUT jalurnya ("ini masuk build
+  beta") dan, bila perubahannya menyentuh data/skema DB, sinkron, backup/Alih
+  Owner, atau logika administrasi, SARANKAN tegas: uji di beta dulu (restore
+  backup produksi ke aplikasi beta) sebelum merge ke main. Sebelum merge ke main
+  (= build production) TANYAKAN dulu apakah perubahan itu sudah layak produksi;
+  jangan merge/tag tanpa perintah eksplisit user. Perubahan yang mengubah skema
+  DB (`schemaVersion` naik) = WAJIB lewat beta dulu karena build lebih lama tak
+  bisa dipasang menimpa yang lebih baru tanpa menghapus data.
 
 ## Perencanaan — [PLAN.md](PLAN.md)
 
