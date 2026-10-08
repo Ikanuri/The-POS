@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/bump_on_change.dart';
 
 /// Tombol "+" yang berubah jadi lingkaran berisi jumlah saat produk ada di
 /// keranjang. Tap menambah 1 (produk satuan tunggal) atau membuka modal
@@ -198,14 +199,18 @@ class _AddControlState extends State<AddControl> {
           {Color color = Colors.white}) =>
       Padding(
         padding: EdgeInsets.all(circleSize * 0.12),
-        child: FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Text(
-            label,
-            style: TextStyle(
-              color: color,
-              fontWeight: FontWeight.w700,
-              fontSize: circleSize * 0.40,
+        // Angka berdenyut halus tiap berubah (tanpa duplikasi widget).
+        child: BumpOnChange(
+          value: label,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.w700,
+                fontSize: circleSize * 0.40,
+              ),
             ),
           ),
         ),

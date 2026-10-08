@@ -19,6 +19,7 @@ import '../../core/providers/product_providers.dart';
 import '../../core/services/order_page_service.dart';
 import '../../core/services/order_parser_service.dart';
 import '../../core/services/price_service.dart';
+import '../../core/theme/app_motion.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/inline_banner.dart';
 import '../../core/widgets/marquee_text.dart';
@@ -3088,10 +3089,39 @@ class _ProductListTile extends ConsumerStatefulWidget {
   ConsumerState<_ProductListTile> createState() => _ProductListTileState();
 }
 
-class _ProductListTileState extends ConsumerState<_ProductListTile> {
+class _ProductListTileState extends ConsumerState<_ProductListTile>
+    with SingleTickerProviderStateMixin {
   bool _expanded = false;
 
+  /// 0 = daftar varian tertutup, 1 = terbuka penuh. Dipertahankan TERPASANG
+  /// selama animasi tutup berjalan (lihat `build`).
+  late final AnimationController _variantCtrl =
+      AnimationController(vsync: this, duration: AppMotion.medium);
+
+  late final CurvedAnimation _variantCurved = CurvedAnimation(
+    parent: _variantCtrl,
+    curve: AppMotion.easeOutQuint,
+    reverseCurve: AppMotion.easeOutQuint.flipped,
+  );
+
   Product get product => widget.product;
+
+  void _setExpanded(bool v) {
+    setState(() => _expanded = v);
+    _variantCtrl.duration = AppMotion.dur(context, AppMotion.medium);
+    if (v) {
+      _variantCtrl.forward();
+    } else {
+      _variantCtrl.reverse();
+    }
+  }
+
+  @override
+  void dispose() {
+    _variantCurved.dispose();
+    _variantCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -3118,9 +3148,7 @@ class _ProductListTileState extends ConsumerState<_ProductListTile> {
             onTap: widget.onTapBody,
             // Tahan item dengan varian → jalan pintas buka/tutup dropdown varian
             // inline (cara utama: tombol chevron di kanan).
-            onLongPress: hasVariants
-                ? () => setState(() => _expanded = !_expanded)
-                : null,
+            onLongPress: hasVariants ? () => _setExpanded(!_expanded) : null,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
               child: Row(
@@ -3181,8 +3209,16 @@ class _ProductListTileState extends ConsumerState<_ProductListTile> {
                           ],
                         ),
                         const SizedBox(height: 2),
-                        detailAsync.when(
+                        AnimatedSwitcher(
+                          duration: AppMotion.dur(context, AppMotion.base),
+                          // Rata kiri (bawaan Stack = tengah) & hanya fade.
+                          layoutBuilder: (current, previous) => Stack(
+                            alignment: Alignment.centerLeft,
+                            children: [...previous, if (current != null) current],
+                          ),
+                          child: detailAsync.when(
                           data: (d) => Row(
+                            key: const ValueKey('sub-data'),
                             children: [
                               Text(
                                 formatRupiah(d.basePrice),
@@ -3205,9 +3241,12 @@ class _ProductListTileState extends ConsumerState<_ProductListTile> {
                             ],
                           ),
                           loading: () => Text('…',
+                              key: const ValueKey('sub-loading'),
                               style: TextStyle(
                                   fontSize: 12, color: cs.onSurfaceVariant)),
-                          error: (_, __) => const SizedBox.shrink(),
+                          error: (_, __) => const SizedBox.shrink(
+                              key: ValueKey('sub-error')),
+                        ),
                         ),
                       ],
                     ),
@@ -3223,16 +3262,20 @@ class _ProductListTileState extends ConsumerState<_ProductListTile> {
                       child: InkWell(
                         key: const ValueKey('variant-toggle'),
                         customBorder: const CircleBorder(),
-                        onTap: () => setState(() => _expanded = !_expanded),
+                        onTap: () => _setExpanded(!_expanded),
                         child: SizedBox(
                           width: 40,
                           height: 40,
-                          child: Icon(
-                            _expanded
-                                ? Icons.expand_less_rounded
-                                : Icons.expand_more_rounded,
-                            size: 22,
-                            color: cs.onSurfaceVariant,
+                          // Chevron berputar halus (bukan ganti ikon mendadak).
+                          child: AnimatedRotation(
+                            turns: _expanded ? 0.5 : 0,
+                            duration: AppMotion.dur(context, AppMotion.medium),
+                            curve: AppMotion.easeOutQuint,
+                            child: Icon(
+                              Icons.expand_more_rounded,
+                              size: 22,
+                              color: cs.onSurfaceVariant,
+                            ),
                           ),
                         ),
                       ),
@@ -3278,13 +3321,29 @@ class _ProductListTileState extends ConsumerState<_ProductListTile> {
             ),
           ),
           // Dropdown varian inline — mendorong item di bawahnya, bukan popup.
-          if (_expanded && hasVariants)
-            _VariantDropdown(
-              parent: product,
-              parentDetail: detailAsync.asData?.value,
-              cartId: widget.cartId,
-              onAfterQtyChange: widget.onAfterQtyChange,
-            ),
+          // Membuka/menutup dianimasikan (tinggi + fade); tetap terpasang
+          // selama animasi tutup, lalu dilepas saat benar-benar tertutup.
+          AnimatedBuilder(
+            animation: _variantCtrl,
+            builder: (context, _) {
+              if (!hasVariants || (_variantCtrl.isDismissed && !_expanded)) {
+                return const SizedBox.shrink();
+              }
+              return SizeTransition(
+                sizeFactor: _variantCurved,
+                axisAlignment: -1,
+                child: FadeTransition(
+                  opacity: _variantCurved,
+                  child: _VariantDropdown(
+                    parent: product,
+                    parentDetail: detailAsync.asData?.value,
+                    cartId: widget.cartId,
+                    onAfterQtyChange: widget.onAfterQtyChange,
+                  ),
+                ),
+              );
+            },
+          ),
         ],
       ),
     );

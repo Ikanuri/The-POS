@@ -117,4 +117,39 @@ void main() {
     expect(find.byKey(toggle), findsNothing);
     await drain(tester);
   });
+
+  testWidgets('membuka/menutup varian dianimasikan (tinggi + fade), chevron '
+      'berputar, varian tetap terpasang selama animasi tutup', (tester) async {
+    await seedParentWithVariant();
+    await pumpKasirList(tester);
+
+    SizeTransition sizeT() => tester.widget<SizeTransition>(find
+        .ancestor(
+            of: find.text('Coklat', skipOffstage: false),
+            matching: find.byType(SizeTransition))
+        .first);
+    double turns() => tester
+        .widget<AnimatedRotation>(find.descendant(
+            of: find.byKey(toggle), matching: find.byType(AnimatedRotation)))
+        .turns;
+
+    expect(turns(), 0);
+    await tester.tap(find.byKey(toggle));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 60));
+    expect(sizeT().sizeFactor.value, inExclusiveRange(0, 1));
+    expect(turns(), 0.5);
+    await tester.pumpAndSettle();
+    expect(sizeT().sizeFactor.value, 1);
+
+    await tester.tap(find.byKey(toggle));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 60));
+    expect(find.text('Coklat'), findsOneWidget); // masih terlihat saat menutup
+    expect(sizeT().sizeFactor.value, inExclusiveRange(0, 1));
+    expect(turns(), 0);
+    await tester.pumpAndSettle();
+    expect(find.text('Coklat'), findsNothing);
+    await drain(tester);
+  });
 }
