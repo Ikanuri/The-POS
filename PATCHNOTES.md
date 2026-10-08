@@ -8,6 +8,14 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 8 Oktober 2026 (Landing Kasir, uji di build beta)
+
+- **Layar Kasir kini dibuka dengan halaman awal ala katalog online**: kolom cari besar dengan tombol scan, kategori, daftar **Terlaris**, dan **Terakhir dijual** (atau **Sering dibeli** pelanggan yang sedang dipilih). Ketuk **Semua produk**, pilih kategori, atau mulai mengetik untuk membuka daftar seperti biasa; tombol **Beranda** membawa Anda kembali.
+- **Bisa dimatikan**: Pengaturan > Tampilan Awal Kasir, bila lebih suka langsung melihat semua produk.
+- **Perbaikan tombol "+"** pada kartu produk yang kadang hanya memantul tanpa menambah barang.
+
+---
+
 ## 8 Oktober 2026 (Animasi lebih hidup, uji di build beta)
 
 - **Tombol, kartu produk, dan chip kategori kini memantul halus saat ditekan.**
