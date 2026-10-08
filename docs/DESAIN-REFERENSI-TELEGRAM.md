@@ -136,3 +136,76 @@ Diukur ulang dari klon dangkal `DrKLO/Telegram`. Pola & angka saja (GPLv2).
 | Token abu-abu 5 tingkat | Belum | Menyentuh tema seluruh app |
 | Blur / gradien / ikon khusus | Tidak | Visual; butuh mockup JPG + persetujuan |
 | Slider ukuran font + pratinjau | Ada skala font | Cek: tabrakan dgn Newsreader utk angka |
+
+---
+
+# Bagian 16-23 — Tata letak & UX (penggalian 8 Okt 2026, tahap 3)
+
+Fokus: struktur layar, navigasi, kerapatan, alur interaksi. Diukur dari kode
+(`MainTabsActivity`, `DialogsActivity`, `DialogCell`, `BottomSheet`,
+`AlertDialog`, `SettingsActivity`, `ProfileActivity`). Pola & angka saja.
+
+## 16. Navigasi utama — bilah tab MELAYANG (glass pill)
+
+- 5 tab (Chats, Contacts, Settings, Calls, Profile-avatar). Bilah **tidak menempel ke tepi**: tinggi **56 dp**, margin **8 dp** di semua sisi, **lebar maks 328 dp** (+margin) di tengah, sudut bulat penuh, latar kaca/blur (blur hanya di HP kelas HIGH).
+- **Konten diberi padding bawah** setinggi bilah (`additionNavigationBarHeight = 56+16`) dan `clipToPadding=false` -> daftar menggulir DI BAWAH bilah, baris terakhir tetap bisa ditarik naik. FAB ikut naik (`additionFloatingButtonOffset = 56+8`).
+- **Tahan tab = pemilih cepat** (Chats -> folder, Contacts -> urut, Calls -> filter, Profile -> ganti akun). Pola yang SAMA sudah kita pakai (tahan tab Kasir -> Laci Meja).
+- Tab punya **counter/badge** beranimasi (titik "!" bila ada hal yang perlu perhatian).
+- Posisi pindah: indikator tab terpilih meluncur 380 ms EASE_OUT_QUINT.
+- Terjemahan: kita pakai `NavigationBar` Material 3 menempel di bawah (label, ikon). Bilah melayang = ubah tata letak global (semua layar perlu padding bawah) -> keputusan desain besar.
+
+## 17. Daftar utama — kerapatan & dua mode
+
+- Baris dialog **70 dp** (default) atau **76 dp** ("tiga baris"); avatar **52-56 dp**; garis pemisah **1 px** (bukan kartu). Pengguna BISA mengganti kerapatan (`useThreeLinesLayout`).
+- Skema isi baris: nama (tebal) + waktu di kanan; baris kedua = pratinjau; badge hitung di kanan bawah. Satu "judul + satu baris pendukung" — sangat konsisten.
+- Terjemahan: daftar produk kita punya kartu/baris dgn banyak info (harga, stok, varian). Opsi "kerapatan" (kompak/nyaman) belum ada; layak utk HP kecil.
+
+## 18. Pencarian
+
+- Ikon cari di bilah atas membuka **kolom cari yang menggantikan bilah** (150 ms), bukan layar baru. Di bawahnya: **tab hasil** (Chat, Media, Tautan...), **pencarian terakhir** (carousel avatar 80x86 dp), saran.
+- Terjemahan: kolom cari kasir kita sudah inline. Yang belum: **riwayat pencarian terakhir** & saran produk/pelanggan terakhir dipakai (cocok utk kasir yang mengulang barang sama).
+
+## 19. Header yang menciut & "snap"
+
+- Profil/Pengaturan: kartu header besar (avatar, nama, tombol aksi) **menciut saat menggulir**; bila berhenti di tengah, otomatis **snap** (`smoothScrollBy` EASE_OUT_QUINT) ke posisi penuh atau tertutup (ambang 60%). Daftar pengaturan diberi padding atas 12 dp dari status bar; header BUKAN bagian layar terpisah.
+- Baris aksi cepat (Pesan, Bisukan, Panggil...) = satu deret tombol ikon+label di bawah nama.
+- Terjemahan: layar Pengaturan/Detail Pelanggan/Detail Produk kita bisa memakai header menciut + deret aksi cepat. Kasir tidak butuh (layar sudah padat).
+
+## 20. Lembar bawah (bottom sheet) & dialog — ukuran
+
+- Sheet: padding atas **8 dp**, padding bawah **8 dp**, **lebar maks 500 dp** (layar lebar: 80%), tutup dgn **geser turun** (VelocityTracker: lepas cepat = tutup, lambat = kembali), ketuk di luar menutup. Judul sheet 16 dp horizontal (21 bila besar). Ada deteksi keyboard (>20 dp) -> tinggi sheet menyesuaikan.
+- Dialog: padding isi **23 dp**, tombol tinggi **48 dp**, **lebar maks 356 dp** (446/496 utk layout khusus) -> dialog sempit & fokus.
+- Terjemahan: aturan 360-dp di CLAUDE.md (tombol dalam `AlertDialog` overflow) selaras: Telegram menyusun tombol dgn lebar terukur. Lebar maks 500 dp utk sheet = bagus utk tablet/landscape kita.
+
+## 21. FAB & tombol kirim
+
+- FAB menghilang saat gulir turun, muncul saat naik/berhenti (bagian 11); terangkat sebesar tinggi bilah tab; bersembunyi saat mode seleksi.
+- Kolom ketik: **satu tombol berubah bentuk** (mikrofon <-> kirim) tergantung isi; tooltip/penguncian rekaman. Terjemahan: tombol "Bayar"/"Tambah" kita bisa berubah label/ikon sesuai konteks tanpa pindah tempat (mis. "Tahan" vs "Bayar").
+
+## 22. Keyboard & ukuran adaptif
+
+- `SizeNotifierFrameLayout` memantau tinggi keyboard; layar menyesuaikan padding secara berkelanjutan (bukan loncat). Sheet/dialog dan kolom ketik menghitung ulang tiap frame.
+- Terjemahan: Flutter sudah memberi `viewInsets` per frame; yang perlu dicek hanya layar yang memakai `Scaffold(resizeToAvoidBottomInset)` + `ListView` panjang agar baris aktif tetap terlihat.
+
+## 23. Peta tata letak/UX: sudah / belum / bertabrakan
+
+| Pola | Telegram | The POS | Penilaian |
+|---|---|---|---|
+| Tab melayang (glass pill) | 56 dp, margin 8, maks 328 | `NavigationBar` M3 menempel | Ubah global; keputusan desain besar, uji di tablet |
+| Padding bawah = tinggi bilah, `clipToPadding=false` | ya | sebagian (FAB/cart bar) | Positif: baris terakhir tak tertutup |
+| Tahan tab = pemilih cepat | ya | ADA (tab Kasir) | Perluas ke tab lain (Produk: kategori; Laporan: rentang) |
+| Kerapatan baris dapat diatur | 70/76 dp | tetap | Opsi kompak utk HP kecil |
+| Pencarian terakhir/saran | ya | belum | Positif utk kasir (barang berulang) |
+| Header menciut + snap | ya | tidak | Hanya utk layar detail; bukan kasir |
+| Sheet lebar maks 500 dp + geser tutup | ya | sheet penuh lebar | Cek tablet/landscape |
+| Dialog lebar maks ~356 dp | ya | bawaan M3 (280-560) | Selaras aturan 360 dp |
+| Tombol berubah bentuk menurut konteks | ya (mic/kirim) | label statis | Kandidat di Kasir (Bayar/Tahan) |
+| Blur/kaca | HIGH saja | tidak | Butuh mode performa dulu (bagian 8) |
+| Baris pemisah 1 px, tanpa kartu | ya | kartu + bayangan | Gaya; butuh mockup JPG + persetujuan |
+
+**Ketidakcocokan mendasar:** Telegram = aplikasi MEMBACA/menggulir daftar
+(informasi sama berulang). POS = aplikasi MENGETIK/mengetuk cepat dgn uang
+(salah ketuk = rugi). Maka pola yang meningkatkan kecepatan/orientasi (padding
+bilah, pencarian terakhir, tahan-tab, kerapatan) aman; pola yang menyembunyikan
+elemen (FAB hilang saat gulir, header menciut) atau melakukan-dulu-tanya-nanti
+(undo) HARUS dipilah per layar, terutama yang menyentuh uang/stok.
