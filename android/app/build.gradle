@@ -49,6 +49,25 @@ android {
         versionName = flutter.versionName
     }
 
+    // Dua jalur build (lihat CLAUDE.md "Jalur Build"): `production` = ID &
+    // nama asli (dipakai toko sungguhan); `beta` = ID berbeda (.beta) sehingga
+    // TERPASANG BERDAMPINGAN dgn produksi dgn data, database & kunci terpisah —
+    // mencoba build branch tidak pernah menimpa/merusak aplikasi produksi.
+    // Build SELALU memakai `--flavor production|beta` (CI memilih otomatis).
+    flavorDimensions = ["track"]
+    productFlavors {
+        production {
+            dimension = "track"
+            manifestPlaceholders = [appName: "The POS"]
+        }
+        beta {
+            dimension = "track"
+            applicationIdSuffix = ".beta"
+            versionNameSuffix = "-beta"
+            manifestPlaceholders = [appName: "The POS Beta"]
+        }
+    }
+
     buildTypes {
         release {
             // Pakai keystore rilis bila tersedia; jika tidak, debug signing
