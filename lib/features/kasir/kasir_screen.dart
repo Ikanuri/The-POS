@@ -48,6 +48,8 @@ import '../../core/theme/app_overlays.dart';
 import '../../core/widgets/bump_on_change.dart';
 import '../../core/widgets/press_scale.dart';
 import '../../core/widgets/skeleton.dart';
+import '../../core/services/kasir_sticker_service.dart';
+import '../../core/widgets/app_sticker.dart';
 
 const _kasirUuid = Uuid();
 
@@ -614,6 +616,13 @@ final _kasirSelectedGroupProvider = StateProvider<int?>((ref) => null);
 /// "Beranda" di baris kategori.
 final _kasirShowAllProvider =
     StateProvider.autoDispose.family<bool, String>((ref, cartId) => false);
+
+/// JSON Lottie stiker Kasir (unggahan owner atau bawaan); null = tanpa stiker.
+/// autoDispose: dibaca ulang tiap layar/landing tampil (ganti stiker di
+/// Pengaturan langsung berlaku).
+final kasirStickerProvider = FutureProvider.autoDispose
+    .family<String?, KasirStickerSlot>((ref, slot) =>
+        KasirStickerService.loadJson(ref.watch(databaseProvider), slot));
 
 /// Produk INDUK terlaris 30 hari terakhir (skor = jumlah nota berbeda) —
 /// sumber yang sama dengan saran terlaris katalog HTML. Dipetakan ke daftar
@@ -2259,6 +2268,21 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
                                 child: Column(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
+                                    if (query.isNotEmpty &&
+                                        ref
+                                                .watch(kasirStickerProvider(
+                                                    KasirStickerSlot.notFound))
+                                                .valueOrNull !=
+                                            null)
+                                      AppSticker(
+                                        key: const Key('notfound-sticker'),
+                                        json: ref
+                                            .watch(kasirStickerProvider(
+                                                KasirStickerSlot.notFound))
+                                            .valueOrNull!,
+                                        size: 120,
+                                      )
+                                    else
                                     Container(
                                       width: 56,
                                       height: 56,
@@ -2609,9 +2633,18 @@ class _KasirLanding extends ConsumerWidget {
       padding: const EdgeInsets.only(bottom: 24),
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 28, 20, 4),
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 4),
           child: Column(
             children: [
+              if (ref
+                      .watch(kasirStickerProvider(KasirStickerSlot.landing))
+                      .valueOrNull
+                  case final String sticker) ...[
+                AppSticker(
+                    key: const Key('landing-sticker'), json: sticker),
+                const SizedBox(height: 8),
+              ] else
+                const SizedBox(height: 8),
               Text(
                 'Mau jual apa hari ini?',
                 textAlign: TextAlign.center,

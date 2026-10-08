@@ -7,7 +7,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:the_pos/core/database/app_database.dart';
 import 'package:the_pos/core/providers/device_provider.dart';
 import 'package:the_pos/core/theme/app_theme.dart';
+import 'package:the_pos/core/services/catalog_sticker_service.dart';
+import 'package:the_pos/core/services/kasir_sticker_service.dart';
+import 'package:the_pos/core/widgets/app_sticker.dart';
 import 'package:the_pos/features/kasir/kasir_screen.dart';
+import 'package:lottie/lottie.dart';
+import 'dart:io';
+import 'dart:convert';
 
 /// Landing layar Kasir: query "terakhir dijual" (DB nyata) + perilaku layar
 /// (landing saat kosong, daftar saat mengetik/kategori/"Semua produk",
@@ -69,7 +75,9 @@ Future<void> _sale(AppDatabase db, DateTime at, List<(String, double)> lines,
 
 Future<void> _pumpKasir(WidgetTester tester, AppDatabase db,
     {Map<String, Object> prefs = const {},
-    Size size = const Size(430, 2400)}) async {
+    Size size = const Size(430, 2400),
+    bool stickers = false,
+    bool reduced = false}) async {
   await tester.binding.setSurfaceSize(size);
   addTearDown(() => tester.binding.setSurfaceSize(null));
   SharedPreferences.setMockInitialValues(
@@ -78,6 +86,10 @@ Future<void> _pumpKasir(WidgetTester tester, AppDatabase db,
     ProviderScope(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        // Stiker berulang selamanya -> pumpAndSettle tak pernah selesai.
+        // Test umum mematikannya; test stiker khusus menyalakannya.
+        if (!stickers)
+          kasirStickerProvider.overrideWith((ref, slot) async => null),
         deviceProvider.overrideWith((ref) => DeviceNotifier()
           ..state = const DeviceIdentity(
             storeUuid: 'test-store-uuid',
@@ -87,10 +99,23 @@ Future<void> _pumpKasir(WidgetTester tester, AppDatabase db,
             deviceRole: 'owner',
           )),
       ],
-      child: MaterialApp(theme: AppTheme.light(), home: const KasirScreen()),
+      child: MaterialApp(
+        theme: AppTheme.light(),
+        builder: (c, child) => MediaQuery(
+            data: MediaQuery.of(c).copyWith(disableAnimations: reduced),
+            child: child!),
+        home: const KasirScreen(),
+      ),
     ),
   );
-  await tester.pumpAndSettle();
+  if (stickers) {
+    // Stiker berulang: jangan pumpAndSettle.
+    for (var i = 0; i < 20; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+  } else {
+    await tester.pumpAndSettle();
+  }
 }
 
 Future<void> _drain(WidgetTester tester) async {
@@ -247,6 +272,80 @@ void main() {
       await _pumpKasir(tester, db, size: const Size(360, 800));
       expect(find.byKey(const Key('kasir-landing')), findsOneWidget);
       expect(tester.takeException(), isNull);
+      await _drain(tester);
+      await db.close();
+    });
+  });
+
+  group('stiker .tgs Kasir', () {
+    Future<Uint8List> asset(String path) async =>
+        File(path).readAsBytesSync();
+
+    test('loadJson: bawaan dimuat; unggahan valid menggantikan; unggahan '
+        'rusak jatuh ke bawaan; reset kembali bawaan', () async {
+      final db = AppDatabase(NativeDatabase.memory());
+      const slot = KasirStickerSlot.landing;
+      final bundled = await KasirStickerService.loadJson(db, slot,
+          loadAsset: asset);
+      expect(bundled, isNotNull);
+      expect(await KasirStickerService.isCustom(db, slot), isFalse);
+
+      // Unggahan valid: pakai notfound.tgs sebagai "berkas owner".
+      final other = File('assets/stickers/closed.tgs').readAsBytesSync();
+      await KasirStickerService.setCustom(db, slot, other);
+      expect(await KasirStickerService.isCustom(db, slot), isTrue);
+      final custom = await KasirStickerService.loadJson(db, slot,
+          loadAsset: asset);
+      expect(custom, CatalogStickerService.validateTgs(other).json);
+      expect(custom, isNot(bundled));
+
+      // Berkas rusak tersimpan -> aman, kembali ke bawaan.
+      await db.setSetting(slot.settingKey, base64Encode([1, 2, 3]));
+      expect(await KasirStickerService.loadJson(db, slot, loadAsset: asset),
+          bundled);
+
+      await KasirStickerService.resetToDefault(db, slot);
+      expect(await KasirStickerService.isCustom(db, slot), isFalse);
+      expect(await KasirStickerService.loadJson(db, slot, loadAsset: asset),
+          bundled);
+      await db.close();
+    });
+
+    test('slot Kasir terpisah dari slot katalog HTML', () {
+      for (final s in KasirStickerSlot.values) {
+        expect(CatalogStickerService.allKeys.contains(s.settingKey), isFalse);
+      }
+    });
+
+    testWidgets('landing menampilkan stiker; "produk tidak ditemukan" '
+        'menampilkan stiker; pengaturan mati = tanpa stiker',
+        (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      await _addProduct(db, 'Gula Pasir');
+      await _pumpKasir(tester, db, stickers: true);
+      expect(find.byKey(const Key('landing-sticker')), findsOneWidget);
+      expect(find.byType(Lottie), findsOneWidget);
+
+      await tester.enterText(find.byType(TextField).first, 'zzzz-tidak-ada');
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(find.byKey(const Key('landing-sticker')), findsNothing);
+      expect(find.byKey(const Key('notfound-sticker')), findsOneWidget);
+      expect(find.text('Produk tidak ditemukan'), findsOneWidget);
+
+      await _drain(tester);
+      await db.close();
+    });
+
+    testWidgets('"kurangi animasi": stiker diam (tidak berulang)',
+        (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      await _addProduct(db, 'Gula Pasir');
+      await _pumpKasir(tester, db, stickers: true, reduced: true);
+      expect(find.byType(AppSticker), findsOneWidget);
+      // Tanpa animasi berulang -> pumpAndSettle selesai (tidak menggantung).
+      await tester.pumpAndSettle();
       await _drain(tester);
       await db.close();
     });

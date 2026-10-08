@@ -1,4 +1,5 @@
 import '../kasir/cart_provider.dart' show kasirLandingProvider;
+import 'kasir_sticker_sheet.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -453,6 +454,15 @@ class PengaturanScreen extends ConsumerWidget {
                         value: ref.watch(kasirLandingProvider),
                         onChanged: (v) =>
                             ref.read(kasirLandingProvider.notifier).set(v),
+                      ),
+                      ListTile(
+                        key: const Key('setting-kasir-sticker'),
+                        leading: const Icon(Icons.emoji_emotions_outlined),
+                        title: const Text('Stiker Animasi Kasir'),
+                        subtitle: const Text(
+                            'Landing & "Produk tidak ditemukan" (.tgs)'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => KasirStickerSheet.show(context),
                       ),
                     ],
                   ),
