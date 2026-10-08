@@ -47,6 +47,7 @@ import 'widgets/tx_history_sheet.dart';
 import '../../core/theme/app_overlays.dart';
 import '../../core/widgets/bump_on_change.dart';
 import '../../core/widgets/press_scale.dart';
+import '../../core/widgets/skeleton.dart';
 
 const _kasirUuid = Uuid();
 
@@ -2238,8 +2239,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
                               ),
                             );
                           },
-                          loading: () =>
-                              const Center(child: CircularProgressIndicator()),
+                          loading: () => const SkeletonList(),
                           error: (e, _) => Center(child: Text('Error: $e')),
                         ),
                       ),
@@ -2994,10 +2994,9 @@ class _ProductCard extends ConsumerWidget {
                           style: AppTheme.numStyle(context,
                               size: 14, weight: FontWeight.w700),
                         ),
-                        loading: () => const SizedBox(
+                        loading: () => const SkeletonBox(
                           height: 14,
                           width: 40,
-                          child: _PriceShimmer(),
                         ),
                         error: (_, __) => const SizedBox.shrink(),
                       ),
@@ -3046,19 +3045,6 @@ class _ProductCard extends ConsumerWidget {
         ),
       ),
       ),  // PressScale
-    );
-  }
-}
-
-class _PriceShimmer extends StatelessWidget {
-  const _PriceShimmer();
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.outlineVariant.withOpacity(0.4),
-        borderRadius: BorderRadius.circular(4),
-      ),
     );
   }
 }
@@ -3250,10 +3236,11 @@ class _ProductListTileState extends ConsumerState<_ProductListTile>
                                 ),
                             ],
                           ),
-                          loading: () => Text('…',
-                              key: const ValueKey('sub-loading'),
-                              style: TextStyle(
-                                  fontSize: 12, color: cs.onSurfaceVariant)),
+                          loading: () => const Padding(
+                            key: ValueKey('sub-loading'),
+                            padding: EdgeInsets.symmetric(vertical: 3),
+                            child: SkeletonBox(width: 90, height: 11),
+                          ),
                           error: (_, __) => const SizedBox.shrink(
                               key: ValueKey('sub-error')),
                         ),
