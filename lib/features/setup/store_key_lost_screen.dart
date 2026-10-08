@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/providers/device_provider.dart';
+import '../../core/theme/app_overlays.dart';
 
 /// Item 41 A.6 — layar pemulihan saat identitas device PERNAH ada
 /// (storeUuid tersimpan) tapi kunci toko tidak terbaca dari secure storage
@@ -38,7 +39,7 @@ class _StoreKeyLostScreenState extends ConsumerState<StoreKeyLostScreen> {
   }
 
   Future<void> _reset() async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Reset Identitas Device?'),

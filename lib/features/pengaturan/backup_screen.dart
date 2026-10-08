@@ -8,6 +8,7 @@ import '../../core/services/db_export_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/export_destination.dart';
 import '../../core/widgets/inline_banner.dart';
+import '../../core/theme/app_overlays.dart';
 
 /// Status backup (waktu terakhir + setting otomatis) untuk kartu pengingat.
 final _backupStatusProvider = FutureProvider.autoDispose<BackupStatus>((ref) {
@@ -32,7 +33,7 @@ class _BackupScreenState extends ConsumerState<BackupScreen>
     // HANYA berlaku utk ekspor baru — impor file lama ber-password pendek
     // tetap diterima (lihat _import, tanpa batasan).
     String? pwError;
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
@@ -127,7 +128,7 @@ class _BackupScreenState extends ConsumerState<BackupScreen>
 
     final pwCtrl = TextEditingController();
     if (!mounted) return;
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Password Restore'),

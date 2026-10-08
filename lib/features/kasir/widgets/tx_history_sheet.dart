@@ -19,6 +19,7 @@ import '../cart_price_category_provider.dart';
 import '../cart_provider.dart';
 import '../merged_receipt_screen.dart';
 import 'debt_payment_sheet.dart';
+import '../../../core/theme/app_overlays.dart';
 
 /// Parameter query riwayat. Saat tidak ada filter aktif → 100 terakhir;
 /// saat ada filter aktif → sampai 1000 agar pencarian menjangkau data lama.
@@ -307,7 +308,7 @@ class _TxHistorySheetState extends ConsumerState<TxHistorySheet> {
   }
 
   Future<void> _pickMethod() async {
-    final picked = await showModalBottomSheet<String>(
+    final picked = await showAppSheet<String>(
       context: context,
       builder: (ctx) => SafeArea(
         child: Column(
@@ -704,7 +705,7 @@ class _TxHistorySheetState extends ConsumerState<TxHistorySheet> {
   Future<void> _bayarSisa(int sumSisa) async {
     final ctrl = TextEditingController(
         text: ThousandsSeparatorFormatter.format(sumSisa));
-    final result = await showDialog<int>(
+    final result = await showAppDialog<int>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Bayar Sisa Gabungan'),
@@ -1104,7 +1105,7 @@ class _TxDetail extends ConsumerWidget {
     List<Customer> suggestions = [];
 
     try {
-      final result = await showDialog<({String? name, String? id})>(
+      final result = await showAppDialog<({String? name, String? id})>(
         context: context,
         builder: (ctx) => StatefulBuilder(
           builder: (ctx, setSt) => AlertDialog(
@@ -1278,7 +1279,7 @@ Future<bool> showVoidTransactionDialog(
   final reasonCtrl = TextEditingController();
 
   try {
-    final result = await showDialog<String>(
+    final result = await showAppDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Batalkan Transaksi?'),
@@ -1541,7 +1542,7 @@ Future<void> _redoCartFromVoidedTransaction(
   final canOfferPrabayar =
       tx.paid > 0 && (tx.status == 'lunas' || tx.status == 'kurang_bayar');
   if (canOfferPrabayar && context.mounted) {
-    final bawa = await showDialog<bool>(
+    final bawa = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Bawa Pembayaran Lama?'),

@@ -6,6 +6,7 @@ import '../../kasir/cart_provider.dart';
 import 'catalog_models.dart';
 import 'catalog_share.dart';
 import 'catalog_store.dart';
+import '../../../core/theme/app_overlays.dart';
 
 /// Daftar katalog tersimpan. Dibuka dari tombol "Katalog" di tab Produk.
 /// Tombol "Buat Katalog" meminjam layar kasir dalam mode katalog.
@@ -118,7 +119,7 @@ class _CatalogTile extends ConsumerWidget {
   }
 
   Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
-    final ok = await showDialog<bool>(
+    final ok = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Hapus Katalog?'),

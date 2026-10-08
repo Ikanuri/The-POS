@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/database/app_database.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/app_overlays.dart';
 
 /// Konfirmasi anti-misclick utk "Penuhi" pre-order yang SISANYA <= 1 (tidak
 /// ada dialog jumlah, dulu langsung dipenuhi). Kalau DP/jaminan masih
@@ -17,7 +18,7 @@ Future<bool> confirmFulfillPreorder(
   final owed = await db.getPreorderDepositOwed(entryId);
   if (!context.mounted) return false;
   final scheme = Theme.of(context).colorScheme;
-  final ok = await showDialog<bool>(
+  final ok = await showAppDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
       title: const Text('Penuhi pre-order?'),
@@ -63,7 +64,7 @@ Future<bool> confirmCollectLeftBehind(
   required String itemName,
   required String customerLabel,
 }) async {
-  final ok = await showDialog<bool>(
+  final ok = await showAppDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
       title: const Text('Tandai sudah diambil?'),

@@ -7,6 +7,7 @@ import '../providers/device_provider.dart';
 import '../theme/app_theme.dart' show formatRupiah;
 import '../utils/input_formatters.dart';
 import '../utils/price_category_calc.dart';
+import '../theme/app_overlays.dart';
 
 /// Hasil editor margin — dipakai baik dari layar Kategori Harga
 /// (`kategori_harga_screen.dart`, langsung menulis via `setPriceCategoryMargin`)
@@ -285,7 +286,7 @@ class _PriceCategoryMarginSheetState extends State<PriceCategoryMarginSheet> {
   }
 }
 
-/// Sentinel dikembalikan `showModalBottomSheet` saat user memilih "Lepas
+/// Sentinel dikembalikan `showAppSheet` saat user memilih "Lepas
 /// dari Kategori" pada [pickPriceCategoryForRow].
 class _UnassignMarker {
   const _UnassignMarker();
@@ -328,7 +329,7 @@ Future<PriceCategoryAssignOutcome?> pickPriceCategoryForRow({
   final cats = await db.getAllPriceCategories();
   if (!context.mounted) return null;
 
-  final picked = await showModalBottomSheet<Object>(
+  final picked = await showAppSheet<Object>(
     context: context,
     builder: (ctx) => SafeArea(
       child: Column(
@@ -413,7 +414,7 @@ Future<PriceCategoryAssignOutcome?> pickPriceCategoryForRow({
   if (!context.mounted) return null;
 
   final sameCategory = cat.id == currentCategoryId;
-  final margin = await showModalBottomSheet<PriceCategoryMarginResult>(
+  final margin = await showAppSheet<PriceCategoryMarginResult>(
     context: context,
     isScrollControlled: true,
     builder: (_) => PriceCategoryMarginSheet(

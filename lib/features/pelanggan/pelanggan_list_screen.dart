@@ -6,6 +6,7 @@ import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../shell/sync_status_banner.dart';
+import '../../core/theme/app_overlays.dart';
 
 final _pelangganQueryProvider = StateProvider<String>((ref) => '');
 
@@ -288,7 +289,7 @@ class _CustomerTile extends ConsumerWidget {
 
   Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
     final hasDebt = customer.outstandingDebt > 0;
-    final ok = await showDialog<bool>(
+    final ok = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Hapus Pelanggan'),

@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import '../theme/app_overlays.dart';
 
 /// Setelah file backup (BPOP2/BPOT1/dst) selesai dibuat: tanya user mau
 /// disimpan ke penyimpanan perangkat (lewat `FilePicker.saveFile`, alur
@@ -27,7 +28,7 @@ Future<bool> saveOrShareExport({
   // besar bersaing lebar dalam `Row` `actions` AlertDialog terbukti overflow
   // di HP sempit (gotcha dicatat di CLAUDE.md). Ditumpuk vertikal di content
   // sebagai gantinya (tiap tombol sendiri di barisnya, aman lebar penuh).
-  final choice = await showDialog<String>(
+  final choice = await showAppDialog<String>(
     context: context,
     builder: (ctx) => AlertDialog(
       title: Text(title),

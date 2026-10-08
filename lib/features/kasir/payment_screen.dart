@@ -28,6 +28,7 @@ import 'cart_provider.dart';
 import 'discount_allocation.dart';
 import 'receipt_screen.dart' show netRemainingOwed;
 import 'widgets/payment_qris_view.dart';
+import '../../core/theme/app_overlays.dart';
 
 const _uuid = Uuid();
 
@@ -621,7 +622,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
   Future<void> _pickEmployee() async {
     FocusScope.of(context).unfocus();
     final scheme = Theme.of(context).colorScheme;
-    final result = await showModalBottomSheet<Object?>(
+    final result = await showAppSheet<Object?>(
       context: context,
       isScrollControlled: true,
       builder: (ctx) => SafeArea(
@@ -865,7 +866,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       orElse: () => _defaultDiscountRoundDirection,
     );
     if (!mounted) return;
-    final result = await showDialog<_EditTotalDialogResult>(
+    final result = await showAppDialog<_EditTotalDialogResult>(
       context: context,
       builder: (ctx) => _EditTotalDialog(
         cartTotal: _cartTotal,
@@ -2395,7 +2396,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     if (_selectedMethodType != 'tempo') {
       final selectedMethod =
           _methods.where((m) => m.id == _selectedMethodId).firstOrNull;
-      final result = await showModalBottomSheet<int>(
+      final result = await showAppSheet<int>(
         context: context,
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
@@ -2777,7 +2778,7 @@ class _CashKeypadSheetState extends State<_CashKeypadSheet> {
   late int _tendered = widget.initial;
 
   /// Mirror lokal `widget.unclaimedChangeTaken` — sheet ini dibuka via
-  /// `showModalBottomSheet`, yang builder-nya cuma dievaluasi SEKALI saat
+  /// `showAppSheet`, yang builder-nya cuma dievaluasi SEKALI saat
   /// dibuka. `setState` di parent (`_PaymentScreenState`) TIDAK memicu
   /// rebuild sheet yang sudah terbuka, jadi kalau Checkbox baca langsung
   /// `widget.unclaimedChangeTaken`, tampilannya beku di nilai awal walau

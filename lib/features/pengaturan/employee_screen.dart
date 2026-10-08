@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
+import '../../core/theme/app_overlays.dart';
 
 const _empUuid = Uuid();
 
@@ -100,7 +101,7 @@ class EmployeeScreen extends ConsumerWidget {
       {Employee? employee}) async {
     final ctrl = TextEditingController(text: employee?.name ?? '');
     final isEdit = employee != null;
-    final saved = await showDialog<bool>(
+    final saved = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(isEdit ? 'Edit Pegawai' : 'Tambah Pegawai'),
@@ -145,7 +146,7 @@ class EmployeeScreen extends ConsumerWidget {
 
   Future<void> _confirmDelete(
       BuildContext context, WidgetRef ref, Employee e) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Hapus Pegawai'),

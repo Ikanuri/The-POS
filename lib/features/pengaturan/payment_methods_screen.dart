@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
+import '../../core/theme/app_overlays.dart';
 
 const _pmUuid = Uuid();
 
@@ -59,7 +60,7 @@ class PaymentMethodsScreen extends ConsumerWidget {
   }
 
   void _showAddSheet(BuildContext context, WidgetRef ref) {
-    showModalBottomSheet(
+    showAppSheet(
       context: context,
       isScrollControlled: true,
       builder: (_) => const _AddMethodSheet(),
@@ -136,7 +137,7 @@ class _MethodTile extends ConsumerWidget {
               content: Text('Nonaktifkan metode ini dulu sebelum menghapus.')));
           return false;
         }
-        final ok = await showDialog<bool>(
+        final ok = await showAppDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
             title: Text('Hapus ${method.name}?'),
@@ -166,7 +167,7 @@ class _MethodTile extends ConsumerWidget {
   }
 
   void _showEditSheet(BuildContext context, PaymentMethod method) {
-    showModalBottomSheet(
+    showAppSheet(
       context: context,
       isScrollControlled: true,
       builder: (_) => _AddMethodSheet(existing: method),

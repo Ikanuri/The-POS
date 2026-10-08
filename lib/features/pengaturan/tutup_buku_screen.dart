@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/services/tutup_buku_service.dart';
 import '../../core/widgets/inline_banner.dart';
+import '../../core/theme/app_overlays.dart';
 
 class TutupBukuScreen extends ConsumerStatefulWidget {
   const TutupBukuScreen({super.key});
@@ -87,7 +88,7 @@ class _TutupBukuScreenState extends ConsumerState<TutupBukuScreen>
     final device = ref.read(deviceProvider);
 
     // Konfirmasi
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
@@ -148,7 +149,7 @@ class _TutupBukuScreenState extends ConsumerState<TutupBukuScreen>
         periodEnd: periodEnd,
       );
       if (!mounted) return;
-      await showDialog(
+      await showAppDialog(
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('Tutup Buku Selesai'),

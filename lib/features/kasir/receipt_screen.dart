@@ -33,6 +33,7 @@ import 'qris_choice.dart';
 import 'widgets/debt_payment_sheet.dart';
 import 'widgets/payment_qris_view.dart';
 import 'widgets/tx_history_sheet.dart';
+import '../../core/theme/app_overlays.dart';
 
 /// Label "Kasir: ..." di header nota. Bug nyata dilaporkan user: nota
 /// `A1-...` (dibuat device ASISTEN) dilihat dari HP owner tertulis
@@ -732,7 +733,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     var depositQty = qty;
     final depositCtrl = TextEditingController(text: _fmtQtyShort(depositQty));
 
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
@@ -878,7 +879,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
 
   Future<void> _editItemNote(TransactionItem item) async {
     final ctrl = TextEditingController(text: item.itemNote ?? '');
-    final result = await showDialog<String?>(
+    final result = await showAppDialog<String?>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(_productNames[item.productId] ?? 'Catatan Barang'),
@@ -930,7 +931,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     final canPreorder =
         item.qty - _alreadyPreorderedQty(item.productUnitId) > 0;
 
-    final saved = await showModalBottomSheet<String>(
+    final saved = await showAppSheet<String>(
       context: context,
       isScrollControlled: true,
       builder: (ctx) {
@@ -1087,7 +1088,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
 
   Future<void> _editInternalNote() async {
     final ctrl = TextEditingController(text: _tx!.internalNote ?? '');
-    final result = await showDialog<String?>(
+    final result = await showAppDialog<String?>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Catatan Internal'),
@@ -1134,7 +1135,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
 
   Future<void> _editStrukNote() async {
     final ctrl = TextEditingController(text: _tx!.strukNote ?? '');
-    final result = await showDialog<String?>(
+    final result = await showAppDialog<String?>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Catatan Nota'),
@@ -1237,7 +1238,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       }
     }
     if (!mounted) return;
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Batalkan Pembayaran?'),
@@ -1530,7 +1531,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   Future<void> _pickEmployee() async {
     final scheme = Theme.of(context).colorScheme;
     final db = ref.read(databaseProvider);
-    final result = await showModalBottomSheet<Object?>(
+    final result = await showAppSheet<Object?>(
       context: context,
       isScrollControlled: true,
       builder: (ctx) => SafeArea(
@@ -1855,7 +1856,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         paymentMethods.where((m) => m.type == 'tunai').firstOrNull?.id ??
         fallbackTunaiId;
 
-    final saved = await showModalBottomSheet<bool>(
+    final saved = await showAppSheet<bool>(
       context: context,
       isScrollControlled: true,
       builder: (ctx) {
@@ -2289,7 +2290,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   /// ditambah opsi baru, cuma didesain ulang supaya terasa "utuh" sbg sheet
   /// pengaturan (judul+ikon, switch row dgn ikon & deskripsi singkat).
   Future<void> _showReceiptSettingsSheet() async {
-    await showModalBottomSheet<void>(
+    await showAppSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (sheetCtx) => StatefulBuilder(
@@ -2375,7 +2376,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   /// NULL) — lihat keputusan "jangan buat struk terpisah" di PLAN.md
   /// Item 52.
   Future<void> _showCatatMenu(String transactionId) async {
-    final choice = await showModalBottomSheet<String>(
+    final choice = await showAppSheet<String>(
       context: context,
       builder: (ctx) => SafeArea(
         child: Column(
@@ -2448,7 +2449,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     // ambient berisiko ambigu (mis. checklist kebetulan jg menampilkan '1').
     // Wajib diisi eksplisit.
     final otherQtyController = TextEditingController();
-    final result = await showDialog<bool>(
+    final result = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
@@ -2733,7 +2734,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     final notaCustomer = _customerDisplay(_tx!);
     final customerController =
         TextEditingController(text: notaCustomer == 'Umum' ? '' : notaCustomer);
-    final result = await showDialog<bool>(
+    final result = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Catat Pinjaman Barang'),
@@ -2943,13 +2944,13 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
 
     final boundaryKey = GlobalKey();
     // Akumulasi overscroll drag-turun dlm SATU gesture — dismiss-drag
-    // bawaan `showModalBottomSheet` cuma nyambung kalau isi TIDAK
+    // bawaan `showAppSheet` cuma nyambung kalau isi TIDAK
     // scrollable; begitu gambar struk (+QR) melebihi layar & jadi
     // scrollable, gesture arena selalu dimenangkan scrollable itu. Lihat
     // dok setara di `debt_payment_sheet.dart` (kena bug yang sama).
     var dragOverscroll = 0.0;
     if (!mounted) return;
-    await showModalBottomSheet(
+    await showAppSheet(
       context: context,
       isScrollControlled: true,
       builder: (ctx) => StatefulBuilder(
@@ -4073,7 +4074,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     String? qtyError;
     String? depositError;
 
-    final saved = await showModalBottomSheet<bool>(
+    final saved = await showAppSheet<bool>(
       context: context,
       isScrollControlled: true,
       builder: (ctx) => StatefulBuilder(
@@ -4480,7 +4481,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
   }) async {
     final controller = TextEditingController(
         text: sisa % 1 == 0 ? sisa.toInt().toString() : '$sisa');
-    return showDialog<double>(
+    return showAppDialog<double>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(title),

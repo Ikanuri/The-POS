@@ -15,6 +15,7 @@ import '../../core/services/catalog_sticker_service.dart';
 import '../../core/services/cloudflare_publish_service.dart';
 import '../../core/services/order_page_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/app_overlays.dart';
 
 /// Generate & bagikan katalog pesanan HTML — file statis self-contained
 /// (tanpa server/hosting) yang bisa dibuka pelanggan dari WhatsApp untuk
@@ -558,7 +559,7 @@ class _OrderShareScreenState extends ConsumerState<OrderShareScreen> {
     if (!mounted) return;
     final tokenCtrl = TextEditingController(text: creds?.apiToken ?? '');
     final accountCtrl = TextEditingController(text: creds?.accountId ?? '');
-    final saved = await showDialog<bool>(
+    final saved = await showAppDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Pengaturan Cloudflare Pages'),

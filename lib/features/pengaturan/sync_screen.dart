@@ -10,6 +10,7 @@ import '../../core/widgets/qr_sync_widgets.dart';
 import '../laci_meja/laci_meja_proposal_review_screen.dart';
 import '../pelanggan/customer_proposal_review_screen.dart';
 import 'product_proposal_review_screen.dart';
+import '../../core/theme/app_overlays.dart';
 
 /// Kategori yang tersedia di payload sync (yang ada datanya), beserta
 /// jumlah baris. Dipisah jadi fungsi murni supaya bisa diuji langsung tanpa
@@ -107,7 +108,7 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
     }
 
     final selected = {for (final k in available.keys) k: true};
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSt) => AlertDialog(
@@ -190,7 +191,7 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
   /// kirim ulang lewat full-dump seperti dulu — lihat dok `LanSyncService.
   /// rejectSync`), jadi WAJIB minta konfirmasi eksplisit sebelum dieksekusi.
   Future<void> _reject(PendingSyncItem item) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Tolak Data Sync?'),
@@ -224,7 +225,7 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
   /// sejak awal, bukan cuma delta. Dipakai kalau owner salah tolak (lihat
   /// dialog konfirmasi di atas) atau curiga ada data yang belum sampai.
   Future<void> _syncUlangPenuh() async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Sync Ulang Penuh?'),

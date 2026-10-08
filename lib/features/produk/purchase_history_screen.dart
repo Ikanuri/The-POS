@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/app_overlays.dart';
 
 /// PLAN Item 90 tahap 6 (keputusan user: "riwayat saja") — daftar pembelian
 /// yang pernah dicatat lewat Penerimaan Barang, detail per baris (HPP lama ->
@@ -104,7 +105,7 @@ Future<void> showPurchaseDetailSheet(
 
   String n(double v) => v % 1 == 0 ? v.toInt().toString() : v.toString();
 
-  final action = await showModalBottomSheet<String>(
+  final action = await showAppSheet<String>(
     context: context,
     isScrollControlled: true,
     builder: (ctx) => SafeArea(
@@ -199,7 +200,7 @@ Future<void> showPurchaseDetailSheet(
       messenger.showSnackBar(const SnackBar(
           content: Text('Usulan HPP ditolak — stok tetap tercatat')));
     case 'void':
-      final ok = await showDialog<bool>(
+      final ok = await showAppDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('Batalkan pembelian?'),

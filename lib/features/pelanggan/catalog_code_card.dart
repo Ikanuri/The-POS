@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/services/catalog_access_service.dart';
 import '../../core/services/cloudflare_publish_service.dart';
+import '../../core/theme/app_overlays.dart';
 
 /// Kode akses katalog per pelanggan (toko tutup) — dibuat/diganti/dicabut
 /// dari form pelanggan (khusus owner). Kode TIDAK ikut ke HTML (hanya
@@ -41,7 +42,7 @@ class _CatalogCodeCardState extends ConsumerState<CatalogCodeCard> {
 
   Future<void> _rotate() async {
     if (_code != null) {
-      final ok = await showDialog<bool>(
+      final ok = await showAppDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('Buat kode baru?'),
@@ -66,7 +67,7 @@ class _CatalogCodeCardState extends ConsumerState<CatalogCodeCard> {
   }
 
   Future<void> _revoke() async {
-    final ok = await showDialog<bool>(
+    final ok = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Cabut kode?'),

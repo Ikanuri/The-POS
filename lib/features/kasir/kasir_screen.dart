@@ -43,6 +43,7 @@ import 'widgets/debt_settlement_sheet.dart';
 import 'widgets/item_entry_sheet.dart';
 import 'widgets/paste_order_sheet.dart';
 import 'widgets/tx_history_sheet.dart';
+import '../../core/theme/app_overlays.dart';
 
 const _kasirUuid = Uuid();
 
@@ -1552,7 +1553,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
 
     if (_scannerOpen) _closeScanner();
     if (!mounted) return;
-    showModalBottomSheet(
+    showAppSheet(
       context: context,
       isScrollControlled: true,
       builder: (_) => PasteOrderSheet(cartId: _cartId, initialText: text),
@@ -1572,7 +1573,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
     _cartSheetOpen = true;
     final payRoute =
         _isAddMode ? '/kasir/tambah/${widget.addToTxId}/bayar' : '/kasir/bayar';
-    final editProductId = await showModalBottomSheet<String>(
+    final editProductId = await showAppSheet<String>(
       context: context,
       isScrollControlled: true,
       builder: (_) => CartSheet(
@@ -1587,7 +1588,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
     final product =
         await ref.read(databaseProvider).getProductById(editProductId);
     if (product == null || !mounted) return;
-    final navigatedAway = await showModalBottomSheet<bool>(
+    final navigatedAway = await showAppSheet<bool>(
       context: context,
       isScrollControlled: true,
       builder: (_) => ItemEntrySheet(product: product, cartId: _cartId),
@@ -1659,7 +1660,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
     final wasSearchActive =
         _searchFocus.hasFocus && _searchCtrl.text.isNotEmpty;
     if (wasSearchActive) setState(() => _searchForceExpanded = true);
-    await showModalBottomSheet(
+    await showAppSheet(
       context: context,
       isScrollControlled: true,
       builder: (_) => ItemEntrySheet(product: product, cartId: _cartId),
@@ -1739,7 +1740,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
   Future<String?> _askHoldLabel() async {
     final ctrl = TextEditingController();
     try {
-      return await showDialog<String>(
+      return await showAppDialog<String>(
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('Tahan Pesanan'),
@@ -2071,7 +2072,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
                 ref.read(_kasirSearchProvider(_cartId).notifier).state = v,
             onScan: _openScanner,
             onHeld: () => setState(() => _heldPanelOpen = !_heldPanelOpen),
-            onHistory: () => showModalBottomSheet(
+            onHistory: () => showAppSheet(
               context: context,
               isScrollControlled: true,
               builder: (_) => const TxHistorySheet(),
@@ -2082,7 +2083,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
             // kode pesanan yang sama) — hanya disembunyikan di mode
             // Katalog (bukan transaksi sungguhan).
             onPasteOrder: !_isCatalogMode
-                ? () => showModalBottomSheet(
+                ? () => showAppSheet(
                       context: context,
                       isScrollControlled: true,
                       builder: (_) => PasteOrderSheet(cartId: _cartId),
@@ -2368,7 +2369,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
     if (items.isEmpty) return;
     final editing = ref.read(catalogEditProvider);
     final titleCtrl = TextEditingController(text: _catalogTitle);
-    final ok = await showDialog<bool>(
+    final ok = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(editing == null ? 'Simpan Katalog' : 'Simpan Perubahan'),
@@ -2425,7 +2426,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
   }
 
   Future<void> _openCatalogItemsSheet() async {
-    await showModalBottomSheet(
+    await showAppSheet(
       context: context,
       isScrollControlled: true,
       builder: (_) => _CatalogItemsSheet(cartId: _cartId),

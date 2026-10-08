@@ -6,6 +6,7 @@ import '../../../core/database/app_database.dart';
 import '../../../core/providers/device_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../cart_debt_settlement_provider.dart';
+import '../../../core/theme/app_overlays.dart';
 
 /// Fitur "Lunasi Hutang" — REDESAIN KEDUA (permintaan user, gantikan toggle
 /// boolean tunggal `_DebtSettlementCartRow` dari `a254152`, DIHAPUS total).
@@ -36,7 +37,7 @@ Future<void> showDebtSettlementSheet(
         content: Text('Tidak ada nota belum lunas utk pelanggan ini')));
     return;
   }
-  await showModalBottomSheet<void>(
+  await showAppSheet<void>(
     context: context,
     isScrollControlled: true,
     builder: (_) => _DebtSettlementSheetBody(

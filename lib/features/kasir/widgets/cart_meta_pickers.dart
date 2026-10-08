@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/providers/device_provider.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/app_overlays.dart';
 
 /// Hasil pilih pelanggan. null = batal (tidak berubah). Bila [id] dan [name]
 /// keduanya null → pelanggan dihapus (jadi "Umum"). [id] null + [name] terisi
@@ -29,7 +30,7 @@ Future<CustomerPick?> showCustomerPickerSheet(
   WidgetRef ref, {
   String? currentName,
 }) {
-  return showModalBottomSheet<CustomerPick>(
+  return showAppSheet<CustomerPick>(
     context: context,
     isScrollControlled: true,
     builder: (_) => _CustomerPickerSheet(currentName: currentName),
@@ -216,7 +217,7 @@ Future<EmployeePick?> showEmployeePickerSheet(
   final scheme = Theme.of(context).colorScheme;
   final employees = await ref.read(databaseProvider).getEmployees();
   if (!context.mounted) return null;
-  return showModalBottomSheet<EmployeePick>(
+  return showAppSheet<EmployeePick>(
     context: context,
     isScrollControlled: true,
     builder: (ctx) => SafeArea(

@@ -13,6 +13,7 @@ import '../../core/widgets/unit_dropdown.dart';
 import 'receive_goods_screen.dart';
 import 'reset_stock_screen.dart';
 import 'stock_opname_screen.dart';
+import '../../core/theme/app_overlays.dart';
 
 /// Item 30(b) — layar kontrol stok terpisah dari daftar Produk (fokus
 /// triase, bukan manajemen). Filter kategori → list produk stok riil
@@ -240,7 +241,7 @@ class _CekStokScreenState extends ConsumerState<CekStokScreen> {
     // belakangnya (pelajaran dari dialog "Sesuaikan Stok").
     ctrl.selection =
         TextSelection(baseOffset: 0, extentOffset: ctrl.text.length);
-    final result = await showDialog<double>(
+    final result = await showAppDialog<double>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(productName, style: const TextStyle(fontSize: 16)),

@@ -8,6 +8,7 @@ import '../../core/providers/device_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/inline_banner.dart';
 import '../shell/sync_status_banner.dart';
+import '../../core/theme/app_overlays.dart';
 
 final _searchQueryProvider = StateProvider<String>((ref) => '');
 final _selectedGroupProvider = StateProvider<int?>((ref) => null);
@@ -319,7 +320,7 @@ class _ProductTile extends ConsumerWidget {
   final int? basePrice;
 
   Future<void> _confirmDeactivate(BuildContext context, WidgetRef ref) async {
-    final ok = await showDialog<bool>(
+    final ok = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Nonaktifkan Produk?'),

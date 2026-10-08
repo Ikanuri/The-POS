@@ -6,6 +6,7 @@ import '../../core/providers/device_provider.dart';
 import '../../core/services/db_export_service.dart';
 import '../../core/utils/export_destination.dart';
 import '../../core/widgets/inline_banner.dart';
+import '../../core/theme/app_overlays.dart';
 
 /// Item 27 "Alihkan Owner" — pindahkan SELURUH data + identitas toko (bukan
 /// cuma data) ke device lain lewat file terenkripsi (BPOT1), TERPISAH dari
@@ -33,7 +34,7 @@ class _AlihOwnerScreenState extends ConsumerState<AlihOwnerScreen>
     // password ini. Minimal 8 karakter utk ekspor baru (impor file lama
     // ber-password pendek tetap diterima).
     String? pwError;
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
@@ -126,7 +127,7 @@ class _AlihOwnerScreenState extends ConsumerState<AlihOwnerScreen>
 
     final pwCtrl = TextEditingController();
     if (!mounted) return;
-    final password = await showDialog<String>(
+    final password = await showAppDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Password File Alihan'),
@@ -230,7 +231,7 @@ class _AlihOwnerScreenState extends ConsumerState<AlihOwnerScreen>
     final nameCtrl = TextEditingController(text: 'Owner');
     final codeCtrl = TextEditingController(text: 'O1');
     final formKey = GlobalKey<FormState>();
-    return showDialog<({String name, String code})>(
+    return showAppDialog<({String name, String code})>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Identitas Perangkat'),
@@ -287,7 +288,7 @@ class _AlihOwnerScreenState extends ConsumerState<AlihOwnerScreen>
 
   Future<bool?> _confirmDestructive(String storeName) {
     final ackNotifier = ValueNotifier(false);
-    return showDialog<bool>(
+    return showAppDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSt) => AlertDialog(

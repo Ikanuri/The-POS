@@ -11,6 +11,7 @@ import '../../../core/utils/input_formatters.dart';
 import '../../../core/utils/stock_display.dart';
 import '../cart_price_category_provider.dart';
 import '../cart_provider.dart';
+import '../../../core/theme/app_overlays.dart';
 
 /// Modal entri item: pilih satuan (harga lain), atur qty & harga, lalu
 /// tambahkan / perbarui keranjang. Menggantikan VariantSheet lama dengan
@@ -568,7 +569,7 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
     if (sel == null || _price <= 0) return;
     final amountCtrl = TextEditingController();
     double computedQty = 0;
-    await showDialog<void>(
+    await showAppDialog<void>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) {

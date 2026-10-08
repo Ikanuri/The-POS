@@ -15,6 +15,7 @@ import 'preorder_calc.dart';
 import 'preorder_quota_store.dart';
 import 'preorder_report.dart';
 import 'product_picker_dropdown.dart';
+import '../../core/theme/app_overlays.dart';
 
 enum _LaciMejaCategory { titipKetinggalan, pinjaman, preorder }
 
@@ -933,7 +934,7 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
   }) async {
     final controller = TextEditingController(
         text: sisa % 1 == 0 ? sisa.toInt().toString() : '$sisa');
-    return showDialog<double>(
+    return showAppDialog<double>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(title),
@@ -1204,7 +1205,7 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
     Map<String, String> productNames,
     Map<String, double> quotas,
   ) {
-    return showModalBottomSheet<void>(
+    return showAppSheet<void>(
       context: context,
       isScrollControlled: true,
       builder: (ctx) => SafeArea(

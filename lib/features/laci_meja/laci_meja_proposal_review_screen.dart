@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/services/lan_sync_service.dart';
+import '../../core/theme/app_overlays.dart';
 
 /// Item 52 ("Laci Meja") — review usulan client->host utk 3 tabel Laci
 /// Meja (left_behind_items/borrowed_items/preorder_entries), PARALEL dari
@@ -51,7 +52,7 @@ class _LaciMejaProposalReviewScreenState
       // akan otomatis diusulkan ulang begitu transaksinya sendiri sudah
       // tersinkron — tidak hilang, cukup ditunggu/diulang.
       if (result.skippedReasons.isNotEmpty) {
-        await showDialog<void>(
+        await showAppDialog<void>(
           context: context,
           builder: (ctx) => AlertDialog(
             title: const Text('Sebagian Baris Ditunda'),

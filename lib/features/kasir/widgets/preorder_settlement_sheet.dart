@@ -6,6 +6,7 @@ import '../../../core/database/app_database.dart';
 import '../../../core/providers/device_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../cart_preorder_settlement_provider.dart';
+import '../../../core/theme/app_overlays.dart';
 
 /// Fitur "Pelunasi Pre-order" DI KERANJANG — arsitektur IDENTIK dgn
 /// `showDebtSettlementSheet` (`debt_settlement_sheet.dart`, baca dok di sana
@@ -36,7 +37,7 @@ Future<void> showPreorderSettlementSheet(
             Text('Tidak ada pre-order dgn DP tertunggak utk pelanggan ini')));
     return;
   }
-  await showModalBottomSheet<void>(
+  await showAppSheet<void>(
     context: context,
     isScrollControlled: true,
     builder: (_) => _PreorderSettlementSheetBody(

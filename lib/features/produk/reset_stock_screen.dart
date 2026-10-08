@@ -5,6 +5,7 @@ import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/inline_banner.dart';
+import '../../core/theme/app_overlays.dart';
 
 /// Susulan (permintaan user): "beri opsi untuk reset seluruh atau grup
 /// produk tertentu stoknya jadi 0". Proposal UI/UX direview & disetujui
@@ -203,7 +204,7 @@ class _ResetStockReviewScreenState
     final scopeLabel = widget.categoryLabel == null
         ? 'SEMUA produk (${widget.rows.length} item)'
         : 'kategori "${widget.categoryLabel}" (${widget.rows.length} item)';
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (dCtx) => _TypeToConfirmDialog(scopeLabel: scopeLabel),

@@ -10,6 +10,7 @@ import '../../core/providers/device_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../laporan/stats/customer_stats_screen.dart';
 import 'catalog_code_card.dart';
+import '../../core/theme/app_overlays.dart';
 
 const _custUuid = Uuid();
 
@@ -129,7 +130,7 @@ class _PelangganFormScreenState
     final c = _existing;
     if (c == null) return;
     final hasDebt = c.outstandingDebt > 0;
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Hapus Pelanggan'),

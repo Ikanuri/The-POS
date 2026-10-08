@@ -13,6 +13,7 @@ import '../../core/services/price_sync_service.dart';
 import '../../core/utils/export_destination.dart';
 import '../../core/widgets/inline_banner.dart';
 import '../../core/widgets/qr_sync_widgets.dart';
+import '../../core/theme/app_overlays.dart';
 
 class PriceSyncScreen extends ConsumerStatefulWidget {
   const PriceSyncScreen({super.key});
@@ -192,7 +193,7 @@ class _PriceSyncScreenState extends ConsumerState<PriceSyncScreen>
   Future<void> _exportPriceFile() async {
     final pwCtrl = TextEditingController();
     String? pwError;
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
@@ -273,7 +274,7 @@ class _PriceSyncScreenState extends ConsumerState<PriceSyncScreen>
 
     final pwCtrl = TextEditingController();
     if (!mounted) return;
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Password Katalog Harga'),

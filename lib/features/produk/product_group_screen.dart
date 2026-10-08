@@ -6,6 +6,7 @@ import '../../core/widgets/labeled_tool_button.dart';
 import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/widgets/inline_banner.dart';
+import '../../core/theme/app_overlays.dart';
 
 final _groupsProvider = FutureProvider.autoDispose<List<ProductGroup>>((ref) {
   return ref.watch(databaseProvider).getAllProductGroups();
@@ -50,7 +51,7 @@ class _ProductGroupScreenState extends ConsumerState<ProductGroupScreen>
 
   Future<void> _showBulkAddDialog() async {
     final ctrl = TextEditingController();
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Tambah Massal'),
@@ -96,7 +97,7 @@ class _ProductGroupScreenState extends ConsumerState<ProductGroupScreen>
       totalProducts += await db.countProductsInGroup(g.id);
     }
     if (!mounted) return;
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('Hapus ${selected.length} kategori?'),
@@ -129,7 +130,7 @@ class _ProductGroupScreenState extends ConsumerState<ProductGroupScreen>
 
   Future<void> _showAddDialog() async {
     final ctrl = TextEditingController();
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Tambah Kategori'),
@@ -168,7 +169,7 @@ class _ProductGroupScreenState extends ConsumerState<ProductGroupScreen>
     final ctrl = TextEditingController(text: group.name);
     ctrl.selection =
         TextSelection(baseOffset: 0, extentOffset: ctrl.text.length);
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Ubah Nama Kategori'),
@@ -217,7 +218,7 @@ class _ProductGroupScreenState extends ConsumerState<ProductGroupScreen>
     final db = ref.read(databaseProvider);
     final count = await db.countProductsInGroup(group.id);
     if (!mounted) return;
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('Hapus "${group.name}"?'),

@@ -8,6 +8,7 @@ import '../../core/database/app_database.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/export_destination.dart';
 import '../../core/widgets/inline_banner.dart';
+import '../../core/theme/app_overlays.dart';
 
 // Nama tanpa underscore (BUKAN cuma gaya) — WAJIB bisa di-override dari test
 // widget (lihat `test/arsip_export_widget_test.dart`): pemanggilan asli
@@ -114,7 +115,7 @@ class _ArchiveCardState extends ConsumerState<_ArchiveCard>
     // Item 41 B.5 — pola sama dgn backup_screen.dart: password ekspor
     // minimal 8 karakter (kekuatan enkripsi = kekuatan password ini).
     String? pwError;
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(

@@ -42,6 +42,7 @@ import 'cart_meta_pickers.dart';
 import 'cart_preview_paper.dart';
 import 'paste_order_sheet.dart';
 import 'payment_qris_view.dart';
+import '../../../core/theme/app_overlays.dart';
 
 /// Susulan (permintaan user): posisi scroll TERAKHIR per keranjang (key:
 /// `cartId`) — supaya kalau sheet ditutup (mis. misclick tap item yang
@@ -86,7 +87,7 @@ class _CartSheetState extends ConsumerState<CartSheet> {
   bool _scrollRestoreAttached = false;
 
   // Guard tap ganda-cepat pada tombol "Tahan Pesanan" di header sheet ini —
-  // sheet ini sendiri sudah modal (`showModalBottomSheet`, barrier menahan
+  // sheet ini sendiri sudah modal (`showAppSheet`, barrier menahan
   // panel/toolbar kasir_screen.dart di belakangnya), jadi satu-satunya celah
   // race adalah double-tap ke tombolnya sendiri sebelum `holdOrder` selesai
   // → insert `held_order` duplikat (bukan kehilangan data seperti di
@@ -199,7 +200,7 @@ class _CartSheetState extends ConsumerState<CartSheet> {
       prabayarChangeTaken: prabayarChangeTaken,
     );
 
-    await showModalBottomSheet<void>(
+    await showAppSheet<void>(
       context: context,
       isScrollControlled: true,
       builder: (_) => _HandoffQrSheet(
@@ -413,7 +414,7 @@ class _CartSheetState extends ConsumerState<CartSheet> {
   /// Daftar entri Pra-Bayar terkunci — tiap entri bisa dihapus lagi selama
   /// belum checkout (kasir salah input).
   Future<void> _showPrabayarList(BuildContext ctx, WidgetRef ref) async {
-    await showModalBottomSheet<void>(
+    await showAppSheet<void>(
       context: ctx,
       isScrollControlled: true,
       builder: (sheetCtx) => Consumer(
@@ -480,7 +481,7 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                                 // diserahkan), baru entri ini boleh dihapus.
                                 if (n.totalLocked - e.amount <
                                     n.changeTakenTotal) {
-                                  showDialog<void>(
+                                  showAppDialog<void>(
                                     context: consumerCtx,
                                     builder: (dCtx) => AlertDialog(
                                       title: const Text(
@@ -535,7 +536,7 @@ class _CartSheetState extends ConsumerState<CartSheet> {
   /// `recordChangeTaken`/`removeChangeTaken` re-assign `state` — lihat dok
   /// `CartPrabayarNotifier`.
   Future<void> _showChangeTakenList(BuildContext ctx, WidgetRef ref) async {
-    await showModalBottomSheet<void>(
+    await showAppSheet<void>(
       context: ctx,
       isScrollControlled: true,
       builder: (sheetCtx) => Consumer(
@@ -633,7 +634,7 @@ class _CartSheetState extends ConsumerState<CartSheet> {
   /// tetap ada) — juga melepas reservasi nomor nota (Item 55) supaya
   /// nomor itu tidak "hangus" selamanya kalau keranjang dibatalkan.
   Future<void> _confirmClear(BuildContext ctx, WidgetRef ref) async {
-    final ok = await showDialog<bool>(
+    final ok = await showAppDialog<bool>(
       context: ctx,
       builder: (dCtx) => AlertDialog(
         title: const Text('Kosongkan Keranjang?'),
@@ -767,7 +768,7 @@ class _CartSheetState extends ConsumerState<CartSheet> {
     final boundaryKey = GlobalKey();
     var dragOverscroll = 0.0;
     if (!ctx.mounted) return;
-    await showModalBottomSheet(
+    await showAppSheet(
       context: ctx,
       isScrollControlled: true,
       builder: (sheetCtx) => StatefulBuilder(
@@ -1027,7 +1028,7 @@ class _CartSheetState extends ConsumerState<CartSheet> {
   /// "Pengaturan Struk" di `receipt_screen.dart::_showReceiptSettingsSheet`)
   /// — menggantikan `AlertDialog` generik lama.
   void _showCartSettingsDialog(BuildContext ctx) {
-    showModalBottomSheet<void>(
+    showAppSheet<void>(
       context: ctx,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
@@ -1467,7 +1468,7 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                     if (widget.cartId != kCatalogCartId)
                       IconButton(
                         tooltip: 'Tempel Pesanan',
-                        onPressed: () => showModalBottomSheet(
+                        onPressed: () => showAppSheet(
                           context: ctx,
                           isScrollControlled: true,
                           builder: (_) =>

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/services/csv_import_service.dart';
 import '../../core/widgets/inline_banner.dart';
+import '../../core/theme/app_overlays.dart';
 
 /// Import produk dari CSV.
 class CsvImportScreen extends ConsumerStatefulWidget {
@@ -30,7 +31,7 @@ class _CsvImportScreenState extends ConsumerState<CsvImportScreen>
 
     if (!mounted) return;
     // Konfirmasi
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Import Produk CSV'),
@@ -48,7 +49,7 @@ class _CsvImportScreenState extends ConsumerState<CsvImportScreen>
       final db = ref.read(databaseProvider);
       final result2 = await CsvImportService.importFromBytes(bytes: bytes, db: db);
       if (!mounted) return;
-      await showDialog(
+      await showAppDialog(
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('Hasil Import'),

@@ -11,6 +11,7 @@ import '../../core/services/receive_text_parser.dart';
 import '../../core/utils/purchase_calc.dart';
 import '../../core/theme/app_theme.dart';
 import 'purchase_history_screen.dart';
+import '../../core/theme/app_overlays.dart';
 
 /// Penerimaan Barang — tempel daftar barang yang datang, qty MENAMBAH stok.
 ///
@@ -283,7 +284,7 @@ class _ReceiveGoodsScreenState extends ConsumerState<ReceiveGoodsScreen> {
 
   Future<void> _pickProduct(_Row row) async {
     final db = ref.read(databaseProvider);
-    final picked = await showModalBottomSheet<String>(
+    final picked = await showAppSheet<String>(
       context: context,
       isScrollControlled: true,
       builder: (_) => _ProductPickerSheet(
@@ -320,7 +321,7 @@ class _ReceiveGoodsScreenState extends ConsumerState<ReceiveGoodsScreen> {
   /// Tambah barang manual (cari nama/barcode) ke faktur pertama.
   Future<void> _addManual() async {
     final db = ref.read(databaseProvider);
-    final picked = await showModalBottomSheet<String>(
+    final picked = await showAppSheet<String>(
       context: context,
       isScrollControlled: true,
       builder: (_) => _ProductPickerSheet(db: db, initialQuery: ''),
@@ -423,7 +424,7 @@ class _ReceiveGoodsScreenState extends ConsumerState<ReceiveGoodsScreen> {
       }
       if (warnings.isNotEmpty) {
         if (!mounted) return;
-        final go = await showDialog<bool>(
+        final go = await showAppDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
             title: const Text('Periksa dulu'),
@@ -512,7 +513,7 @@ class _ReceiveGoodsScreenState extends ConsumerState<ReceiveGoodsScreen> {
     var treatment = _settings.treatment;
     final rateCtrl = TextEditingController(text: _fmtNum(_settings.taxRate));
     final warnCtrl = TextEditingController(text: _fmtNum(_settings.warnPct));
-    final ok = await showDialog<bool>(
+    final ok = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setD) => AlertDialog(

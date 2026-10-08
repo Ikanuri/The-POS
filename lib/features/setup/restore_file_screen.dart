@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/providers/device_provider.dart';
 import '../../core/services/db_export_service.dart';
+import '../../core/theme/app_overlays.dart';
 
 /// Item 27/28 — "Pulihkan dari File" di welcome screen: restore langsung
 /// tanpa perlu bikin toko dummy dulu (`Setup Toko Baru`) sebelum bisa
@@ -51,7 +52,7 @@ class _RestoreFileScreenState extends ConsumerState<RestoreFileScreen> {
 
     final pwCtrl = TextEditingController();
     if (!mounted) return;
-    final password = await showDialog<String>(
+    final password = await showAppDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Password File'),

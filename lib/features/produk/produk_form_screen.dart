@@ -17,12 +17,13 @@ import '../../core/utils/unit_ratio_calc.dart';
 import '../../core/widgets/inline_banner.dart';
 import '../../core/widgets/price_category_margin_sheet.dart';
 import '../../core/widgets/unit_dropdown.dart';
+import '../../core/theme/app_overlays.dart';
 
 /// Buka dialog scanner kamera untuk mengisi field barcode secara otomatis.
 /// Mengembalikan nilai barcode yang ter-scan, atau null jika dibatalkan.
 Future<String?> _scanBarcodeDialog(BuildContext context) async {
   String? result;
-  await showDialog<void>(
+  await showAppDialog<void>(
     context: context,
     barrierDismissible: true,
     builder: (ctx) => Dialog(
@@ -287,7 +288,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
         TextSelection(baseOffset: 0, extentOffset: qtyCtrl.text.length);
     final noteCtrl = TextEditingController();
 
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Sesuaikan Stok'),
@@ -587,7 +588,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
         final hasVariantAdds = _sessionVariantIds.isNotEmpty;
-        final leave = await showDialog<bool>(
+        final leave = await showAppDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
             title: const Text('Buang perubahan?'),
@@ -1153,7 +1154,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
     final altTypes = <String?>[for (final a in altPrices) a.marginType];
     final altValues = <double?>[for (final a in altPrices) a.marginValue];
 
-    final ok = await showDialog<bool>(
+    final ok = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialog) => AlertDialog(
@@ -1683,7 +1684,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
   }
 
   Future<void> _deleteVariant(Product v) async {
-    final ok = await showDialog<bool>(
+    final ok = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Hapus Varian'),
@@ -1720,7 +1721,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
   }
 
   Future<void> _confirmDeactivate() async {
-    final ok = await showDialog<bool>(
+    final ok = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Nonaktifkan Produk?'),
@@ -1959,7 +1960,7 @@ class _UnitCardState extends ConsumerState<_UnitCard> {
         text: cur == null
             ? ''
             : formatMarginInput(cur, isPercent: _marginPercent));
-    final result = await showDialog<double>(
+    final result = await showAppDialog<double>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Margin Harga Grosir'),
@@ -2908,7 +2909,7 @@ Future<double?> _ratioReferenceDialog(
 }) {
   final countCtrl = TextEditingController();
   var sel = 0;
-  return showDialog<double>(
+  return showAppDialog<double>(
     context: context,
     builder: (ctx) => StatefulBuilder(builder: (ctx, setState) {
       final count = double.tryParse(countCtrl.text.replaceAll(',', '.'));

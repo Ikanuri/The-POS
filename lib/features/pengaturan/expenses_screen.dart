@@ -6,6 +6,7 @@ import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/input_formatters.dart';
+import '../../core/theme/app_overlays.dart';
 
 const _thousandsFmt = ThousandsSeparatorFormatter();
 
@@ -254,7 +255,7 @@ class ExpensesScreen extends ConsumerWidget {
   }
 
   void _showAddSheet(BuildContext context, WidgetRef ref) {
-    showModalBottomSheet(
+    showAppSheet(
       context: context,
       isScrollControlled: true,
       builder: (_) => const _AddExpenseSheet(),
@@ -292,7 +293,7 @@ class _ExpenseTile extends ConsumerWidget {
         child: Icon(Icons.delete_outline, color: scheme.error),
       ),
       confirmDismiss: (_) async {
-        return await showDialog<bool>(
+        return await showAppDialog<bool>(
               context: context,
               builder: (ctx) => AlertDialog(
                 title: const Text('Hapus pengeluaran?'),

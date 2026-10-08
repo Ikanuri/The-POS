@@ -12,6 +12,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/utils/export_destination.dart';
 import '../../core/utils/input_formatters.dart';
 import '../shell/sync_status_banner.dart';
+import '../../core/theme/app_overlays.dart';
 
 const _thousandsFmt = ThousandsSeparatorFormatter();
 
@@ -491,7 +492,7 @@ class PengaturanScreen extends ConsumerWidget {
 
   void _showFontScaleDialog(BuildContext context, WidgetRef ref) {
     final current = ref.read(fontScaleProvider);
-    showDialog<FontScale>(
+    showAppDialog<FontScale>(
       context: context,
       builder: (ctx) => SimpleDialog(
         title: const Text('Ukuran Teks'),
@@ -531,7 +532,7 @@ class PengaturanScreen extends ConsumerWidget {
     final perCtrl =
         TextEditingController(text: (curPer < 1 ? 1 : curPer).toString());
 
-    final saved = await showDialog<bool>(
+    final saved = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Poin Loyalitas'),
@@ -597,7 +598,7 @@ class PengaturanScreen extends ConsumerWidget {
     final messenger = ScaffoldMessenger.of(context);
 
     if (turnOn) {
-      final confirmed = await showDialog<bool>(
+      final confirmed = await showAppDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('Jeda Pelacakan Stok?'),

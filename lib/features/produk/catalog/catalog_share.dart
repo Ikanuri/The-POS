@@ -12,6 +12,7 @@ import '../../../core/providers/device_provider.dart';
 import '../../kasir/cart_provider.dart';
 import 'catalog_models.dart';
 import 'catalog_paper.dart';
+import '../../../core/theme/app_overlays.dart';
 
 const _idMonths = [
   'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
@@ -103,7 +104,7 @@ Future<void> showCatalogPreviewSheet(
   if (!context.mounted) return;
 
   final boundaryKey = GlobalKey();
-  await showModalBottomSheet(
+  await showAppSheet(
     context: context,
     isScrollControlled: true,
     builder: (ctx) => SafeArea(

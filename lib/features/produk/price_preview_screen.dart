@@ -10,6 +10,7 @@ import '../../core/providers/device_provider.dart';
 import '../../core/services/price_match_service.dart';
 import '../../core/services/price_sync_service.dart';
 import '../../core/widgets/inline_banner.dart';
+import '../../core/theme/app_overlays.dart';
 
 class PricePreviewScreen extends ConsumerStatefulWidget {
   const PricePreviewScreen({super.key, required this.result});
@@ -162,7 +163,7 @@ class _PricePreviewScreenState extends ConsumerState<PricePreviewScreen>
       if (linked > 0) parts.add('$linked produk disamakan');
       final msg = parts.isEmpty ? 'Tidak ada perubahan' : parts.join(', ');
 
-      await showDialog(
+      await showAppDialog(
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('Selesai'),
@@ -333,7 +334,7 @@ class _PricePreviewScreenState extends ConsumerState<PricePreviewScreen>
   void _showLogDialog(BuildContext ctx) {
     final allLog = [..._matchLog, '', ..._applyLog];
     final text = allLog.join('\n');
-    showDialog(
+    showAppDialog(
       context: ctx,
       builder: (c) => AlertDialog(
         title: Row(

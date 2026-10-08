@@ -7,6 +7,7 @@ import '../../../core/providers/data_refresh_provider.dart';
 import '../../../core/providers/device_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../kasir/widgets/debt_payment_sheet.dart';
+import '../../../core/theme/app_overlays.dart';
 
 final _debtBookProvider =
     FutureProvider.autoDispose<List<DebtBookEntry>>((ref) {
@@ -194,7 +195,7 @@ class _HutangTabState extends ConsumerState<HutangTab> {
         ? await db.getUnpaidTxDetailsByCustomerName(e.adhocCustomerName)
         : await db.getUnpaidTxDetails(e.customerId!);
     if (!mounted) return;
-    await showModalBottomSheet<void>(
+    await showAppSheet<void>(
       context: context,
       isScrollControlled: true,
       builder: (ctx) => DraggableScrollableSheet(

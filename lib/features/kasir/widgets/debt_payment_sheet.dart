@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/theme/app_theme.dart';
 import 'payment_qris_view.dart';
+import '../../../core/theme/app_overlays.dart';
 
 /// Sheet pelunasan / tambah bayar hutang — kalkulator gaya checkout, plus
 /// pemilihan metode bayar & tampilan QRIS/metadata langsung di dalamnya.
@@ -38,7 +39,7 @@ Future<({int amount, String method, String? methodName})?> showDebtPaymentSheet(
   // default awalnya SELALU statis (lihat dok `_DebtPaymentSheet._qrDynamic`).
   final qrisEnabled = (await db.getSetting('qris_dynamic_enabled')) != '0';
   if (!context.mounted) return null;
-  return showModalBottomSheet<
+  return showAppSheet<
       ({int amount, String method, String? methodName})>(
     context: context,
     isScrollControlled: true,
@@ -104,7 +105,7 @@ class _DebtPaymentSheetState extends State<_DebtPaymentSheet> {
   final _scroll = ScrollController();
 
   /// Akumulasi overscroll (drag ke bawah saat sudah di posisi paling atas)
-  /// selama SATU gesture drag. `showModalBottomSheet` bawaan cuma
+  /// selama SATU gesture drag. `showAppSheet` bawaan cuma
   /// menghubungkan swipe-turun ke `Navigator.pop` kalau isi TIDAK
   /// scrollable (mis. state QRIS statis yang lebih tinggi dari layar) —
   /// begitu ada `SingleChildScrollView` yang benar-benar overflow, gesture

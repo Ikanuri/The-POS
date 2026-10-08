@@ -6,6 +6,7 @@ import '../../core/providers/device_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/price_category_calc.dart';
 import '../../core/widgets/price_category_margin_sheet.dart';
+import '../../core/theme/app_overlays.dart';
 
 /// Fase B "Kategori Harga" — kategori murni label pengelompokan (TIDAK ADA
 /// margin default per kategori, lihat dok `PriceCategories`). Margin selalu
@@ -70,7 +71,7 @@ class KategoriHargaScreen extends ConsumerWidget {
   }
 
   void _showAddDialog(BuildContext context, WidgetRef ref) {
-    showDialog<void>(
+    showAppDialog<void>(
       context: context,
       builder: (_) => const _NameDialog(),
     );
@@ -109,7 +110,7 @@ class _CategoryTile extends ConsumerWidget {
             IconButton(
               icon: const Icon(Icons.edit_outlined, size: 20),
               tooltip: 'Ubah nama',
-              onPressed: () => showDialog<void>(
+              onPressed: () => showAppDialog<void>(
                 context: context,
                 builder: (_) => _NameDialog(existing: category),
               ),
@@ -146,7 +147,7 @@ class _CategoryTile extends ConsumerWidget {
   }
 
   Future<bool> _confirmDelete(BuildContext context) async {
-    final ok = await showDialog<bool>(
+    final ok = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('Hapus ${category.name}?'),
@@ -316,7 +317,7 @@ class _KategoriHargaDetailScreenState
     required String? existingType,
     required double? existingValue,
   }) async {
-    final result = await showModalBottomSheet<PriceCategoryMarginResult>(
+    final result = await showAppSheet<PriceCategoryMarginResult>(
       context: context,
       isScrollControlled: true,
       builder: (_) => PriceCategoryMarginSheet(
@@ -342,7 +343,7 @@ class _KategoriHargaDetailScreenState
   }
 
   Future<void> _removeMember(PriceCategoryMember m) async {
-    final ok = await showDialog<bool>(
+    final ok = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('Keluarkan ${m.productName}?'),
@@ -508,7 +509,7 @@ class _ProductUnitPickerScreenState
     if (units.length == 1) {
       unit = units.first;
     } else {
-      final selected = await showModalBottomSheet<ProductUnit>(
+      final selected = await showAppSheet<ProductUnit>(
         context: context,
         builder: (_) => SafeArea(
           child: Column(

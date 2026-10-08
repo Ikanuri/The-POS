@@ -5,6 +5,7 @@ import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 
 import '../../core/services/printer_service.dart';
 import '../../core/widgets/inline_banner.dart';
+import '../../core/theme/app_overlays.dart';
 
 class PrinterScreen extends StatefulWidget {
   const PrinterScreen({super.key});
@@ -107,7 +108,7 @@ class _PrinterScreenState extends State<PrinterScreen>
   Future<void> _addManual() async {
     final nameCtrl = TextEditingController();
     final macCtrl = TextEditingController();
-    final result = await showDialog<bool>(
+    final result = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Tambah Printer Manual'),
