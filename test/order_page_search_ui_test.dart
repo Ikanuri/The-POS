@@ -18,7 +18,9 @@ void main() {
     // Hanya nama produk yang boleh terpotong; ekor "? Tekan →" utuh.
     expect(html, contains('.ph span b{flex-shrink:1;min-width:0;overflow:hidden;'));
     // Berputar walau kolom fokus; berhenti hanya bila ada huruf.
-    expect(html, isNot(contains('document.activeElement !== qEl')));
+    final phCan = html.substring(html.indexOf('function phCanRun(){'),
+        html.indexOf('function phStep'));
+    expect(phCan, isNot(contains('document.activeElement')));
     expect(html, contains('!document.hidden && !qEl.value && !sheetOpen'));
     // X = lingkaran outline.
     expect(html,
