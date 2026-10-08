@@ -12,6 +12,7 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 - **Layar Kasir kini dibuka dengan halaman awal ala katalog online**: kolom cari besar dengan tombol scan, kategori, daftar **Terlaris**, dan **Terakhir dijual** (atau **Sering dibeli** pelanggan yang sedang dipilih). Ketuk **Semua produk**, pilih kategori, atau mulai mengetik untuk membuka daftar seperti biasa; tombol **Beranda** membawa Anda kembali.
 - **Bisa dimatikan**: Pengaturan > Tampilan Awal Kasir, bila lebih suka langsung melihat semua produk.
+- **Stiker animasi di Kasir**: ada di halaman awal dan saat pencarian tidak menemukan produk. Bawaan aplikasi, bisa diganti berkas stiker .tgs sendiri di Pengaturan > Stiker Animasi Kasir. Ikut mati bila "kurangi animasi" di HP aktif.
 - **Perbaikan tombol "+"** pada kartu produk yang kadang hanya memantul tanpa menambah barang.
 
 ---
