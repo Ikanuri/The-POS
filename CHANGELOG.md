@@ -14,6 +14,8 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-10-08 (jalur build production vs beta)
 
+- build: ikon aplikasi beta diberi pita diagonal "BETA" (android/app/src/beta/res, override flavor beta; ikon produksi tidak berubah); test ikon di build_flavors_test
+
 - ci/build: flavor Android `production` (ID asli) & `beta` (ID `.beta`, nama "The POS Beta", terpasang berdampingan dgn data terpisah); CI memilih otomatis main/tag -> production, branch lain -> beta (+ input manual); APK/rilis diberi nama flavor; aturan "Jalur Build" di CLAUDE.md (tanya/saran production vs beta tiap batch commit); test penjaga build_flavors_test
 
 ## 2026-10-08 (kolom cari tak tertutup keyboard; dropdown jumlah saran)
