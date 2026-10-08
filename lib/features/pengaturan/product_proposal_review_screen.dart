@@ -1,3 +1,4 @@
+import '../../core/theme/app_overlays.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -285,7 +286,7 @@ class _ProductProposalReviewScreenState
           await LanSyncService.applyProposal(widget.proposal.id, _selected);
       if (!mounted) return;
       Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      ScaffoldMessenger.of(context).showAppSnackBar(SnackBar(
           content: Text('$applied baris diterapkan ke ${_selected.length} '
               'produk')));
     } catch (e) {

@@ -1,3 +1,4 @@
+import 'app_overlays.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -99,7 +100,7 @@ class AppTheme {
     final fg = isDark ? _dInk : _lCanvas;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(
+      ..showAppSnackBar(SnackBar(
         backgroundColor: bg,
         content: Row(
           children: [

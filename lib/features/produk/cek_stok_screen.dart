@@ -296,7 +296,7 @@ class _CekStokScreenState extends ConsumerState<CekStokScreen> {
   void _copyOrderText(String text) {
     Clipboard.setData(ClipboardData(text: text));
     ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('Teks order disalin')));
+        .showAppSnackBar(const SnackBar(content: Text('Teks order disalin')));
   }
 
   void _shareOrderText(String text) {

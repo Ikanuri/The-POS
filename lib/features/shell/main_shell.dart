@@ -1,3 +1,4 @@
+import '../../core/theme/app_overlays.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -55,7 +56,7 @@ class _MainShellState extends ConsumerState<MainShell> {
   void _checkLicenseExpiry() {
     final days = ref.read(licenseProvider).daysUntilExpiry;
     if (days == null || days < 0 || days > 7) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+    ScaffoldMessenger.of(context).showAppSnackBar(SnackBar(
       duration: const Duration(seconds: 8),
       content: Text(days == 0
           ? 'Aktivasi berakhir hari ini — hubungi developer untuk perpanjang.'
@@ -68,7 +69,7 @@ class _MainShellState extends ConsumerState<MainShell> {
     final status = await BackupReminder.load(ref.read(databaseProvider));
     if (!mounted || !status.overdue) return;
     final days = status.daysSince;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+    ScaffoldMessenger.of(context).showAppSnackBar(SnackBar(
       duration: const Duration(seconds: 8),
       content: Text(days == null
           ? 'Data belum pernah dicadangkan. Backup sekarang?'

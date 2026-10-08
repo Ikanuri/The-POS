@@ -33,7 +33,7 @@ Future<void> showDebtSettlementSheet(
     // Race jarang: hutang sudah lunas di antara baca total (chip) & tap
     // (mis. dilunasi dari device lain lalu sync). Beri tahu, jangan buka
     // sheet kosong yang membingungkan.
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+    ScaffoldMessenger.of(context).showAppSnackBar(const SnackBar(
         content: Text('Tidak ada nota belum lunas utk pelanggan ini')));
     return;
   }

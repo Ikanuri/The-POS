@@ -244,7 +244,7 @@ class _ReceiveGoodsScreenState extends ConsumerState<ReceiveGoodsScreen> {
       await CrashLogService.record(e, st, context: 'receive_goods_$what');
       if (!mounted) return;
       setState(() => _busy = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      ScaffoldMessenger.of(context).showAppSnackBar(SnackBar(
         content: Text('Gagal ($what): $e'),
         duration: const Duration(seconds: 8),
       ));
@@ -496,7 +496,7 @@ class _ReceiveGoodsScreenState extends ConsumerState<ReceiveGoodsScreen> {
     final skipped = total - ready.length;
     final proposal = !device.isOwner &&
         ready.any((r) => _canPrice && r.applyCost && r.unitPrice > 0);
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+    ScaffoldMessenger.of(context).showAppSnackBar(SnackBar(
       content: Text([
         skipped == 0
             ? '${ready.length} barang masuk ke stok'

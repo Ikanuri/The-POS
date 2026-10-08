@@ -1,3 +1,4 @@
+import '../../core/theme/app_overlays.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -74,7 +75,7 @@ class DeviceLicenseScreen extends ConsumerWidget {
                     onPressed: () async {
                       await Clipboard.setData(ClipboardData(text: formatted));
                       if (!context.mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
+                      ScaffoldMessenger.of(context).showAppSnackBar(
                         const SnackBar(content: Text('Nomor serial disalin')),
                       );
                     },

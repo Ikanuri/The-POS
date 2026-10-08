@@ -1,3 +1,4 @@
+import '../../../core/theme/app_overlays.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:qr_flutter/qr_flutter.dart';
@@ -103,7 +104,7 @@ IconData paymentMethodIcon(String type) => switch (type) {
 void copyPaymentMetadata(BuildContext context, String data) {
   Clipboard.setData(ClipboardData(text: data));
   ScaffoldMessenger.of(context)
-      .showSnackBar(const SnackBar(content: Text('Nomor disalin')));
+      .showAppSnackBar(const SnackBar(content: Text('Nomor disalin')));
 }
 
 /// true bila metode ini punya metadata teks untuk ditampilkan (bank/e-wallet

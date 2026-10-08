@@ -1191,7 +1191,7 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
     );
     await Clipboard.setData(ClipboardData(text: text));
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
+    ScaffoldMessenger.of(context).showAppSnackBar(
       const SnackBar(content: Text('Laporan pre-order disalin')),
     );
   }

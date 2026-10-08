@@ -1,3 +1,4 @@
+import '../../core/theme/app_overlays.dart';
 import 'package:barcode_widget/barcode_widget.dart';
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
@@ -75,7 +76,7 @@ class _BarcodeScreenState extends ConsumerState<BarcodeScreen> {
       final mac = await PrinterService.getSavedMac();
       if (mac == null || mac.isEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          ScaffoldMessenger.of(context).showAppSnackBar(const SnackBar(
               content:
                   Text('Printer belum diatur — atur di Pengaturan > Printer')));
         }
@@ -89,7 +90,7 @@ class _BarcodeScreenState extends ConsumerState<BarcodeScreen> {
         barcode: barcode,
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        ScaffoldMessenger.of(context).showAppSnackBar(SnackBar(
             content:
                 Text(ok ? 'Label terkirim ke printer' : 'Gagal mencetak label')));
       }

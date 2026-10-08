@@ -42,7 +42,7 @@ class _LaciMejaProposalReviewScreenState
       if (!mounted) return;
       Navigator.of(context).pop();
       final messenger = ScaffoldMessenger.of(context);
-      messenger.showSnackBar(SnackBar(
+      messenger.showAppSnackBar(SnackBar(
         content: Text('${result.applied} baris diterapkan ke Laci Meja'),
       ));
       // Susulan (bug ditemukan user) — baris yang transaksi terkaitnya
@@ -89,7 +89,7 @@ class _LaciMejaProposalReviewScreenState
     } catch (e) {
       if (mounted) {
         setState(() => _applying = false);
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context).showAppSnackBar(
             SnackBar(content: Text('Gagal menerapkan usulan: $e')));
       }
     }

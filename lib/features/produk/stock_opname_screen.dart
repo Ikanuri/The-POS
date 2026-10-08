@@ -1,3 +1,4 @@
+import '../../core/theme/app_overlays.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -34,7 +35,7 @@ class _StockOpnameScreenState extends ConsumerState<StockOpnameScreen> {
     final rows = await db.watchStockOverview(groupId: _selectedGroupId).first;
     if (!mounted) return;
     if (rows.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      ScaffoldMessenger.of(context).showAppSnackBar(const SnackBar(
           content: Text('Tidak ada produk berstok di kategori ini')));
       return;
     }
@@ -238,7 +239,7 @@ class _OpnameCountScreenState extends ConsumerState<_OpnameCountScreen> {
       ));
     }
     if (entries.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      ScaffoldMessenger.of(context).showAppSnackBar(const SnackBar(
           content: Text('Isi minimal 1 hitungan sebelum lanjut review')));
       return;
     }
@@ -412,7 +413,7 @@ class _OpnameReviewScreenState extends ConsumerState<_OpnameReviewScreen>
       if (mounted) {
         Navigator.of(context)
             .popUntil((r) => r.isFirst || r.settings.name == '/');
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        ScaffoldMessenger.of(context).showAppSnackBar(SnackBar(
             content: Text(
                 'Opname disimpan (${changed.length} produk disesuaikan)')));
       }

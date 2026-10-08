@@ -920,7 +920,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         }
         if (shortages.isNotEmpty && mounted) {
           setState(() => _isSaving = false);
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          ScaffoldMessenger.of(context).showAppSnackBar(SnackBar(
             content: Text('Stok tidak cukup:\n${shortages.join('\n')}'),
             duration: const Duration(seconds: 4),
           ));
@@ -1275,7 +1275,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error: $e')));
+            .showAppSnackBar(SnackBar(content: Text('Error: $e')));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -2437,7 +2437,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       final dueCash = _settlementDueCash;
       if (dueCash > 0 && result < dueCash) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          ScaffoldMessenger.of(context).showAppSnackBar(SnackBar(
             content: Text(
                 'Uang diterima ${formatRupiah(result)} belum menutup '
                 'pelunasan Hutang/Pre-order ${formatRupiah(dueCash)} '

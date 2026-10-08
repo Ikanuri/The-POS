@@ -1,3 +1,4 @@
+import '../../core/theme/app_overlays.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -36,7 +37,7 @@ class _AktivasiScreenState extends ConsumerState<AktivasiScreen> {
     await Clipboard.setData(ClipboardData(text: formatted));
     if (!mounted) return;
     ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('Kode disalin')));
+        .showAppSnackBar(const SnackBar(content: Text('Kode disalin')));
   }
 
   Future<void> _shareFingerprint(String formatted) async {

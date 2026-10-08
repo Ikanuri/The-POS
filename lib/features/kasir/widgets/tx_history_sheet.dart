@@ -267,7 +267,7 @@ class _TxHistorySheetState extends ConsumerState<TxHistorySheet> {
   /// kedua aturan sekaligus.
   void _toggleSelect(Transaction tx, List<Transaction> loaded) {
     if (_isReturTx(tx)) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showAppSnackBar(
           const SnackBar(content: Text('Nota retur tidak bisa digabung')));
       return;
     }
@@ -280,7 +280,7 @@ class _TxHistorySheetState extends ConsumerState<TxHistorySheet> {
     if (selectedTxs.isNotEmpty &&
         selectedTxs.first.customerId != tx.customerId) {
       final umum = selectedTxs.first.customerId == null;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      ScaffoldMessenger.of(context).showAppSnackBar(SnackBar(
           content: Text(umum
               ? 'Hanya nota pelanggan umum yang bisa digabung di sini'
               : 'Hanya nota pelanggan yang sama yang bisa digabung')));
@@ -758,7 +758,7 @@ class _TxHistorySheetState extends ConsumerState<TxHistorySheet> {
     final msg = change > 0
         ? 'Dibayar ${formatRupiah(applied)} · kembalian ${formatRupiah(change)}'
         : 'Dibayar ${formatRupiah(applied)}';
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    ScaffoldMessenger.of(context).showAppSnackBar(SnackBar(content: Text(msg)));
     _exitSelectMode();
   }
 }
@@ -1228,7 +1228,7 @@ class _TxDetail extends ConsumerWidget {
               ? '${tx.localId} lunas · kembalian ${formatRupiah(change)}'
               : '${tx.localId} lunas')
           : 'Pembayaran dicatat, sisa ${formatRupiah(newRemaining)}';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      ScaffoldMessenger.of(context).showAppSnackBar(SnackBar(content: Text(msg)));
     }
   }
 
@@ -1262,7 +1262,7 @@ Future<bool> showVoidTransactionDialog(
     final allowed = await db.isPermissionEnabled('batal_transaksi');
     if (!allowed) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        ScaffoldMessenger.of(context).showAppSnackBar(const SnackBar(
             content: Text('Tidak punya izin membatalkan transaksi')));
       }
       return false;
@@ -1364,7 +1364,7 @@ Future<bool> showVoidTransactionDialog(
         await _redoCartFromVoidedTransaction(context, ref, tx);
       }
     } else if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showAppSnackBar(
           SnackBar(content: Text('Transaksi ${tx.localId} dibatalkan')));
     }
     return true;
@@ -1451,7 +1451,7 @@ Future<void> _redoCartFromVoidedTransaction(
   final lines = await db.cartItemsFromTransaction(tx.id);
   if (!context.mounted) return;
   if (lines.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+    ScaffoldMessenger.of(context).showAppSnackBar(const SnackBar(
         content: Text('Transaksi dibatalkan — tidak ada barang tersisa '
             'untuk disusun ulang')));
     return;
@@ -1531,7 +1531,7 @@ Future<void> _redoCartFromVoidedTransaction(
   // Item 64 — beri tahu kasir keranjang yg sedang diproses SEBELUMNYA tidak
   // hilang, cuma ditahan (lihat dok `_autoHoldActiveCartIfAny`).
   if (autoHeldLabel != null && context.mounted) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+    ScaffoldMessenger.of(context).showAppSnackBar(SnackBar(
         content: Text('Keranjang sebelumnya ditahan sbg "$autoHeldLabel"')));
   }
 

@@ -32,7 +32,7 @@ Future<void> showPreorderSettlementSheet(
     // Race jarang: DP sudah terkumpul di antara baca total (chip) & tap
     // (mis. dilunasi dari device lain lalu sync). Beri tahu, jangan buka
     // sheet kosong yang membingungkan.
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+    ScaffoldMessenger.of(context).showAppSnackBar(const SnackBar(
         content:
             Text('Tidak ada pre-order dgn DP tertunggak utk pelanggan ini')));
     return;

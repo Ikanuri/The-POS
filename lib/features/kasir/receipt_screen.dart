@@ -871,7 +871,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         ));
     await _load();
     if (mounted) {
-      messenger.showSnackBar(const SnackBar(
+      messenger.showAppSnackBar(const SnackBar(
           content: Text('Ditandai sebagai pre-order — kelola dari '
               'dashboard Laci Meja')));
     }
@@ -1764,7 +1764,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       );
       await _load();
       if (change > 0) {
-        messenger.showSnackBar(
+        messenger.showAppSnackBar(
             SnackBar(content: Text('Kembalian ${formatRupiah(change)}')));
       }
     }
@@ -2125,7 +2125,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
         // dari pembayaran terakhir, sumber yang SAMA dgn baris "Kembalian"
         // di ringkasan struk (lihat `_latestPayment`).
         final change = _latestPayment?.changeGiven ?? 0;
-        messenger.showSnackBar(SnackBar(
+        messenger.showAppSnackBar(SnackBar(
             content: Text(change > 0
                 ? 'Retur dicatat, stok dikembalikan · kembalian '
                     '${formatRupiah(change)}'
@@ -2159,7 +2159,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     // basi, konsisten dgn jalur nota belum-lunas di atas.
     await _load();
     if (mounted) {
-      messenger.showSnackBar(
+      messenger.showAppSnackBar(
           const SnackBar(content: Text('Retur dicatat, stok dikembalikan')));
     }
   }
@@ -2176,7 +2176,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       final mac = await PrinterService.getSavedMac();
       if (mac == null || mac.isEmpty) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context).showAppSnackBar(
           SnackBar(
             content: const Text('Printer belum dikonfigurasi'),
             action: SnackBarAction(
@@ -2191,7 +2191,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       final granted = await PrinterService.ensurePermissions();
       if (!granted) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context).showAppSnackBar(
           SnackBar(
             content: const Text('Izin Bluetooth ditolak'),
             action: SnackBarAction(
@@ -2711,7 +2711,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     }
     if (!mounted) return;
     ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('Tercatat di Laci Meja')));
+        .showAppSnackBar(const SnackBar(content: Text('Tercatat di Laci Meja')));
   }
 
   static String _fmtQtyShort(double qty) =>
@@ -2801,7 +2801,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
     if (mounted) setState(() => _borrowedForTx = borrowed);
     if (!mounted) return;
     ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('Tercatat di Laci Meja')));
+        .showAppSnackBar(const SnackBar(content: Text('Tercatat di Laci Meja')));
   }
 
   /// Item 62 susulan — nota ini SECARA PRINSIP layak ditawari QR pelunasan
@@ -2884,7 +2884,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
 
     if (cartItems.isEmpty) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showAppSnackBar(
         const SnackBar(content: Text('Tidak ada item untuk disalin')),
       );
       return;
@@ -2904,7 +2904,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
 
     await Clipboard.setData(ClipboardData(text: code));
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
+    ScaffoldMessenger.of(context).showAppSnackBar(
       const SnackBar(content: Text('Kode pesanan disalin')),
     );
   }
@@ -3091,7 +3091,7 @@ class _ReceiptScreenState extends ConsumerState<ReceiptScreen> {
       if (sheetCtx.mounted) Navigator.of(sheetCtx).pop();
     } catch (e) {
       if (sheetCtx.mounted) {
-        ScaffoldMessenger.of(sheetCtx).showSnackBar(
+        ScaffoldMessenger.of(sheetCtx).showAppSnackBar(
           SnackBar(content: Text('Gagal membagikan: $e')),
         );
       }

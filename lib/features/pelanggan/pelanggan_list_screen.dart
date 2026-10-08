@@ -313,7 +313,7 @@ class _CustomerTile extends ConsumerWidget {
     if (ok == true) {
       await ref.read(databaseProvider).deactivateCustomer(customer.id);
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context).showAppSnackBar(
           SnackBar(content: Text('Pelanggan "${customer.name}" dihapus')),
         );
       }

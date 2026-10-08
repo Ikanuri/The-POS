@@ -380,7 +380,7 @@ class _CartSheetState extends ConsumerState<CartSheet> {
       ref.read(cartDebtSettlementProvider(widget.cartId).notifier).clear();
       ref.read(cartPreorderSettlementProvider(widget.cartId).notifier).clear();
       if (!ctx.mounted) return;
-      ScaffoldMessenger.of(ctx).showSnackBar(
+      ScaffoldMessenger.of(ctx).showAppSnackBar(
         SnackBar(content: Text('Pesanan "$label" ditahan')),
       );
       Navigator.of(ctx).pop();
@@ -483,7 +483,7 @@ class _CartSheetState extends ConsumerState<CartSheet> {
       lockedAt: DateTime.now(),
     ));
     if (!ctx.mounted) return;
-    ScaffoldMessenger.of(ctx).showSnackBar(
+    ScaffoldMessenger.of(ctx).showAppSnackBar(
       SnackBar(content: Text('Pra-Bayar ${formatRupiah(result.amount)} dikunci')),
     );
   }
@@ -1001,7 +1001,7 @@ class _CartSheetState extends ConsumerState<CartSheet> {
       if (sheetCtx.mounted) Navigator.of(sheetCtx).pop();
     } catch (e) {
       if (sheetCtx.mounted) {
-        ScaffoldMessenger.of(sheetCtx).showSnackBar(
+        ScaffoldMessenger.of(sheetCtx).showAppSnackBar(
           SnackBar(content: Text('Gagal membagikan: $e')),
         );
       }
@@ -1021,7 +1021,7 @@ class _CartSheetState extends ConsumerState<CartSheet> {
       if (!mounted) return;
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(
+        ..showAppSnackBar(SnackBar(
           content: Text(msg),
           backgroundColor: error ? Theme.of(ctx).colorScheme.error : null,
           action: settings
@@ -3033,7 +3033,7 @@ class _HandoffQrSheet extends StatelessWidget {
             OutlinedButton.icon(
               onPressed: () {
                 Clipboard.setData(ClipboardData(text: shareText));
-                ScaffoldMessenger.of(context).showSnackBar(
+                ScaffoldMessenger.of(context).showAppSnackBar(
                   const SnackBar(content: Text('Teks pesanan disalin')),
                 );
               },

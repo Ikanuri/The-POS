@@ -621,12 +621,12 @@ class PengaturanScreen extends ConsumerWidget {
       if (confirmed != true) return;
       final count = await db.pauseStockTrackingForAllProducts();
       ref.invalidate(_stockPauseProvider);
-      messenger.showSnackBar(
+      messenger.showAppSnackBar(
           SnackBar(content: Text('$count produk ditandai non-stok sementara')));
     } else {
       final count = await db.resumeStockTrackingForAllProducts();
       ref.invalidate(_stockPauseProvider);
-      messenger.showSnackBar(
+      messenger.showAppSnackBar(
           SnackBar(content: Text('Pelacakan stok $count produk dipulihkan')));
     }
   }
@@ -687,11 +687,11 @@ Future<void> _exportProductsCsv(BuildContext context, WidgetRef ref) async {
       title: 'Simpan CSV',
     );
     if (!done) return;
-    messenger.showSnackBar(
+    messenger.showAppSnackBar(
       const SnackBar(content: Text('Selesai')),
     );
   } catch (e) {
-    messenger.showSnackBar(
+    messenger.showAppSnackBar(
       SnackBar(content: Text('Gagal ekspor: $e')),
     );
   }

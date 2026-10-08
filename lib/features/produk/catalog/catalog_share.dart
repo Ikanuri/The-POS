@@ -176,7 +176,7 @@ Future<void> _captureAndShare(
   } catch (e) {
     if (sheetCtx.mounted) {
       ScaffoldMessenger.of(sheetCtx)
-          .showSnackBar(SnackBar(content: Text('Gagal membagikan: $e')));
+          .showAppSnackBar(SnackBar(content: Text('Gagal membagikan: $e')));
     }
   }
 }

@@ -1351,7 +1351,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
     final resolved = await _resolveBarcode(barcode);
     if (!mounted) return;
     if (resolved == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showAppSnackBar(
         SnackBar(
           content: Text('Barcode tidak ditemukan: $barcode'),
           duration: const Duration(seconds: 1),
@@ -2421,7 +2421,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
     ref.read(cartProvider(_cartId).notifier).clear();
     ref.read(catalogEditProvider.notifier).state = null;
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+    ScaffoldMessenger.of(context).showAppSnackBar(SnackBar(
         content: Text(editing == null
             ? 'Katalog disimpan'
             : 'Perubahan katalog disimpan')));
@@ -2865,7 +2865,7 @@ void _decrementProduct(BuildContext context, List<CartItem> cart,
   if (unitLines.length > 1) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(const SnackBar(
+      ..showAppSnackBar(const SnackBar(
         content: Text('Produk ini punya beberapa satuan di keranjang — '
             'atur jumlahnya lewat keranjang.'),
       ));

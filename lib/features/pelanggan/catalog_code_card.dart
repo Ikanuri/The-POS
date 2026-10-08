@@ -173,7 +173,7 @@ class _CatalogCodeCardState extends ConsumerState<CatalogCodeCard> {
                     onPressed: () async {
                       final messenger = ScaffoldMessenger.of(context);
                       await Clipboard.setData(ClipboardData(text: _code!));
-                      messenger.showSnackBar(
+                      messenger.showAppSnackBar(
                           const SnackBar(content: Text('Kode disalin')));
                     },
                     icon: const Icon(Icons.copy, size: 16),

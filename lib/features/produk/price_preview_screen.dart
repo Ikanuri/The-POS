@@ -344,7 +344,7 @@ class _PricePreviewScreenState extends ConsumerState<PricePreviewScreen>
               icon: const Icon(Icons.copy, size: 18),
               onPressed: () {
                 Clipboard.setData(ClipboardData(text: text));
-                ScaffoldMessenger.of(c).showSnackBar(
+                ScaffoldMessenger.of(c).showAppSnackBar(
                     const SnackBar(content: Text('Log disalin')));
               },
             ),

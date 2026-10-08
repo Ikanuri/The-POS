@@ -193,11 +193,11 @@ Future<void> showPurchaseDetailSheet(
   switch (action) {
     case 'approve':
       await db.approvePurchase(p.id);
-      messenger.showSnackBar(
+      messenger.showAppSnackBar(
           const SnackBar(content: Text('HPP disetujui & diterapkan')));
     case 'reject':
       await db.rejectPurchaseCost(p.id);
-      messenger.showSnackBar(const SnackBar(
+      messenger.showAppSnackBar(const SnackBar(
           content: Text('Usulan HPP ditolak — stok tetap tercatat')));
     case 'void':
       final ok = await showAppDialog<bool>(
@@ -221,7 +221,7 @@ Future<void> showPurchaseDetailSheet(
       if (ok != true) return;
       final notRestored =
           await db.voidPurchase(p.id, kasirId: device.deviceCode);
-      messenger.showSnackBar(SnackBar(
+      messenger.showAppSnackBar(SnackBar(
         content: Text(notRestored.isEmpty
             ? 'Pembelian dibatalkan'
             : 'Pembelian dibatalkan. HPP ${notRestored.length} barang TIDAK '

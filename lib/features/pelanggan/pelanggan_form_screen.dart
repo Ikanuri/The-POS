@@ -109,7 +109,7 @@ class _PelangganFormScreenState
         await db.markCustomerLocallyModified(custId);
       }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context).showAppSnackBar(
           SnackBar(
               content: Text(
                   _isEdit ? 'Data pelanggan diperbarui' : 'Pelanggan ditambahkan')),
@@ -119,7 +119,7 @@ class _PelangganFormScreenState
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error: $e')));
+            .showAppSnackBar(SnackBar(content: Text('Error: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -194,7 +194,7 @@ class _PelangganFormScreenState
     await db.deactivateCustomer(c.id);
     if (mounted) {
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Pelanggan "${c.name}" dihapus')));
+          .showAppSnackBar(SnackBar(content: Text('Pelanggan "${c.name}" dihapus')));
       context.pop();
     }
   }

@@ -133,7 +133,7 @@ class _MethodTile extends ConsumerWidget {
       ),
       confirmDismiss: (_) async {
         if (method.isActive) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          ScaffoldMessenger.of(context).showAppSnackBar(const SnackBar(
               content: Text('Nonaktifkan metode ini dulu sebelum menghapus.')));
           return false;
         }

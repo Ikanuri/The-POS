@@ -1,3 +1,4 @@
+import '../../core/theme/app_overlays.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -74,7 +75,7 @@ class _TutupKasirScreenState extends ConsumerState<TutupKasirScreen> {
     ));
     ref.invalidate(_closingHistoryProvider);
     if (!mounted) return;
-    messenger.showSnackBar(
+    messenger.showAppSnackBar(
         const SnackBar(content: Text('Tutup kasir tersimpan')));
     _physicalCtrl.clear();
     _noteCtrl.clear();

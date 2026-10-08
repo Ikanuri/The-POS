@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'app_motion.dart';
 
@@ -132,6 +133,26 @@ class AppDialogRoute<T> extends DialogRoute<T> {
       child: ScaleTransition(
         scale: Tween<double>(begin: 0.94, end: 1).animate(eased),
         child: child,
+      ),
+    );
+  }
+}
+
+/// SnackBar/toast dengan animasi baku app (muncul 260 ms easeOutQuint,
+/// keluar 175 ms ala Bulletin Telegram) + tik haptik halus. Pemanggil lama
+/// cukup ganti `showSnackBar` → `showAppSnackBar`.
+extension AppSnackBarX on ScaffoldMessengerState {
+  ScaffoldFeatureController<SnackBar, SnackBarClosedReason> showAppSnackBar(
+      SnackBar snackBar) {
+    HapticFeedback.selectionClick();
+    return showSnackBar(
+      snackBar,
+      snackBarAnimationStyle: AnimationStyle(
+        duration: AppMotion.dur(context, AppMotion.medium),
+        reverseDuration:
+            AppMotion.dur(context, const Duration(milliseconds: 175)),
+        curve: AppMotion.easeOutQuint,
+        reverseCurve: AppMotion.easeIn,
       ),
     );
   }

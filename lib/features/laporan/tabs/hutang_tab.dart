@@ -305,7 +305,7 @@ class _HutangTabState extends ConsumerState<HutangTab> {
     );
     ref.invalidate(_debtBookProvider);
     if (!mounted) return;
-    messenger.showSnackBar(SnackBar(
+    messenger.showAppSnackBar(SnackBar(
       content: Text(change > 0
           ? 'Terbayar ${formatRupiah(applied)}, kembalian ${formatRupiah(change)}'
           : 'Terbayar ${formatRupiah(applied)}'),

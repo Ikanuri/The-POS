@@ -1,3 +1,4 @@
+import '../../core/theme/app_overlays.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/services/lan_sync_service.dart';
@@ -34,12 +35,12 @@ class _CustomerProposalReviewScreenState
           widget.proposal.id, _selected);
       if (!mounted) return;
       Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showAppSnackBar(
           SnackBar(content: Text('$applied pelanggan diterapkan')));
     } catch (e) {
       if (mounted) {
         setState(() => _applying = false);
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context).showAppSnackBar(
             SnackBar(content: Text('Gagal menerapkan usulan: $e')));
       }
     }

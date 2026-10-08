@@ -1,3 +1,4 @@
+import '../../core/theme/app_overlays.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -184,7 +185,7 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
     // Indikasi proses untuk ekspor yang melibatkan tangkapan grafik.
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(
+      ..showAppSnackBar(SnackBar(
         duration: const Duration(seconds: 1),
         content: Text('Menyiapkan laporan ${_tabName(_tabController.index)}…'),
       ));
@@ -203,7 +204,7 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
     final tab = ReportTab.values[_tabController.index];
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(
+      ..showAppSnackBar(SnackBar(
         duration: const Duration(seconds: 1),
         content: Text('Menyiapkan laporan ${_tabName(_tabController.index)}…'),
       ));

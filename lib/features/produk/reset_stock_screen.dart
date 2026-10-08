@@ -51,7 +51,7 @@ class _ResetStockScreenState extends ConsumerState<ResetStockScreen> {
     if (!mounted) return;
     setState(() => _loading = false);
     if (rows.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      ScaffoldMessenger.of(context).showAppSnackBar(const SnackBar(
           content: Text('Tidak ada produk berstok di cakupan ini')));
       return;
     }
@@ -226,7 +226,7 @@ class _ResetStockReviewScreenState
       );
       if (mounted) {
         Navigator.of(context).popUntil((r) => r.isFirst || r.settings.name == '/');
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        ScaffoldMessenger.of(context).showAppSnackBar(SnackBar(
             content:
                 Text('Stok direset (${widget.rows.length} produk ke 0)')));
       }

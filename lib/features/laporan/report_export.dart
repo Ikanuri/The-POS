@@ -1,3 +1,4 @@
+import '../../core/theme/app_overlays.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
@@ -118,12 +119,12 @@ Future<void> exportReport({
     );
     if (!context.mounted) return;
     if (path != null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      ScaffoldMessenger.of(context).showAppSnackBar(const SnackBar(
           content: Text('Selesai')));
     }
   } catch (e) {
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+    ScaffoldMessenger.of(context).showAppSnackBar(SnackBar(
       content: Text('Gagal export: $e'),
       backgroundColor: Theme.of(context).colorScheme.error,
     ));
@@ -159,11 +160,11 @@ Future<void> shareReport({
         text: 'Laporan ${_tabLabel(tab)}'
             '${storeName.isEmpty ? '' : ' - $storeName'}');
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+    ScaffoldMessenger.of(context).showAppSnackBar(const SnackBar(
         content: Text('Selesai')));
   } catch (e) {
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+    ScaffoldMessenger.of(context).showAppSnackBar(SnackBar(
       content: Text('Gagal membagikan: $e'),
       backgroundColor: Theme.of(context).colorScheme.error,
     ));

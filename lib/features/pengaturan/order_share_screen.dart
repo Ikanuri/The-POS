@@ -423,7 +423,7 @@ class _OrderShareScreenState extends ConsumerState<OrderShareScreen> {
     if (!mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     if (v.json == null) {
-      messenger.showSnackBar(SnackBar(
+      messenger.showAppSnackBar(SnackBar(
           content: Text(v.error ?? 'Stiker tidak valid'),
           backgroundColor: Theme.of(context).colorScheme.error));
       return;
@@ -431,7 +431,7 @@ class _OrderShareScreenState extends ConsumerState<OrderShareScreen> {
     await CatalogStickerService.setCustom(
         ref.read(databaseProvider), slot, result.files.single.bytes!);
     ref.invalidate(_stickerCustomProvider);
-    messenger.showSnackBar(SnackBar(
+    messenger.showAppSnackBar(SnackBar(
         content: Text('Stiker "${slot.label}" diganti - berlaku setelah '
             'Publish/bagikan ulang')));
   }
@@ -604,14 +604,14 @@ class _OrderShareScreenState extends ConsumerState<OrderShareScreen> {
       final accountId = accountCtrl.text.trim();
       if (token.isEmpty || accountId.isEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          ScaffoldMessenger.of(context).showAppSnackBar(const SnackBar(
               content: Text('Account ID & API Token tidak boleh kosong')));
         }
         return;
       }
       await _cloudflare.saveCredentials(apiToken: token, accountId: accountId);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context).showAppSnackBar(
             const SnackBar(content: Text('Kredensial Cloudflare disimpan')));
       }
     }
@@ -650,11 +650,11 @@ class _OrderShareScreenState extends ConsumerState<OrderShareScreen> {
       );
       if (mounted) {
         setState(() => _publishedUrl = result.url);
-        messenger.showSnackBar(
+        messenger.showAppSnackBar(
             SnackBar(content: Text('Berhasil publish ke ${result.url}')));
       }
     } catch (e) {
-      messenger.showSnackBar(SnackBar(
+      messenger.showAppSnackBar(SnackBar(
           content: Text('Gagal publish ke web: $e — coba lagi atau pakai '
               '"Buat & Bagikan" manual di bawah')));
     } finally {
@@ -688,7 +688,7 @@ class _OrderShareScreenState extends ConsumerState<OrderShareScreen> {
       );
     } catch (e) {
       messenger
-          .showSnackBar(SnackBar(content: Text('Gagal membuat katalog: $e')));
+          .showAppSnackBar(SnackBar(content: Text('Gagal membuat katalog: $e')));
     } finally {
       if (mounted) setState(() => _generating = false);
     }
@@ -835,7 +835,7 @@ class _OrderShareScreenState extends ConsumerState<OrderShareScreen> {
                     Clipboard.setData(ClipboardData(text: _publishedUrl!));
                     ScaffoldMessenger.of(context)
                       ..hideCurrentSnackBar()
-                      ..showSnackBar(
+                      ..showAppSnackBar(
                           const SnackBar(content: Text('Link disalin')));
                   },
                 ),
