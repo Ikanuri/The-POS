@@ -16,6 +16,17 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 8 Oktober 2026 (Animasi & Transisi Lebih Halus di Aplikasi)
+
+- **Perpindahan halaman lebih halus:** halaman baru muncul memudar sambil bergeser sedikit dari kanan, dan kembali dengan gerak sebaliknya. Pindah tab di bawah memudar lembut.
+- **Jendela (sheet dan dialog) muncul dan hilang lebih halus**, bukan lagi muncul mendadak.
+- **Daftar produk kasir:** daftar varian membuka dan menutup dengan animasi, panah berputar halus, dan angka jumlah berdenyut kecil saat berubah.
+- **Keranjang:** barang baru masuk dengan animasi, dan total serta jumlah barang berdenyut halus saat berubah.
+- **Sentuhan lebih tenang:** efek saat menekan tombol kini riak lembut dan indikator tab bawah berpindah lebih cepat.
+- Jika "kurangi animasi" aktif di pengaturan HP, semua gerak ini otomatis dimatikan. Tata letak dan cara kerja kasir tidak berubah.
+
+---
+
 ## 8 Oktober 2026 (Kolom Cari & Pengaturan Jumlah Saran)
 
 > **Perlu Publish ulang katalog** untuk perbaikan kolom cari.

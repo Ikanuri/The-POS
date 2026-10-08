@@ -12,6 +12,15 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 - feat(katalog): `666181d` — feat(katalog): stepper jumlah saran terlaris + tombol Salin link hasil publish
 - feat(katalog-html): saran cari "Cari <nama>? Tekan →" (ikon panah inline; hanya nama produk terpotong), saran tetap berputar saat kolom fokus (berhenti saat ada huruf), tombol X jadi lingkaran outline & tidak mencuri fokus (pointerdown/mousedown preventDefault) sehingga kursor+keyboard tetap terbuka setelah menghapus -> kembali landing
 
+## 2026-10-08 (Prototype Redesign Flutter: animasi & transisi ala Telegram)
+
+- feat(motion): token gerak terpusat (durasi + kurva baku) di core/theme/app_motion.dart
+- feat(motion): transisi halaman - sub-halaman fade + geser 48px (pop = kebalikannya), pindah tab fade+skala; hormati 'kurangi animasi'
+- feat(motion): sheet & dialog beranimasi baku (showAppSheet easeOutQuint, showAppDialog fade + skala 0,94->1); 45 berkas memakai pembungkus baru
+- feat(motion): daftar produk kasir - daftar varian membuka/menutup (tinggi+fade), chevron berputar, subtitle harga fade, angka qty AddControl berdenyut (BumpOnChange)
+- feat(motion): keranjang - baris baru masuk dgn animasi (EnterAnimation), total & badge jumlah berdenyut
+- feat(motion): riak sentuh polos lembut (bukan InkSparkle), animasi state tombol token fast, indikator tab bawah 260ms; bump 2.96.0+193
+
 ## 2026-10-08 (kolom cari tak tertutup keyboard; dropdown jumlah saran)
 
 - fix(katalog-html): kembali ke landing (X / hapus huruf terakhir) dengan keyboard terbuka -> halaman digulir agar kolom cari terlihat di atas keyboard & tombol keranjang (`revealSearch`, juga saat fokus & visualViewport resize)
