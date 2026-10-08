@@ -14,6 +14,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 - feat(motion): `d3b18c7` — angka bengkak +10% hanya saat bertambah (CounterView)
 - feat(motion): `6e8fb7c` — skeleton memuat menggantikan spinner di daftar produk kasir
 - feat(motion): `3559597` — popup menu tumbuh dari titik pemicu (150+16n ms)
+- fix(motion): `24c02a5` — PressScale: pohon widget konstan, tap tidak hilang saat animasi tekan (bug vital stepper)
 - feat(motion): `e0ce2db` — toast/SnackBar animasi baku + tik haptik (`showAppSnackBar`)
 
 ## 2026-10-08 (stepper jumlah saran + salin link publish)
