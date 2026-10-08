@@ -140,7 +140,8 @@ void main() {
   });
 
   group('layar Kasir', () {
-    testWidgets('kolom cari kosong -> landing (Terlaris + Terakhir dijual); '
+    testWidgets(
+        'kolom cari kosong -> landing (Terlaris + Terakhir dijual); '
         'ketik -> daftar; hapus -> landing lagi', (tester) async {
       final db = AppDatabase(NativeDatabase.memory());
       final a = await _addProduct(db, 'Gula Pasir');
@@ -174,7 +175,8 @@ void main() {
       await db.close();
     });
 
-    testWidgets('"Semua produk" membuka daftar penuh; chip Beranda kembali '
+    testWidgets(
+        '"Semua produk" membuka daftar penuh; chip Beranda kembali '
         'ke landing', (tester) async {
       final db = AppDatabase(NativeDatabase.memory());
       await _addProduct(db, 'Gula Pasir');
@@ -206,8 +208,8 @@ void main() {
       await _sale(db, DateTime.now(), [(a, 1)]);
       await _pumpKasir(tester, db);
 
-      final g = await tester.startGesture(
-          tester.getCenter(find.byIcon(Icons.add_rounded).first));
+      final g = await tester
+          .startGesture(tester.getCenter(find.byIcon(Icons.add_rounded).first));
       await tester.pump(const Duration(milliseconds: 60));
       await g.up();
       await tester.pumpAndSettle();
@@ -220,7 +222,8 @@ void main() {
     testWidgets('pengaturan "Langsung daftar": tanpa landing', (tester) async {
       final db = AppDatabase(NativeDatabase.memory());
       await _addProduct(db, 'Gula Pasir');
-      await _pumpKasir(tester, db, prefs: {'kasir_landing_view': false});
+      await _pumpKasir(tester, db,
+          prefs: {'kasir_landing_view': false, 'kasir_swipe_hint_count': 3});
 
       expect(find.byKey(const Key('kasir-landing')), findsNothing);
       expect(find.text('Gula Pasir'), findsOneWidget);
@@ -228,9 +231,9 @@ void main() {
       await _drain(tester);
       await db.close();
     });
-  
 
-    testWidgets('lebar HP sempit (360x800): landing tanpa overflow, banyak '
+    testWidgets(
+        'lebar HP sempit (360x800): landing tanpa overflow, banyak '
         'kategori membungkus', (tester) async {
       final db = AppDatabase(NativeDatabase.memory());
       final a = await _addProduct(db, 'Gula Pasir');

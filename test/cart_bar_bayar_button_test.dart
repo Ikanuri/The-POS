@@ -19,8 +19,8 @@ import 'package:the_pos/features/kasir/cart_provider.dart' show kMainCartId;
 /// Owner/Asisten" via cart sheet, lihat kasir_handoff_qr_test.dart).
 void main() {
   // Layar Kasir default = landing; test ini menguji DAFTAR produk langsung.
-  setUp(() =>
-      SharedPreferences.setMockInitialValues({'kasir_landing_view': false}));
+  setUp(() => SharedPreferences.setMockInitialValues(
+      {'kasir_landing_view': false, 'kasir_swipe_hint_count': 3}));
 
   Future<AppDatabase> seedDb({bool terimaPembayaran = false}) async {
     final db = AppDatabase(NativeDatabase.memory());
@@ -51,6 +51,10 @@ void main() {
       double ambientLetterSpacing = 0}) async {
     await tester.binding.setSurfaceSize(const Size(420, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
+    // Prefs diatur ulang tiap pump: test yang memanggil pumpKasir dua kali
+    // tidak boleh mewarisi keranjang tersimpan dari pump pertama.
+    SharedPreferences.setMockInitialValues(
+        {'kasir_landing_view': false, 'kasir_swipe_hint_count': 3});
 
     final container = ProviderContainer(overrides: [
       databaseProvider.overrideWithValue(db),

@@ -18,8 +18,8 @@ import 'package:the_pos/features/kasir/widgets/add_control.dart';
 /// (138->152) ikut ditambah supaya kartu tidak overflow.
 void main() {
   // Layar Kasir default = landing; test ini menguji DAFTAR produk langsung.
-  setUp(() =>
-      SharedPreferences.setMockInitialValues({'kasir_landing_view': false}));
+  setUp(() => SharedPreferences.setMockInitialValues(
+      {'kasir_landing_view': false, 'kasir_swipe_hint_count': 3}));
 
   late AppDatabase db;
   setUp(() => db = AppDatabase(NativeDatabase.memory()));

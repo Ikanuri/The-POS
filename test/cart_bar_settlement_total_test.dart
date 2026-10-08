@@ -23,8 +23,8 @@ import 'package:the_pos/features/kasir/cart_provider.dart' show kMainCartId;
 /// layar ini.
 void main() {
   // Layar Kasir default = landing; test ini menguji DAFTAR produk langsung.
-  setUp(() =>
-      SharedPreferences.setMockInitialValues({'kasir_landing_view': false}));
+  setUp(() => SharedPreferences.setMockInitialValues(
+      {'kasir_landing_view': false, 'kasir_swipe_hint_count': 3}));
 
   Future<AppDatabase> seedDb() async {
     final db = AppDatabase(NativeDatabase.memory());

@@ -15,7 +15,7 @@ import 'package:the_pos/features/kasir/kasir_screen.dart';
 void main() {
   // Layar Kasir default = landing; test ini menguji DAFTAR produk langsung.
   setUp(() => SharedPreferences.setMockInitialValues(
-      {'kasir_landing_view': false}));
+      {'kasir_landing_view': false, 'kasir_swipe_hint_count': 3}));
 
   late AppDatabase db;
   setUp(() => db = AppDatabase(NativeDatabase.memory()));
@@ -72,8 +72,7 @@ void main() {
 
   const toggle = ValueKey('variant-toggle');
 
-  testWidgets('tap chevron membuka lalu menutup daftar varian',
-      (tester) async {
+  testWidgets('tap chevron membuka lalu menutup daftar varian', (tester) async {
     await seedParentWithVariant();
     await pumpKasirList(tester);
 
@@ -100,8 +99,7 @@ void main() {
     await drain(tester);
   });
 
-  testWidgets('tahan item tetap membuka varian (jalan pintas)',
-      (tester) async {
+  testWidgets('tahan item tetap membuka varian (jalan pintas)', (tester) async {
     await seedParentWithVariant();
     await pumpKasirList(tester);
     await tester.longPress(find.text('Pop Ice'));
@@ -110,10 +108,10 @@ void main() {
     await drain(tester);
   });
 
-  testWidgets('produk TANPA varian tidak punya tombol chevron',
-      (tester) async {
-    await db.into(db.products).insert(
-        ProductsCompanion.insert(id: 'p9', name: 'Minyak Goreng'));
+  testWidgets('produk TANPA varian tidak punya tombol chevron', (tester) async {
+    await db
+        .into(db.products)
+        .insert(ProductsCompanion.insert(id: 'p9', name: 'Minyak Goreng'));
     await db.into(db.productUnits).insert(ProductUnitsCompanion.insert(
         id: 'u9', productId: 'p9', isBaseUnit: const Value(true)));
     await db.into(db.priceTiers).insert(PriceTiersCompanion.insert(
@@ -123,7 +121,8 @@ void main() {
     await drain(tester);
   });
 
-  testWidgets('membuka/menutup varian dianimasikan (tinggi + fade), chevron '
+  testWidgets(
+      'membuka/menutup varian dianimasikan (tinggi + fade), chevron '
       'berputar, varian tetap terpasang selama animasi tutup', (tester) async {
     await seedParentWithVariant();
     await pumpKasirList(tester);

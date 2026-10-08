@@ -53,7 +53,8 @@ void main() {
     required String deviceRole,
     String? customerName,
   }) async {
-    SharedPreferences.setMockInitialValues({'kasir_landing_view': false});
+    SharedPreferences.setMockInitialValues(
+        {'kasir_landing_view': false, 'kasir_swipe_hint_count': 3});
     await tester.binding.setSurfaceSize(const Size(400, 700));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 

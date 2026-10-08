@@ -14,8 +14,8 @@ import 'package:the_pos/features/kasir/kasir_screen.dart';
 /// yang benar-benar menonaktifkan tombolnya.
 void main() {
   // Layar Kasir default = landing; test ini menguji DAFTAR produk langsung.
-  setUp(() =>
-      SharedPreferences.setMockInitialValues({'kasir_landing_view': false}));
+  setUp(() => SharedPreferences.setMockInitialValues(
+      {'kasir_landing_view': false, 'kasir_swipe_hint_count': 3}));
 
   testWidgets(
       'produk ditandai stok habis → badge "Habis" tampil di kartu, tombol '

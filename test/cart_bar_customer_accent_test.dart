@@ -18,8 +18,8 @@ import 'package:the_pos/features/kasir/cart_provider.dart' show kMainCartId;
 /// pembedanya benar-benar kelihatan (bukan cuma ikon kecil di pinggir).
 void main() {
   // Layar Kasir default = landing; test ini menguji DAFTAR produk langsung.
-  setUp(() =>
-      SharedPreferences.setMockInitialValues({'kasir_landing_view': false}));
+  setUp(() => SharedPreferences.setMockInitialValues(
+      {'kasir_landing_view': false, 'kasir_swipe_hint_count': 3}));
 
   Future<void> seedProduct(AppDatabase db) async {
     await db

@@ -28,8 +28,7 @@ import 'package:the_pos/features/kasir/kasir_screen.dart';
 ///
 /// Pola fake scanner & harness sama seperti `kasir_scan_order_code_test.dart`.
 class _FakeMobileScannerPlatform extends MobileScannerPlatform {
-  final _barcodesController =
-      StreamController<BarcodeCapture?>.broadcast();
+  final _barcodesController = StreamController<BarcodeCapture?>.broadcast();
   final _torchController = StreamController<TorchState>.broadcast();
   final _zoomController = StreamController<double>.broadcast();
 
@@ -100,7 +99,7 @@ Future<String> _seedProduct(AppDatabase db, {required int livePrice}) async {
 void main() {
   // Layar Kasir default = landing; test ini menguji DAFTAR produk langsung.
   setUp(() => SharedPreferences.setMockInitialValues(
-      {'kasir_landing_view': false}));
+      {'kasir_landing_view': false, 'kasir_swipe_hint_count': 3}));
 
   late _FakeMobileScannerPlatform fake;
   final MobileScannerPlatform original = MobileScannerPlatform.instance;
@@ -196,8 +195,8 @@ void main() {
     fake.emitBarcode(handoffCode(2500));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('ditambahkan ke keranjang aktif'),
-        findsOneWidget);
+    expect(
+        find.textContaining('ditambahkan ke keranjang aktif'), findsOneWidget);
 
     final cart = container.read(cartProvider(kMainCartId));
     final item = cart.firstWhere((c) => c.productId == 'p1');
@@ -214,8 +213,8 @@ void main() {
     await tester.fling(dragArea, const Offset(0, -400), 2000);
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Harga pengirim beda dari lokal'),
-        findsOneWidget);
+    expect(
+        find.textContaining('Harga pengirim beda dari lokal'), findsOneWidget);
     expect(find.textContaining(formatRupiah(3000)), findsWidgets,
         reason: 'nominal harga lokal (dicoret) harus tampil');
     expect(find.textContaining(formatRupiah(2500)), findsWidgets,
@@ -286,8 +285,7 @@ void main() {
     await tester.fling(dragArea, const Offset(0, -400), 2000);
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Harga pengirim beda dari lokal'),
-        findsNothing);
+    expect(find.textContaining('Harga pengirim beda dari lokal'), findsNothing);
 
     await drain(tester);
   });
@@ -355,8 +353,7 @@ void main() {
     final item = cart.firstWhere((c) => c.productId == 'p1');
     expect(item.price, 2500, reason: 'harga pengirim tetap dipakai apa adanya');
     expect(item.priceMismatchLocal, isNull,
-        reason:
-            'penerima tak berwenang → skip, device ini toh ke-gate lagi di '
+        reason: 'penerima tak berwenang → skip, device ini toh ke-gate lagi di '
             'tombol Bayar');
 
     final dragArea = find.byWidgetPredicate(
@@ -364,8 +361,7 @@ void main() {
     await tester.fling(dragArea, const Offset(0, -400), 2000);
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Harga pengirim beda dari lokal'),
-        findsNothing);
+    expect(find.textContaining('Harga pengirim beda dari lokal'), findsNothing);
 
     await drain(tester);
   });

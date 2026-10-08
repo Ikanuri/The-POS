@@ -50,7 +50,13 @@ Future<void> pumpWithFakeApp(
 }) async {
   await tester.binding.setSurfaceSize(surfaceSize);
   addTearDown(() => tester.binding.setSurfaceSize(null));
-  SharedPreferences.setMockInitialValues(initialPrefs);
+  // Layar Kasir default = landing; harness menguji DAFTAR produk langsung
+  // kecuali test menimpa `kasir_landing_view` lewat [initialPrefs].
+  SharedPreferences.setMockInitialValues({
+    'kasir_landing_view': false,
+    'kasir_swipe_hint_count': 3,
+    ...initialPrefs
+  });
 
   final fakeDevice = device ??
       const DeviceIdentity(
@@ -66,7 +72,8 @@ Future<void> pumpWithFakeApp(
     ProviderScope(
       overrides: [
         databaseProvider.overrideWithValue(db),
-        deviceProvider.overrideWith((ref) => DeviceNotifier()..state = fakeDevice),
+        deviceProvider
+            .overrideWith((ref) => DeviceNotifier()..state = fakeDevice),
         ...extraOverrides,
       ],
       child: MaterialApp(

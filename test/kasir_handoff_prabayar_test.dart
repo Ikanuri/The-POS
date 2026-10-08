@@ -84,8 +84,8 @@ Future<String> _seedProduct(AppDatabase db) async {
 
 void main() {
   // Layar Kasir default = landing; test ini menguji DAFTAR produk langsung.
-  setUp(() =>
-      SharedPreferences.setMockInitialValues({'kasir_landing_view': false}));
+  setUp(() => SharedPreferences.setMockInitialValues(
+      {'kasir_landing_view': false, 'kasir_swipe_hint_count': 3}));
 
   late _FakeMobileScannerPlatform fake;
   final MobileScannerPlatform original = MobileScannerPlatform.instance;

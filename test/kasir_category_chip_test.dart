@@ -13,8 +13,8 @@ import 'helpers/pump_app.dart';
 /// chip yang sama = matikan filter ("Semua" implisit).
 void main() {
   // Layar Kasir default = landing; test ini menguji DAFTAR produk langsung.
-  setUp(() =>
-      SharedPreferences.setMockInitialValues({'kasir_landing_view': false}));
+  setUp(() => SharedPreferences.setMockInitialValues(
+      {'kasir_landing_view': false, 'kasir_swipe_hint_count': 3}));
 
   Future<String> seedProduct(AppDatabase db, String id, String name,
       {int? groupId}) async {
