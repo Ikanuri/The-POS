@@ -8,6 +8,7 @@ import '../../core/providers/laci_meja_provider.dart';
 import '../../core/providers/license_provider.dart';
 import '../../core/services/backup_reminder.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/app_motion.dart';
 
 class _TabItem {
   const _TabItem(this.path, this.label, this.icon, this.selectedIcon);
@@ -125,6 +126,9 @@ class _MainShellState extends ConsumerState<MainShell> {
             return Stack(
               children: [
                 NavigationBar(
+                  // Indikator tab berpindah cepat & halus (bawaan M3 500 ms
+                  // terasa lamban).
+                  animationDuration: AppMotion.medium,
                   selectedIndex: selected,
                   onDestinationSelected: (i) => context.go(tabs[i].path),
                   destinations: [

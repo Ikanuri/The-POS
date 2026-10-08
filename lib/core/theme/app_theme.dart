@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'app_motion.dart';
 import 'app_page_transitions.dart';
 
 class AppTheme {
@@ -204,6 +205,11 @@ class AppTheme {
 
     return base.copyWith(
       pageTransitionsTheme: AppPageTransitionsBuilder.theme,
+      // Umpan balik sentuh tenang ala Telegram: riak polos & lembut (bukan
+      // kilau InkSparkle bawaan M3 di Android 12+).
+      splashFactory: InkRipple.splashFactory,
+      splashColor: ink.withOpacity(isDark ? 0.10 : 0.08),
+      highlightColor: ink.withOpacity(isDark ? 0.06 : 0.04),
       textTheme: GoogleFonts.hankenGroteskTextTheme(base.textTheme).apply(
         bodyColor: ink,
         displayColor: ink,
@@ -220,6 +226,7 @@ class AppTheme {
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
+          animationDuration: AppMotion.fast,
           backgroundColor: accent,
           foregroundColor: Colors.white,
           shape: RoundedRectangleBorder(
@@ -234,6 +241,7 @@ class AppTheme {
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
+          animationDuration: AppMotion.fast,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(11),
           ),
