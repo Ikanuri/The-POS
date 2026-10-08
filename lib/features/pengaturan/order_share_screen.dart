@@ -503,7 +503,7 @@ class _OrderShareScreenState extends ConsumerState<OrderShareScreen> {
           subtitle: const Text(
               'Pelanggan memilih kategori dulu di halaman awal (chip "Semua '
               'produk" tetap ada) dan label kategori tampil di tiap produk. '
-              'Dimatikan: langsung semua produk.'),
+              'Dimatikan: halaman awal hanya punya satu chip "Semua produk".'),
           value: d.showCategories,
           onChanged: (v) => _saveDisplay(
               (db) => CatalogDisplayService.setShowCategories(db, v)),

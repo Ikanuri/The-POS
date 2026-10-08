@@ -2821,8 +2821,10 @@ function motionOk(){
 
 function computeState(){
   var q = qEl.value.trim();
-  var view = (!CATS_ON || q || selCat !== null) ? 'list' : 'landing';
-  return {view: view, catRow: CATS_ON && view === 'list' && !q, extras: !CATS_ON && !q};
+  // Halaman awal (landing) SELALU ada; tanpa kategori isinya hanya satu chip
+  // "Semua produk" untuk menjelajah — tidak langsung membuka seluruh daftar.
+  var view = (q || selCat !== null) ? 'list' : 'landing';
+  return {view: view, catRow: CATS_ON && view === 'list' && !q, extras: false};
 }
 
 // Salinan visual elemen yang akan HILANG (ghost): ditaruh absolut di posisi
@@ -2929,15 +2931,14 @@ function clearListDom(){
   byId('listInfo').hidden = true;
 }
 function syncTbId(){
-  var link = CATS_ON && curView === 'list';
+  var link = curView === 'list';
   tbId.classList.toggle('clickable', link);
   if (link) tbId.setAttribute('aria-label', 'Kembali ke halaman awal');
   else tbId.removeAttribute('aria-label');
 }
-tbId.addEventListener('click', function(){ if (CATS_ON && curView === 'list') goLanding(); });
+tbId.addEventListener('click', function(){ if (curView === 'list') goLanding(); });
 
 function goLanding(noAnim){
-  if (!CATS_ON) return;
   selCat = null;
   setSelChips();
   qEl.value = '';
@@ -2964,7 +2965,6 @@ function popListState(){
 // ── Chip kategori. Dibangun SEKALI (dua set: di landing & di baris sticky);
 // pilihan hanya mengganti class (fokus keyboard tidak hilang).
 function buildChips(){
-  if (!CATS_ON) return;
   function mk(label, val, cls){
     var b = document.createElement('button');
     b.type = 'button';
@@ -2975,6 +2975,7 @@ function buildChips(){
     return b;
   }
   catsHero.appendChild(mk('Semua produk', '*', 'all'));
+  if (!CATS_ON) return;   // kategori dimatikan: landing hanya punya chip "Semua produk"
   CATS.forEach(function(c){ catsHero.appendChild(mk(c, c)); });
   catRowEl.appendChild(mk('Semua produk', '*'));
   CATS.forEach(function(c){ catRowEl.appendChild(mk(c, c)); });
@@ -3498,7 +3499,7 @@ byId('pasteBtn').addEventListener('click', loadPasted);
 byId('pasteIn').addEventListener('keydown', function(e){ if (e.key === 'Enter') { e.preventDefault(); loadPasted(); } });
 byId('pasteIn').addEventListener('input', function(){ byId('pasteMsg').textContent = ''; });
 // Slot "Pesan lagi": di landing (bawah chip) atau, tanpa kategori, di bawah kolom cari.
-(CATS_ON ? byId('extrasSlotL') : extrasSlotB).appendChild(extrasEl);
+byId('extrasSlotL').appendChild(extrasEl);
 
 
 // Blueprint §2/§6 — pindah mode, BUKAN pindah halaman: tidak ada reload,
@@ -3682,8 +3683,7 @@ function closeSent(fromPop){
   // Tanpa animasi: halaman menu sendiri sedang muncul kembali (transisi CSS);
   // WAAPI di atas itu (flipY kolom cari) pernah membuat kolom cari tetap
   // 'visibility:hidden' di Chromium.
-  if (CATS_ON) goLanding(true);
-  else { qEl.value = ''; clearTimeout(searchTimer); syncQueryUi(); renderList(true); }
+  goLanding(true);
   menuScroll.scrollTop = 0;
 }
 document.getElementById('sentBack').addEventListener('click', function(){ closeSent(false); });

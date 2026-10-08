@@ -7,6 +7,10 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-10-08 (katalog tanpa kategori tetap punya halaman awal)
+
+- feat(katalog-html): kategori dimatikan -> tetap membuka halaman awal (stiker, cari, Pesan lagi, game) dengan satu chip 'Semua produk', tidak lagi langsung semua produk; tbId/Back/kirim selalu kembali ke landing; bump 2.93.0+190
+
 ## 2026-10-08 (fix game labirin)
 
 - fix(katalog-html): lubang tujuan game 'melayang' di luar labirin - papan dibangun di lebar bawaan 320 saat kartu tersembunyi, lalu resize ke lebar asli tanpa membangun ulang dinding/bola; kini dinding dibangun ulang & bola diskalakan, resize saat tersembunyi diabaikan; bump 2.92.1+189
