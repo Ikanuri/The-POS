@@ -7,7 +7,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:the_pos/core/database/app_database.dart';
 import 'package:the_pos/core/providers/device_provider.dart';
 import 'package:the_pos/core/theme/app_theme.dart';
+import 'package:the_pos/core/providers/theme_provider.dart';
+import 'package:the_pos/features/kasir/cart_provider.dart';
 import 'package:the_pos/features/kasir/kasir_screen.dart';
+import 'package:the_pos/features/kasir/widgets/paste_order_sheet.dart';
 
 /// Kasir gaya BARU (kasir_modern.dart): landing, kolom cari yang naik saat
 /// mengetik, tanpa Terlaris, logika kasir tetap (stepper, select-all, dst.).
@@ -70,7 +73,8 @@ Future<void> _pumpKasir(WidgetTester tester, AppDatabase db,
     {Map<String, Object> prefs = const {},
     Size size = const Size(430, 2400),
     bool stickers = false,
-    bool reduced = false}) async {
+    bool reduced = false,
+    String deviceRole = 'owner'}) async {
   await tester.binding.setSurfaceSize(size);
   addTearDown(() => tester.binding.setSurfaceSize(null));
   SharedPreferences.setMockInitialValues(
@@ -84,12 +88,12 @@ Future<void> _pumpKasir(WidgetTester tester, AppDatabase db,
         if (!stickers)
           kasirStickerProvider.overrideWith((ref, slot) async => null),
         deviceProvider.overrideWith((ref) => DeviceNotifier()
-          ..state = const DeviceIdentity(
+          ..state = DeviceIdentity(
             storeUuid: 'test-store-uuid',
             storeKey: 'test-store-key',
             deviceName: 'Kasir Uji',
             deviceCode: 'K1',
-            deviceRole: 'owner',
+            deviceRole: deviceRole,
           )),
       ],
       child: MaterialApp(
@@ -221,5 +225,114 @@ void main() {
         reason: 'select-all setelah tap + supaya ketik berikutnya menimpa');
     await _drain(tester);
     await db.close();
+  });
+
+  group('tombol pojok', () {
+    testWidgets(
+        'landing = rail ikon (tanpa header Klasik, tanpa tombol scan '
+        'di rail); mengetik = lingkaran tunggal yang mengembang saat diketuk',
+        (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      await _addProduct(db, 'Gula Pasir');
+      await _pumpKasir(tester, db, prefs: modern);
+
+      expect(find.byKey(const Key('fab-rail')), findsOneWidget);
+      for (final k in ['history', 'held', 'paste', 'sync', 'grid', 'theme']) {
+        expect(find.byKey(Key('fab-$k')), findsOneWidget, reason: k);
+      }
+      expect(find.byKey(const Key('fab-main')), findsNothing);
+      // Scan hanya di kolom cari.
+      expect(find.byKey(const Key('modern-scan')), findsOneWidget);
+      // Header Klasik tidak ada (label tombol Klasik).
+      expect(find.text('Antrian'), findsNothing);
+
+      await tester.enterText(find.byKey(const Key('modern-search')), 'gula');
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('fab-rail')), findsNothing);
+      expect(find.byKey(const Key('fab-main')), findsOneWidget);
+      expect(find.byKey(const Key('fab-history')), findsNothing,
+          reason: 'menyusut: harus diketuk dulu untuk mengembang');
+
+      await tester.tap(find.byKey(const Key('fab-main')));
+      await tester.pumpAndSettle();
+      double y(String t) => tester.getCenter(find.text(t)).dy;
+      expect(y('Riwayat Transaksi'), greaterThan(y('Antrian Pesanan')));
+      expect(y('Antrian Pesanan'), greaterThan(y('Tempel Pesanan')));
+      expect(y('Tempel Pesanan'), greaterThan(y('Sync LAN')),
+          reason: 'urutan dari bawah: Riwayat, Antrian, Tempel, Sync');
+      expect(find.byKey(const Key('fab-scrim')), findsOneWidget);
+
+      // Ketuk latar menutup lagi.
+      await tester.tapAt(const Offset(200, 200));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('fab-history')), findsNothing);
+      expect(find.byKey(const Key('fab-main')), findsOneWidget);
+
+      await _drain(tester);
+      await db.close();
+    });
+
+    testWidgets(
+        'Tempel Pesanan membuka sheet; Sync LAN membuka pop-up kecil '
+        '(owner: Jadi host)', (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      await _addProduct(db, 'Gula Pasir');
+      await _pumpKasir(tester, db, prefs: modern);
+
+      await tester.tap(find.byKey(const Key('fab-paste')));
+      await tester.pumpAndSettle();
+      expect(find.byType(PasteOrderSheet), findsOneWidget);
+      Navigator.of(tester.element(find.byType(PasteOrderSheet))).pop();
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('fab-sync')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('quick-sync-dialog')), findsOneWidget);
+      expect(find.byKey(const Key('quick-sync-host')), findsOneWidget);
+      expect(find.byKey(const Key('quick-sync-ip')), findsNothing);
+
+      await _drain(tester);
+      await db.close();
+    });
+
+    testWidgets('Sync LAN untuk kasir: kolom IP/Token + Sinkron sekarang',
+        (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      await _addProduct(db, 'Gula Pasir');
+      await _pumpKasir(tester, db, prefs: modern, deviceRole: 'kasir');
+      await tester.tap(find.byKey(const Key('fab-sync')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('quick-sync-ip')), findsOneWidget);
+      expect(find.byKey(const Key('quick-sync-token')), findsOneWidget);
+      expect(find.byKey(const Key('quick-sync-go')), findsOneWidget);
+      expect(find.byKey(const Key('quick-sync-host')), findsNothing);
+      // Tanpa IP/Token -> pesan, tidak crash.
+      await tester.tap(find.byKey(const Key('quick-sync-go')));
+      await tester.pumpAndSettle();
+      expect(find.text('Isi IP dan Token host dulu'), findsOneWidget);
+      await _drain(tester);
+      await db.close();
+    });
+
+    testWidgets('sakelar tema & grid/list bekerja dari tombol pojok',
+        (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      await _addProduct(db, 'Gula Pasir');
+      await _pumpKasir(tester, db, prefs: modern);
+      final container =
+          ProviderScope.containerOf(tester.element(find.byType(KasirScreen)));
+
+      await tester.tap(find.byKey(const Key('fab-theme')));
+      await tester.pump();
+      expect(container.read(themeModeProvider), ThemeMode.dark);
+
+      final before = container.read(kasirGridProvider);
+      await tester.tap(find.byKey(const Key('fab-grid')));
+      await tester.pump();
+      expect(container.read(kasirGridProvider), !before);
+
+      await _drain(tester);
+      await db.close();
+    });
   });
 }

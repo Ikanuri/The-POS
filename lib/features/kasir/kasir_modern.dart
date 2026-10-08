@@ -8,6 +8,25 @@ part of 'kasir_screen.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 
 extension _KasirModernX on _KasirScreenState {
+  /// Antrian pesanan ditahan (tombol pojok). Sementara memakai panel antrian
+  /// yang sama dengan Klasik di dalam lembar bawah.
+  void _openHeldSheet() {
+    showAppSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetCtx) => SafeArea(
+        child: _HeldInlinePanel(
+          onResume: (o) {
+            Navigator.of(sheetCtx).pop();
+            _onHeldCardTap(o);
+          },
+          busy: _isSwitchingHeld,
+          onClose: () => Navigator.of(sheetCtx).pop(),
+        ),
+      ),
+    );
+  }
+
   Widget _buildModern(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final cart = ref.watch(cartProvider(_cartId));
@@ -77,21 +96,26 @@ extension _KasirModernX on _KasirScreenState {
                           ),
                           Expanded(
                             child: isLanding
-                                ? _ModernLanding(
-                                    cartId: _cartId,
-                                    onShowAll: () => ref
-                                        .read(_kasirShowAllProvider(_cartId)
-                                            .notifier)
-                                        .state = true,
-                                    tileBuilder: (p) => _ProductListTile(
-                                      product: p,
+                                ? Padding(
+                                    // Lorong untuk rail tombol pojok: tombol
+                                    // "+" produk tidak tertutup.
+                                    padding: const EdgeInsets.only(right: 64),
+                                    child: _ModernLanding(
                                       cartId: _cartId,
-                                      onTapBody: () => _openEntry(p),
-                                      onQuickAdd: _quickAdd,
-                                      onOpenEntry: () => _openEntry(p),
-                                      onBeforeTap: _markSkipSearchCollapse,
-                                      onAfterQtyChange:
-                                          _highlightSearchIfActive,
+                                      onShowAll: () => ref
+                                          .read(_kasirShowAllProvider(_cartId)
+                                              .notifier)
+                                          .state = true,
+                                      tileBuilder: (p) => _ProductListTile(
+                                        product: p,
+                                        cartId: _cartId,
+                                        onTapBody: () => _openEntry(p),
+                                        onQuickAdd: _quickAdd,
+                                        onOpenEntry: () => _openEntry(p),
+                                        onBeforeTap: _markSkipSearchCollapse,
+                                        onAfterQtyChange:
+                                            _highlightSearchIfActive,
+                                      ),
                                     ),
                                   )
                                 : _buildProductResults(
@@ -101,6 +125,53 @@ extension _KasirModernX on _KasirScreenState {
                       ),
                     ),
                   ),
+                ),
+              ],
+            ),
+          ),
+          Positioned.fill(
+            child: _ModernFab(
+              isLanding: isLanding,
+              isGrid: isGrid,
+              dark: Theme.of(context).brightness == Brightness.dark,
+              onToggleGrid: () => ref.read(kasirGridProvider.notifier).toggle(),
+              onToggleTheme: () => ref.read(themeModeProvider.notifier).set(
+                  Theme.of(context).brightness == Brightness.dark
+                      ? ThemeMode.light
+                      : ThemeMode.dark),
+              actions: [
+                _FabAction(
+                  key: 'history',
+                  icon: Icons.history_rounded,
+                  label: 'Riwayat Transaksi',
+                  onTap: () => showAppSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    builder: (_) => const TxHistorySheet(),
+                  ),
+                ),
+                _FabAction(
+                  key: 'held',
+                  icon: Icons.pause_circle_outline_rounded,
+                  label: 'Antrian Pesanan',
+                  badge: ref.watch(_heldCountProvider).valueOrNull ?? 0,
+                  onTap: _openHeldSheet,
+                ),
+                _FabAction(
+                  key: 'paste',
+                  icon: Icons.content_paste_go_rounded,
+                  label: 'Tempel Pesanan',
+                  onTap: () => showAppSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    builder: (_) => PasteOrderSheet(cartId: _cartId),
+                  ),
+                ),
+                _FabAction(
+                  key: 'sync',
+                  icon: Icons.sync_rounded,
+                  label: 'Sync LAN',
+                  onTap: () => showQuickSyncDialog(context),
                 ),
               ],
             ),
@@ -413,6 +484,451 @@ class _ModernLanding extends ConsumerWidget {
           ],
         ],
       ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tombol aksi pojok kanan bawah (pengganti header Klasik)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Satu aksi di tombol pojok.
+class _FabAction {
+  const _FabAction({
+    required this.key,
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.badge = 0,
+  });
+
+  final String key;
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final int badge;
+}
+
+/// Tombol pojok kanan bawah ala "chips expanded" Telegram.
+///  - Landing: RAIL ikon-saja (daftar dikasih lorong kanan supaya tombol "+"
+///    produk tidak tertutup).
+///  - Selain landing (mengetik/kategori/daftar): mengecil jadi SATU lingkaran
+///    (badge = jumlah antrian); ketuk untuk mengembang jadi daftar berlabel
+///    dengan latar redup, ketuk lagi/di luar untuk menutup.
+/// Urutan dari BAWAH: Riwayat, Antrian, Tempel Pesanan, Sync LAN; di atasnya
+/// pilihan tampilan (grid/list) dan sakelar terang/gelap.
+class _ModernFab extends StatefulWidget {
+  const _ModernFab({
+    required this.isLanding,
+    required this.actions,
+    required this.isGrid,
+    required this.dark,
+    required this.onToggleGrid,
+    required this.onToggleTheme,
+  });
+
+  /// Dari BAWAH ke ATAS.
+  final List<_FabAction> actions;
+  final bool isLanding;
+  final bool isGrid;
+  final bool dark;
+  final VoidCallback onToggleGrid;
+  final VoidCallback onToggleTheme;
+
+  @override
+  State<_ModernFab> createState() => _ModernFabState();
+}
+
+class _ModernFabState extends State<_ModernFab>
+    with SingleTickerProviderStateMixin {
+  // Dibuat di initState (bukan `late final` lazy): kalau hanya rail yang
+  // tampil, controller tak pernah disentuh sampai dispose() -> pembuatan
+  // Ticker saat unmount melempar "deactivated widget's ancestor".
+  late final AnimationController _c;
+
+  @override
+  void initState() {
+    super.initState();
+    _c = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 260),
+      reverseDuration: const Duration(milliseconds: 160),
+    );
+  }
+
+  bool _open = false;
+
+  @override
+  void didUpdateWidget(_ModernFab old) {
+    super.didUpdateWidget(old);
+    // Pindah landing <-> non-landing: selalu mulai tertutup.
+    if (old.isLanding != widget.isLanding && _open) _setOpen(false);
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  void _setOpen(bool v) {
+    setState(() => _open = v);
+    if (AppMotion.reduced(context)) {
+      _c.value = v ? 1 : 0;
+    } else {
+      v ? _c.forward() : _c.reverse();
+    }
+  }
+
+  void _run(VoidCallback cb) {
+    if (_open) _setOpen(false);
+    cb();
+  }
+
+  int get _totalBadge => widget.actions.fold<int>(0, (s, a) => s + a.badge);
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final rail = widget.isLanding;
+    return Stack(
+      children: [
+        // Latar redup HANYA saat daftar berlabel terbuka (non-landing).
+        if (!rail && _open)
+          Positioned.fill(
+            child: GestureDetector(
+              key: const Key('fab-scrim'),
+              behavior: HitTestBehavior.opaque,
+              onTap: () => _setOpen(false),
+              child: AnimatedBuilder(
+                animation: _c,
+                builder: (_, __) => ColoredBox(
+                    color: Colors.black.withOpacity(0.28 * _c.value)),
+              ),
+            ),
+          ),
+        Positioned(
+          right: 12,
+          bottom: 12,
+          child: rail ? _buildRail(cs) : _buildCollapsible(cs),
+        ),
+      ],
+    );
+  }
+
+  // ── Landing: rail ikon ────────────────────────────────────────────────
+  Widget _buildRail(ColorScheme cs) {
+    return Column(
+      key: const Key('fab-rail'),
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _MiniFab(
+          key: const Key('fab-theme'),
+          icon:
+              widget.dark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+          tooltip: widget.dark ? 'Mode gelap' : 'Mode terang',
+          onTap: widget.onToggleTheme,
+        ),
+        const SizedBox(height: 8),
+        _MiniFab(
+          key: const Key('fab-grid'),
+          icon:
+              widget.isGrid ? Icons.view_list_rounded : Icons.grid_view_rounded,
+          tooltip: widget.isGrid ? 'Tampilan daftar' : 'Tampilan grid',
+          onTap: widget.onToggleGrid,
+        ),
+        for (var i = widget.actions.length - 1; i >= 0; i--) ...[
+          const SizedBox(height: 8),
+          _MiniFab(
+            key: Key('fab-${widget.actions[i].key}'),
+            icon: widget.actions[i].icon,
+            tooltip: widget.actions[i].label,
+            badge: widget.actions[i].badge,
+            onTap: widget.actions[i].onTap,
+          ),
+        ],
+      ],
+    );
+  }
+
+  // ── Non-landing: lingkaran -> daftar berlabel ──────────────────────────
+  Widget _buildCollapsible(ColorScheme cs) {
+    final items = <Widget>[];
+    // Dari ATAS ke bawah: sakelar tema, grid/list, lalu aksi (Sync paling
+    // atas ... Riwayat paling bawah).
+    final topDown = [
+      _ExpandedRow(
+        index: 0,
+        total: widget.actions.length + 2,
+        anim: _c,
+        label: widget.dark ? 'Mode gelap' : 'Mode terang',
+        child: _LampSwitch(
+            key: const Key('fab-theme'),
+            dark: widget.dark,
+            onTap: widget.onToggleTheme),
+      ),
+      _ExpandedRow(
+        index: 1,
+        total: widget.actions.length + 2,
+        anim: _c,
+        label: widget.isGrid ? 'Tampilan daftar' : 'Tampilan grid',
+        child: _MiniFab(
+          key: const Key('fab-grid'),
+          icon:
+              widget.isGrid ? Icons.view_list_rounded : Icons.grid_view_rounded,
+          onTap: () => _run(widget.onToggleGrid),
+        ),
+      ),
+      for (var i = widget.actions.length - 1, n = 2; i >= 0; i--, n++)
+        _ExpandedRow(
+          index: n,
+          total: widget.actions.length + 2,
+          anim: _c,
+          label: widget.actions[i].label,
+          child: _MiniFab(
+            key: Key('fab-${widget.actions[i].key}'),
+            icon: widget.actions[i].icon,
+            badge: widget.actions[i].badge,
+            onTap: () => _run(widget.actions[i].onTap),
+          ),
+        ),
+    ];
+    if (_open) {
+      for (final r in topDown) {
+        items.add(r);
+        items.add(const SizedBox(height: 10));
+      }
+    }
+    return Column(
+      key: const Key('fab-collapsible'),
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        ...items,
+        _MainFab(
+          open: _open,
+          badge: _totalBadge,
+          anim: _c,
+          onTap: () => _setOpen(!_open),
+        ),
+      ],
+    );
+  }
+}
+
+/// Lingkaran utama (tertutup/terbuka): ikon berputar jadi X.
+class _MainFab extends StatelessWidget {
+  const _MainFab(
+      {required this.open,
+      required this.badge,
+      required this.anim,
+      required this.onTap});
+  final bool open;
+  final int badge;
+  final Animation<double> anim;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return PressScale(
+      depth: 0.06,
+      child: Badge(
+        isLabelVisible: badge > 0 && !open,
+        label: Text('$badge'),
+        child: Material(
+          key: const Key('fab-main'),
+          color: cs.primary,
+          elevation: 6,
+          shadowColor: const Color(0x59C96442),
+          shape: const CircleBorder(),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: onTap,
+            child: SizedBox(
+              width: 56,
+              height: 56,
+              child: AnimatedBuilder(
+                animation: anim,
+                builder: (_, __) => Transform.rotate(
+                  angle: anim.value * math.pi / 2,
+                  child: Icon(open ? Icons.close_rounded : Icons.apps_rounded,
+                      color: cs.onPrimary),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Baris berlabel saat terbuka: label (pil) di kiri + tombol bulat di kanan;
+/// masuk bertahap (menyembul dari lingkaran utama).
+class _ExpandedRow extends StatelessWidget {
+  const _ExpandedRow({
+    required this.index,
+    required this.total,
+    required this.anim,
+    required this.label,
+    required this.child,
+  });
+  final int index;
+  final int total;
+  final Animation<double> anim;
+  final String label;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    // Yang paling dekat lingkaran utama (index terbesar) muncul duluan.
+    final order = total - 1 - index;
+    final start = (order * 0.07).clamp(0.0, 0.5);
+    final curved = CurvedAnimation(
+      parent: anim,
+      curve: Interval(start, math.min(1.0, start + 0.5),
+          curve: AppMotion.easeOutBack),
+    );
+    return AnimatedBuilder(
+      animation: curved,
+      builder: (_, __) {
+        final t = curved.value;
+        return Opacity(
+          opacity: t.clamp(0.0, 1.0),
+          child: Transform.translate(
+            offset: Offset(0, (1 - t) * 18),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Material(
+                  color: cs.surfaceContainerHigh,
+                  elevation: 2,
+                  borderRadius: BorderRadius.circular(999),
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    child: Text(label,
+                        style: const TextStyle(
+                            fontSize: 12.5, fontWeight: FontWeight.w600)),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                child,
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Tombol bulat kecil 44dp (+ badge opsional).
+class _MiniFab extends StatelessWidget {
+  const _MiniFab(
+      {super.key,
+      required this.icon,
+      required this.onTap,
+      this.badge = 0,
+      this.tooltip});
+  final IconData icon;
+  final VoidCallback onTap;
+  final int badge;
+  final String? tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    Widget btn = PressScale(
+      depth: 0.06,
+      child: Badge(
+        isLabelVisible: badge > 0,
+        label: Text('$badge'),
+        child: Material(
+          color: cs.surfaceContainerHigh,
+          elevation: 3,
+          shadowColor: Colors.black45,
+          shape: const CircleBorder(),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: onTap,
+            child: SizedBox(
+              width: 44,
+              height: 44,
+              child: Icon(icon, size: 21, color: cs.onSurface),
+            ),
+          ),
+        ),
+      ),
+    );
+    if (tooltip != null) btn = Tooltip(message: tooltip!, child: btn);
+    return btn;
+  }
+}
+
+/// Sakelar terang/gelap ala saklar lampu: lintasan pil, kenop berisi
+/// matahari/bulan yang meluncur dengan sedikit memantul.
+class _LampSwitch extends StatelessWidget {
+  const _LampSwitch({super.key, required this.dark, required this.onTap});
+  final bool dark;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final dur = AppMotion.dur(context, AppMotion.medium);
+    return Semantics(
+      button: true,
+      label: dark ? 'Ganti ke mode terang' : 'Ganti ke mode gelap',
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: dur,
+          curve: AppMotion.easeOutQuint,
+          width: 72,
+          height: 40,
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            gradient: LinearGradient(
+              colors: dark
+                  ? const [Color(0xFF2A2623), Color(0xFF3B3430)]
+                  : const [Color(0xFFFCE7B0), Color(0xFFF6D9A8)],
+            ),
+            boxShadow: const [
+              BoxShadow(
+                  color: Color(0x33000000),
+                  blurRadius: 8,
+                  offset: Offset(0, 2)),
+            ],
+          ),
+          child: AnimatedAlign(
+            duration: dur,
+            curve: AppMotion.easeOutBack,
+            alignment: dark ? Alignment.centerRight : Alignment.centerLeft,
+            child: Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: dark ? const Color(0xFFECE7DD) : Colors.white,
+                boxShadow: const [
+                  BoxShadow(
+                      color: Color(0x40000000),
+                      blurRadius: 4,
+                      offset: Offset(0, 1)),
+                ],
+              ),
+              child: Icon(
+                dark ? Icons.nightlight_round : Icons.wb_sunny_rounded,
+                size: 18,
+                color: dark ? const Color(0xFF3B3430) : const Color(0xFFD97757),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

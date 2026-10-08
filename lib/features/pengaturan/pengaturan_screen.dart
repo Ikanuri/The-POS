@@ -428,13 +428,17 @@ class PengaturanScreen extends ConsumerWidget {
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () => context.push('/pengaturan/printer'),
                       ),
-                      SwitchListTile(
-                        secondary: const Icon(Icons.dark_mode_outlined),
-                        title: const Text('Mode Gelap'),
-                        value: themeMode == ThemeMode.dark,
-                        onChanged: (_) =>
-                            ref.read(themeModeProvider.notifier).toggle(),
-                      ),
+                      // Gaya Kasir Baru memindahkan sakelar terang/gelap ke
+                      // layar Kasir (tombol pojok) - di sini disembunyikan.
+                      if (ref.watch(kasirStyleProvider) != KasirStyle.modern)
+                        SwitchListTile(
+                          key: const Key('setting-dark-mode'),
+                          secondary: const Icon(Icons.dark_mode_outlined),
+                          title: const Text('Mode Gelap'),
+                          value: themeMode == ThemeMode.dark,
+                          onChanged: (_) =>
+                              ref.read(themeModeProvider.notifier).toggle(),
+                        ),
                       Builder(builder: (context) {
                         final scale = ref.watch(fontScaleProvider);
                         return ListTile(
