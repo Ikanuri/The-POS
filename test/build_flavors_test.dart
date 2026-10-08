@@ -31,6 +31,8 @@ void main() {
     expect(wf, contains('flutter build apk --release --flavor "\$FLAVOR"'));
     expect(wf, contains('app-\${FLAVOR}-release.apk'));
     expect(wf, contains('options: [auto, production, beta]'));
+    // `main-beta` (branch beta tetap, tanpa awalan claude/) ikut memicu build.
+    expect(wf, contains("branches: [main, main-beta, 'claude/**']"));
     // Tag rilis resmi hanya lewat jalur production.
     expect(wf, isNot(contains('flutter build apk --release --target-platform')));
   });

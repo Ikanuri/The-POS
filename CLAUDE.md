@@ -260,7 +260,8 @@ sesuai apa yang disentuh, jangan lompat ke widget test kalau cukup test DB:
   "The POS Beta"). Keduanya TERPASANG BERDAMPINGAN dgn data/DB/kunci terpisah,
   jadi mencoba beta tidak pernah menimpa atau merusak aplikasi produksi.
 - CI (`build-apk.yml`) memilih otomatis: **main & tag `v*` → production**,
-  **branch lain (`claude/**`) → beta**. `workflow_dispatch` bisa memaksa salah
+  **branch lain (`main-beta`, `claude/**`) → beta**. `main-beta` = branch beta
+  tetap untuk fitur baru NON-redesign + analisis ukuran aplikasi. `workflow_dispatch` bisa memaksa salah
   satu. Tidak perlu membuat branch khusus untuk beta — cukup push ke branch kerja.
 - **Aturan Claude:** di tiap batch commit/push, SEBUT jalurnya ("ini masuk build
   beta") dan, bila perubahannya menyentuh data/skema DB, sinkron, backup/Alih

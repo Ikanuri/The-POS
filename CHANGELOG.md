@@ -12,6 +12,10 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 - feat(katalog): `666181d` — feat(katalog): stepper jumlah saran terlaris + tombol Salin link hasil publish
 - feat(katalog-html): saran cari "Cari <nama>? Tekan →" (ikon panah inline; hanya nama produk terpotong), saran tetap berputar saat kolom fokus (berhenti saat ada huruf), tombol X jadi lingkaran outline & tidak mencuri fokus (pointerdown/mousedown preventDefault) sehingga kursor+keyboard tetap terbuka setelah menghapus -> kembali landing
 
+## 2026-10-08 (branch main-beta)
+
+- ci: branch `main-beta` (pengganti nama `claude/kategori-produk-qty-harga-mqjh21`) ikut memicu build.apk (-> beta); tujuan: fitur baru NON-redesign + analisis ukuran aplikasi; CLAUDE.md diperbarui
+
 ## 2026-10-08 (jalur build production vs beta)
 
 - build: ikon aplikasi beta diberi pita diagonal "BETA" (android/app/src/beta/res, override flavor beta; ikon produksi tidak berubah); test ikon di build_flavors_test

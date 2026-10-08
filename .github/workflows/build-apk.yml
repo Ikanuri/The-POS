@@ -2,7 +2,7 @@ name: Build APK
 
 on:
   push:
-    branches: [main, 'claude/**']
+    branches: [main, main-beta, 'claude/**']
     tags: ['v*']
   workflow_dispatch:
     inputs:
