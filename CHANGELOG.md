@@ -9,6 +9,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-10-09 (penyesuaian desain Kasir gaya Baru)
 
+- feat(ui): `67627a5` — Setup, Backup, Alih Owner, Printer, empty state (v3.14.0+219)
 - feat(ui): `1dd0067` — form Produk kartu Info Produk (v3.13.0+218)
 - feat(ui): `6d0d05d` — tepi memudar + layar Bayar (v3.12.0+217)
 - feat(ui): `054c3ef` — sub-layar Pengaturan tahap 2 (v3.11.1+216)
