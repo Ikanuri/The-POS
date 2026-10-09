@@ -8,6 +8,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 9 Oktober 2026 (v3.4.0 — Tampilan baru di semua halaman)
+
+- **Seluruh halaman kini senada dengan halaman awal Kasir**: kartu lebih membulat dengan bayangan hangat, tombol berbentuk pil, dialog & lembar bawah lebih lembut, bilah atas menyatu dengan latar, menu bawah berindikator pil.
+
 ## 9 Oktober 2026 (v3.3.0 — Notifikasi baru & Sync LAN)
 
 - **Notifikasi (toast) didesain ulang**: kartu putih membulat di bagian atas layar, dengan ikon berwarna dan tombol aksi, tampil di atas stiker dan di atas dialog. Berlaku juga untuk notif sinkron di latar belakang.

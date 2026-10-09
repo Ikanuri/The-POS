@@ -9,6 +9,8 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-10-09 (penyesuaian desain Kasir gaya Baru)
 
+- feat(ui): `8a8dd70` — Gaya Landing ke seluruh app via tema + AppStyle + docs/STYLE-UIUX.md (v3.4.0+204)
+- docs: `244168e` — catat toast/sync/keyboard
 - feat(kasir): `eff80c4` — pop-up Sync LAN: pilihan Host/Klien, QR host, kamera klien (v3.3.0+203)
 - feat(ui): `892b151` — toast & banner gaya baru (AppToast, AppNoticeCard)
 - feat(kasir): `e6c09ae` — keyboard tidak mengecilkan layar Kasir gaya Baru, cart bar berjarak, banner di atas stiker
