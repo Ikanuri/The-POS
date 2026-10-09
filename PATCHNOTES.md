@@ -8,6 +8,13 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 9 Oktober 2026 (Kasir Gaya Baru: pencarian & keyboard)
+
+- **Pencarian di Kasir gaya Baru kini selalu mencari ke SEMUA produk**, walau sedang memilih kategori. Kosongkan kolom cari untuk kembali ke daftar kategori.
+- **Kolom cari di halaman awal tidak lagi bergeser saat keyboard muncul**, sehingga terasa lebih ringan.
+
+---
+
 ## 9 Oktober 2026 (Kasir Gaya Baru: tombol pindah ke header)
 
 - **Tombol melayang di pojok kanan bawah dihapus** (membuat aplikasi terasa berat). Keempat tombol berwarna - Sync LAN, Tempel Pesanan, Antrian (dengan jumlah), dan Riwayat - kini tetap ada di bagian atas layar. Saat mengetik, header mengecil: hanya ikon aplikasi, empat tombol, dan tombol grid/daftar.
