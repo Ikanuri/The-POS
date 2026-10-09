@@ -1,3 +1,5 @@
+import '../../core/theme/app_theme.dart';
+import 'pengaturan_screen.dart' show SettingsIconBubble;
 import '../../core/theme/app_overlays.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -283,6 +285,7 @@ class _InfoRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final dark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       decoration: isLast
           ? null
@@ -295,7 +298,7 @@ class _InfoRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 20, color: scheme.onSurfaceVariant),
+          SettingsIconBubble(icon, AppTheme.tealFg(dark), AppTheme.tealBg(dark)),
           const SizedBox(width: 14),
           Expanded(
             child: Column(

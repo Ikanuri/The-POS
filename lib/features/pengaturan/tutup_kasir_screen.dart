@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/app_form_section.dart';
 import '../../core/utils/input_formatters.dart';
 
 const _idMonths = [
@@ -124,7 +125,8 @@ class _TutupKasirScreenState extends ConsumerState<TutupKasirScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
+              AppFormSection(title: 'Hitung Uang Laci', children: [
               TextField(
                 controller: _physicalCtrl,
                 keyboardType: TextInputType.number,
@@ -135,12 +137,11 @@ class _TutupKasirScreenState extends ConsumerState<TutupKasirScreen> {
                   prefixText: 'Rp ',
                 ),
               ),
-              const SizedBox(height: 16),
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: diffColor.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(14),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -154,13 +155,13 @@ class _TutupKasirScreenState extends ConsumerState<TutupKasirScreen> {
                   ],
                 ),
               ),
-              const SizedBox(height: 12),
               TextField(
                 controller: _noteCtrl,
                 textCapitalization: TextCapitalization.sentences,
                 decoration: const InputDecoration(
                     labelText: 'Catatan (opsional)'),
               ),
+              ]),
               const SizedBox(height: 16),
               FilledButton.icon(
                 onPressed: () =>

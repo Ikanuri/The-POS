@@ -6,6 +6,8 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
+_Update (9 Okt, v3.15.0+220, BETA) — tutup_kasir: AppFormSection('Hitung Uang Laci'); device_license `_InfoRow` ikon = SettingsIconBubble teal; payment_methods ikon tipe = bubble change. Sisa belum: expenses/about/csv_import/arsip/tutorial (sudah wajar, tak diubah), kartu satuan form Produk. Test terkait hijau; suite penuh belum diulang sejak v3.12.
+
 _Update (9 Okt, v3.14.0+219, BETA) — marathon sisa: setup_toko pakai AppFormSection; pairing/restore info card = tint aksen 0.10 radius 14; backup/alih_owner header kartu = SettingsIconBubble (change/debt); printer: ExpansionTile leading = bubble teal, banner aktif = change; cek_stok/barcode empty -> AppEmptyState. Pelanggan form & Welcome ternyata sudah Gaya Landing. BELUM: isi kartu satuan form Produk, receive_goods/opname/product_group (sengaja tak diubah, sudah rapi), device_license, tutup_kasir, payment_methods, expenses, about, csv_import, arsip. Suite penuh v3.14 belum dikonfirmasi.
 
 _Update (9 Okt, v3.13.0+218, BETA) — produk_form_screen: 4 isian atas dibungkus `AppFormSection('Info Produk')` (separator SizedBox dihapus, gap bawaan 12); chip 'Dasar' pil aksen; kotak stok radius 12. Header 'Satuan & Harga'/'Varian' + _UnitCard belum dirombak (sengaja minimal: file 2986 baris, 15 test form hijau). Berikutnya: Sync/Backup/Printer, Penerimaan Barang/Opname, form Pelanggan, Setup.

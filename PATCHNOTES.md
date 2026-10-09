@@ -8,6 +8,12 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 9 Oktober 2026 (v3.15.0 — Sisa layar Pengaturan)
+
+- **Tutup Kasir**: uang fisik, selisih, dan catatan dikelompokkan dalam kartu "Hitung Uang Laci".
+- **Lisensi & Serial**: tiap baris info berikon bulat teal.
+- **Metode Pembayaran**: ikon tiap metode berbentuk bulat hijau.
+
 ## 9 Oktober 2026 (v3.14.0 — Rapikan layar Setup, Backup, Printer)
 
 - **Setup Toko Baru**: isian dikelompokkan dalam satu kartu; kartu info di layar Gabung Toko dan Pulihkan File kini bernuansa terracotta lembut.

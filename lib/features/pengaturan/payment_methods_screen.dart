@@ -1,3 +1,5 @@
+import 'pengaturan_screen.dart' show SettingsIconBubble;
+import '../../core/theme/app_theme.dart';
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -101,7 +103,12 @@ class _MethodTile extends ConsumerWidget {
                 child: Icon(Icons.drag_handle, color: scheme.onSurfaceVariant),
               ),
             ),
-            Icon(_typeIcon(method.type)),
+            SettingsIconBubble(
+                _typeIcon(method.type),
+                AppTheme.changeFg(
+                    Theme.of(context).brightness == Brightness.dark),
+                AppTheme.changeBg(
+                    Theme.of(context).brightness == Brightness.dark)),
           ],
         ),
         title: Text(method.name),
