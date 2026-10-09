@@ -9,6 +9,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-10-09 (penyesuaian desain Kasir gaya Baru)
 
+- fix(kasir): `174d772` — cart bar tanpa pita latar (extendBody) (v3.4.4+208)
 - feat(ui): `4216dd8` — tahap 2c: judul seksi seragam, kolom cari pil tambahan (v3.4.3+207)
 - feat(ui): `ebb7d4a` — tahap 2b: empty state beraksi, kolom cari pil, Selamat Datang (v3.4.2+206)
 - feat(ui): `09e8d46` — tahap 2: AppEmptyState di banyak layar, kartu clip, divider inset (v3.4.1+205)

@@ -6,6 +6,8 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
+_Update (9 Okt, v3.4.4+208, jalur BETA) — user (screenshot) terganggu pita latar bertepi tegas di sekeliling cart bar (body Scaffold terpotong di tepi bottomNavigationBar, kartu produk terpotong kasar). Fix: inner Scaffold Kasir gaya Baru `extendBody: true`; ruang bawah daftar/landing = `_bottomClear(ctx)` = max(viewInsets.bottom, padding.bottom) dibaca di Builder di bawah Scaffold (padding.bottom = tinggi cart bar). Catatan test: `tester.view.viewInsets` dalam piksel FISIK (dpr 3) -> pakai 1200 utk ~400 logis. Test baru 'daftar menggulir di belakang cart bar'.
+
 _Update (9 Okt, v3.4.3+207, jalur BETA) — tahap 2c: `textTheme.titleSmall` global 15/700 (judul seksi Ringkasan/Laporan seragam); kolom cari pil juga di tab Hutang & Terima Barang; empty state riwayat transaksi. Tahap 2 SELESAI kecuali yang disengaja ditinggal: pesan kosong inline di dalam sheet/struk Kasir (cart_sheet, receipt_screen) & kolom cari Laci Meja (tinggi dikunci 36). LANGKAH BERIKUT: user lihat beta SEKALI -> catatan layar janggal -> perbaiki.
 
 _Update (9 Okt, v3.4.2+206, jalur BETA) — tahap 2b: `AppEmptyState` kini punya `action`; dipakai juga di Arsip, Katalog, Kategori Produk, Cek Stok. `AppStyle.pillSearch(context, TextField)` membungkus kolom cari jadi pil (Produk, Pelanggan, Panduan, Kategori Harga, Penetapan Kategori). Welcome screen: logo gradien + judul Newsreader. SISA tahap 2 (kecil): empty state dalam sheet/struk Kasir (receipt, cart_sheet, tx_history), kolom cari laporan/receive_goods/laci meja belum pil, tabel Laporan/Ringkasan belum diaudit visual. Menunggu user lihat beta SEKALI setelah selesai.
