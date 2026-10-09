@@ -73,8 +73,52 @@ extension _KasirModernX on _KasirScreenState {
             child: Column(
               children: [
                 _ModernHeader(
+                  isLanding: isLanding,
                   isGrid: isGrid,
                   dark: dark,
+                  actions: [
+                    _HeaderAction(
+                      key: 'sync',
+                      icon: Icons.sync_rounded,
+                      label: 'Sync LAN',
+                      fg: AppTheme.scanFg(dark),
+                      bg: AppTheme.scanBg(dark),
+                      onTap: () => showQuickSyncDialog(context),
+                    ),
+                    _HeaderAction(
+                      key: 'paste',
+                      icon: Icons.content_paste_go_rounded,
+                      label: 'Tempel',
+                      fg: AppTheme.tempelFg(dark),
+                      bg: AppTheme.tempelBg(dark),
+                      onTap: () => showAppSheet(
+                        context: context,
+                        isScrollControlled: true,
+                        builder: (_) => PasteOrderSheet(cartId: _cartId),
+                      ),
+                    ),
+                    _HeaderAction(
+                      key: 'held',
+                      icon: Icons.pause_circle_outline_rounded,
+                      label: 'Antrian',
+                      badge: ref.watch(_heldCountProvider).valueOrNull ?? 0,
+                      fg: AppTheme.antrianFg(dark),
+                      bg: AppTheme.antrianBg(dark),
+                      onTap: _openHeldSheet,
+                    ),
+                    _HeaderAction(
+                      key: 'history',
+                      icon: Icons.history_rounded,
+                      label: 'Riwayat',
+                      fg: AppTheme.riwayatFg(dark),
+                      bg: AppTheme.riwayatBg(dark),
+                      onTap: () => showAppSheet(
+                        context: context,
+                        isScrollControlled: true,
+                        builder: (_) => const TxHistorySheet(),
+                      ),
+                    ),
+                  ],
                   onToggleGrid: () =>
                       ref.read(kasirGridProvider.notifier).toggle(),
                   onToggleTheme: () => ref
@@ -136,31 +180,24 @@ extension _KasirModernX on _KasirScreenState {
                                   ),
                                   Expanded(
                                     child: isLanding
-                                        ? Padding(
-                                            // Lorong untuk rail tombol pojok:
-                                            // tombol "+" produk tidak tertutup.
-                                            padding: const EdgeInsets.only(
-                                                right: 64),
-                                            child: _ModernLanding(
+                                        ? _ModernLanding(
+                                            cartId: _cartId,
+                                            onShowAll: () => ref
+                                                .read(_kasirShowAllProvider(
+                                                        _cartId)
+                                                    .notifier)
+                                                .state = true,
+                                            tileBuilder: (p) =>
+                                                _ProductListTile(
+                                              product: p,
                                               cartId: _cartId,
-                                              onShowAll: () => ref
-                                                  .read(_kasirShowAllProvider(
-                                                          _cartId)
-                                                      .notifier)
-                                                  .state = true,
-                                              tileBuilder: (p) =>
-                                                  _ProductListTile(
-                                                product: p,
-                                                cartId: _cartId,
-                                                onTapBody: () => _openEntry(p),
-                                                onQuickAdd: _quickAdd,
-                                                onOpenEntry: () =>
-                                                    _openEntry(p),
-                                                onBeforeTap:
-                                                    _markSkipSearchCollapse,
-                                                onAfterQtyChange:
-                                                    _highlightSearchIfActive,
-                                              ),
+                                              onTapBody: () => _openEntry(p),
+                                              onQuickAdd: _quickAdd,
+                                              onOpenEntry: () => _openEntry(p),
+                                              onBeforeTap:
+                                                  _markSkipSearchCollapse,
+                                              onAfterQtyChange:
+                                                  _highlightSearchIfActive,
                                             ),
                                           )
                                         : _buildProductResults(context,
@@ -179,54 +216,6 @@ extension _KasirModernX on _KasirScreenState {
               ],
             ),
           ),
-          Positioned.fill(
-            child: _ModernFab(
-              isLanding: isLanding,
-              actions: [
-                _FabAction(
-                  key: 'history',
-                  icon: Icons.history_rounded,
-                  label: 'Riwayat',
-                  fg: AppTheme.riwayatFg(dark),
-                  bg: AppTheme.riwayatBg(dark),
-                  onTap: () => showAppSheet(
-                    context: context,
-                    isScrollControlled: true,
-                    builder: (_) => const TxHistorySheet(),
-                  ),
-                ),
-                _FabAction(
-                  key: 'held',
-                  icon: Icons.pause_circle_outline_rounded,
-                  label: 'Antrian',
-                  badge: ref.watch(_heldCountProvider).valueOrNull ?? 0,
-                  fg: AppTheme.antrianFg(dark),
-                  bg: AppTheme.antrianBg(dark),
-                  onTap: _openHeldSheet,
-                ),
-                _FabAction(
-                  key: 'paste',
-                  icon: Icons.content_paste_go_rounded,
-                  label: 'Tempel',
-                  fg: AppTheme.tempelFg(dark),
-                  bg: AppTheme.tempelBg(dark),
-                  onTap: () => showAppSheet(
-                    context: context,
-                    isScrollControlled: true,
-                    builder: (_) => PasteOrderSheet(cartId: _cartId),
-                  ),
-                ),
-                _FabAction(
-                  key: 'sync',
-                  icon: Icons.sync_rounded,
-                  label: 'Sync LAN',
-                  fg: AppTheme.scanFg(dark),
-                  bg: AppTheme.scanBg(dark),
-                  onTap: () => showQuickSyncDialog(context),
-                ),
-              ],
-            ),
-          ),
         ],
       ),
       backgroundColor: cs.surface,
@@ -237,90 +226,143 @@ extension _KasirModernX on _KasirScreenState {
   }
 }
 
-/// Header ringkas (meniru header katalog HTML): ikon aplikasi + nama di kiri;
-/// pilihan tampilan grid/daftar dan saklar terang/gelap di pojok kanan atas.
+/// Header gaya Baru. Landing: ikon + nama aplikasi di kiri, empat tombol bulat
+/// berketerangan kecil, saklar terang/gelap di ujung kanan. Mengetik / daftar:
+/// KOMPAK - hanya ikon, empat tombol bulat tanpa keterangan, tombol grid/list
+/// (saklar tema disembunyikan). Urutan tombol kiri -> kanan: Sync LAN, Tempel,
+/// Antrian, Riwayat (Riwayat paling dekat tepi).
 class _ModernHeader extends StatelessWidget {
   const _ModernHeader({
+    required this.isLanding,
     required this.isGrid,
     required this.dark,
+    required this.actions,
     required this.onToggleGrid,
     required this.onToggleTheme,
   });
 
+  final bool isLanding;
   final bool isGrid;
   final bool dark;
+
+  /// Urutan tampil kiri -> kanan.
+  final List<_HeaderAction> actions;
   final VoidCallback onToggleGrid;
   final VoidCallback onToggleTheme;
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final dur = AppMotion.dur(context, AppMotion.medium);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 2),
-      child: Row(
-        children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xFFD97757), Color(0xFFC96442)],
-              ),
-              borderRadius: BorderRadius.circular(13),
-              boxShadow: const [
-                BoxShadow(
-                    color: Color(0x59C96442),
-                    blurRadius: 12,
-                    offset: Offset(0, 4)),
-              ],
-            ),
-            child: const Icon(Icons.shopping_basket_rounded,
-                color: Colors.white, size: 20),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              'The POS',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style:
-                  AppTheme.numStyle(context, size: 21, weight: FontWeight.w700),
-            ),
-          ),
-          Tooltip(
-            message: isGrid ? 'Tampilan daftar' : 'Tampilan grid',
-            child: PressScale(
-              depth: 0.06,
-              child: Material(
-                color: cs.surface,
-                elevation: 1.5,
-                shadowColor: Colors.black26,
-                shape: CircleBorder(
-                    side: BorderSide(color: cs.outlineVariant, width: 0.6)),
-                child: InkWell(
-                  key: const Key('hdr-grid'),
-                  customBorder: const CircleBorder(),
-                  onTap: onToggleGrid,
-                  child: SizedBox(
-                    width: 42,
-                    height: 42,
-                    child: Icon(
-                        isGrid
-                            ? Icons.view_list_rounded
-                            : Icons.grid_view_rounded,
-                        size: 20,
-                        color: cs.onSurface),
-                  ),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 2),
+      child: AnimatedSize(
+        duration: dur,
+        curve: AppMotion.easeOutQuint,
+        alignment: Alignment.topCenter,
+        child: Row(
+          children: [
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFFD97757), Color(0xFFC96442)],
                 ),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: const [
+                  BoxShadow(
+                      color: Color(0x59C96442),
+                      blurRadius: 12,
+                      offset: Offset(0, 4)),
+                ],
+              ),
+              child: const Icon(Icons.shopping_basket_rounded,
+                  color: Colors.white, size: 18),
+            ),
+            // Nama hanya di landing; boleh menyusut/ellipsis bila sempit.
+            Expanded(
+              child: AnimatedSwitcher(
+                duration: dur,
+                child: isLanding
+                    ? Padding(
+                        key: const ValueKey('hdr-name'),
+                        padding: const EdgeInsets.only(left: 6, right: 4),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'The POS',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTheme.numStyle(context,
+                                size: 19, weight: FontWeight.w700),
+                          ),
+                        ),
+                      )
+                    : const SizedBox.shrink(key: ValueKey('hdr-name-none')),
               ),
             ),
-          ),
-          const SizedBox(width: 12),
-          _LightRocker(
-              key: const Key('hdr-theme'), dark: dark, onTap: onToggleTheme),
-        ],
+            for (var i = 0; i < actions.length; i++) ...[
+              if (i > 0) SizedBox(width: isLanding ? 2 : 6),
+              _HeaderBtn(
+                key: Key('hdr-${actions[i].key}'),
+                action: actions[i],
+                labeled: isLanding,
+              ),
+            ],
+            AnimatedSize(
+              duration: dur,
+              curve: AppMotion.easeOutQuint,
+              child: AnimatedSwitcher(
+                duration: dur,
+                child: isLanding
+                    ? Padding(
+                        key: const ValueKey('hdr-theme-slot'),
+                        padding: const EdgeInsets.only(left: 6),
+                        child: _LightRocker(
+                            key: const Key('hdr-theme'),
+                            dark: dark,
+                            onTap: onToggleTheme),
+                      )
+                    : Padding(
+                        key: const ValueKey('hdr-grid-slot'),
+                        padding: const EdgeInsets.only(left: 6),
+                        child: Tooltip(
+                          message: isGrid ? 'Tampilan daftar' : 'Tampilan grid',
+                          child: PressScale(
+                            depth: 0.06,
+                            child: Material(
+                              color: cs.surface,
+                              elevation: 1.5,
+                              shadowColor: Colors.black26,
+                              shape: CircleBorder(
+                                  side: BorderSide(
+                                      color: cs.outlineVariant, width: 0.6)),
+                              child: InkWell(
+                                key: const Key('hdr-grid'),
+                                customBorder: const CircleBorder(),
+                                onTap: onToggleGrid,
+                                child: SizedBox(
+                                  width: 40,
+                                  height: 40,
+                                  child: Icon(
+                                      isGrid
+                                          ? Icons.view_list_rounded
+                                          : Icons.grid_view_rounded,
+                                      size: 20,
+                                      color: cs.onSurface),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -550,30 +592,44 @@ class _ModernSearchStageState extends ConsumerState<_ModernSearchStage> {
                     valueListenable: widget.ctrl,
                     builder: (_, v, __) {
                       final full = _fullySelected(v);
+                      // Daftar anak Stack WAJIB stabil (3 slot tetap, TextField
+                      // ber-Key): kalau memakai `if` yang menggeser posisi,
+                      // Flutter (mencocokkan anak tanpa Key per indeks+tipe)
+                      // MEMBUANG & membangun ulang TextField saat seleksi-semua
+                      // / kosong<->berisi berganti -> koneksi IME & kursor
+                      // hilang (keyboard terbuka tapi kursor tak muncul).
                       return Stack(
                         alignment: Alignment.centerLeft,
+                        // Jendela hint boleh lebih tinggi dari TextField.
+                        clipBehavior: Clip.none,
                         children: [
                           // Blok seleksi-semua berujung membulat.
-                          if (full)
-                            LayoutBuilder(builder: (context, c) {
-                              final tp = TextPainter(
-                                text:
-                                    TextSpan(text: v.text, style: _kTextStyle),
-                                maxLines: 1,
-                                textDirection: TextDirection.ltr,
-                              )..layout();
-                              return Container(
-                                key: const Key('modern-search-selection'),
-                                width: math.min(c.maxWidth, tp.width + 12),
-                                height: 26,
-                                margin: const EdgeInsets.only(left: 0),
-                                decoration: BoxDecoration(
-                                  color: AppTheme.accent.withOpacity(0.22),
-                                  borderRadius: BorderRadius.circular(9),
-                                ),
-                              );
-                            }),
+                          if (!full)
+                            const SizedBox.shrink(
+                                key: ValueKey('modern-search-sel-slot'))
+                          else
+                            LayoutBuilder(
+                                key: const ValueKey('modern-search-sel-slot'),
+                                builder: (context, c) {
+                                  final tp = TextPainter(
+                                    text: TextSpan(
+                                        text: v.text, style: _kTextStyle),
+                                    maxLines: 1,
+                                    textDirection: TextDirection.ltr,
+                                  )..layout();
+                                  return Container(
+                                    key: const Key('modern-search-selection'),
+                                    width: math.min(c.maxWidth, tp.width + 12),
+                                    height: 26,
+                                    margin: const EdgeInsets.only(left: 0),
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.accent.withOpacity(0.22),
+                                      borderRadius: BorderRadius.circular(9),
+                                    ),
+                                  );
+                                }),
                           TextSelectionTheme(
+                            key: const ValueKey('modern-search-field-slot'),
                             data: TextSelectionThemeData(
                               // Seleksi-semua: warna bawaan disembunyikan
                               // (diganti blok membulat di atas).
@@ -615,8 +671,12 @@ class _ModernSearchStageState extends ConsumerState<_ModernSearchStage> {
                           // Hint: saran bergilir (produk yang sering dibeli
                           // pelanggan) atau 'Cari produk...'. Hilang saat
                           // mengetik.
-                          if (v.text.isEmpty)
+                          if (v.text.isNotEmpty)
+                            const SizedBox.shrink(
+                                key: ValueKey('modern-search-hint-slot'))
+                          else
                             Positioned.fill(
+                              key: const ValueKey('modern-search-hint-slot'),
                               child: IgnorePointer(
                                 child: Padding(
                                   padding: const EdgeInsets.only(left: 6),
@@ -651,6 +711,8 @@ class _ModernSearchStageState extends ConsumerState<_ModernSearchStage> {
                               onPressed: () {
                                 widget.ctrl.clear();
                                 widget.onChanged('');
+                                // Keyboard tetap terbuka & kolom tetap fokus.
+                                widget.focus.requestFocus();
                               },
                             )
                           : const SizedBox.shrink(),
@@ -699,7 +761,7 @@ class _ModernLanding extends ConsumerWidget {
 
     return ListView(
       key: const Key('kasir-landing'),
-      padding: const EdgeInsets.only(bottom: 96),
+      padding: const EdgeInsets.only(bottom: 24),
       children: [
         // Satu baris saja, digeser mendatar bila kategori banyak; bila muat,
         // terpusat.
@@ -771,14 +833,13 @@ class _ModernLanding extends ConsumerWidget {
     );
   }
 }
-
 // ─────────────────────────────────────────────────────────────────────────────
-// Tombol aksi pojok kanan bawah (pengganti header Klasik)
+// Tombol aksi bulat di header (pengganti header Klasik)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Satu aksi di tombol pojok (warna aksen mengikuti header Klasik).
-class _FabAction {
-  const _FabAction({
+/// Satu aksi di header (warna aksen mengikuti header Klasik).
+class _HeaderAction {
+  const _HeaderAction({
     required this.key,
     required this.icon,
     required this.label,
@@ -797,261 +858,72 @@ class _FabAction {
   final int badge;
 }
 
-/// Tombol pojok kanan bawah ala "chips expanded" Telegram.
-///  - Landing: deretan tombol bulat berwarna dengan keterangan kecil di
-///    bawahnya (daftar diberi lorong kanan agar tombol "+" produk tak
-///    tertutup).
-///  - Selain landing: mengecil jadi SATU lingkaran (badge = jumlah antrian);
-///    ketuk untuk mengembang jadi deretan yang sama dengan latar redup.
-/// Urutan dari BAWAH: Riwayat, Antrian, Tempel Pesanan, Sync LAN.
-class _ModernFab extends StatefulWidget {
-  const _ModernFab({required this.isLanding, required this.actions});
-
-  /// Dari BAWAH ke ATAS.
-  final List<_FabAction> actions;
-  final bool isLanding;
-
-  @override
-  State<_ModernFab> createState() => _ModernFabState();
-}
-
-class _ModernFabState extends State<_ModernFab>
-    with SingleTickerProviderStateMixin {
-  // Dibuat di initState (bukan `late final` lazy): kalau hanya rail yang
-  // tampil, controller tak pernah disentuh sampai dispose() -> pembuatan
-  // Ticker saat unmount melempar "deactivated widget's ancestor".
-  late final AnimationController _c;
-
-  @override
-  void initState() {
-    super.initState();
-    _c = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 260),
-      reverseDuration: const Duration(milliseconds: 160),
-    );
-  }
-
-  bool _open = false;
-
-  @override
-  void didUpdateWidget(_ModernFab old) {
-    super.didUpdateWidget(old);
-    // Pindah landing <-> non-landing: selalu mulai tertutup.
-    if (old.isLanding != widget.isLanding && _open) _setOpen(false);
-  }
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  void _setOpen(bool v) {
-    setState(() => _open = v);
-    if (AppMotion.reduced(context)) {
-      _c.value = v ? 1 : 0;
-    } else {
-      v ? _c.forward() : _c.reverse();
-    }
-  }
-
-  void _run(VoidCallback cb) {
-    if (_open) _setOpen(false);
-    cb();
-  }
-
-  int get _totalBadge => widget.actions.fold<int>(0, (s, a) => s + a.badge);
-
-  @override
-  Widget build(BuildContext context) {
-    final rail = widget.isLanding;
-    return Stack(
-      children: [
-        // Latar redup HANYA saat deretan terbuka (non-landing).
-        if (!rail && _open)
-          Positioned.fill(
-            child: GestureDetector(
-              key: const Key('fab-scrim'),
-              behavior: HitTestBehavior.opaque,
-              onTap: () => _setOpen(false),
-              child: AnimatedBuilder(
-                animation: _c,
-                builder: (_, __) => ColoredBox(
-                    color: Colors.black.withOpacity(0.28 * _c.value)),
-              ),
-            ),
-          ),
-        Positioned(
-          right: 12,
-          bottom: 12,
-          child: rail ? _buildRail() : _buildCollapsible(),
-        ),
-      ],
-    );
-  }
-
-  Widget _item(int i, {bool staggered = false}) {
-    final a = widget.actions[i];
-    final w = _FabItem(
-      key: Key('fab-${a.key}'),
-      action: a,
-      onTap: staggered ? () => _run(a.onTap) : a.onTap,
-    );
-    if (!staggered) return w;
-    // Yang paling dekat lingkaran utama (i kecil) muncul duluan.
-    final start = (i * 0.08).clamp(0.0, 0.5);
-    final curved = CurvedAnimation(
-      parent: _c,
-      curve: Interval(start, math.min(1.0, start + 0.5),
-          curve: AppMotion.easeOutBack),
-    );
-    return AnimatedBuilder(
-      animation: curved,
-      builder: (_, child) => Opacity(
-        opacity: curved.value.clamp(0.0, 1.0),
-        child: Transform.translate(
-            offset: Offset(0, (1 - curved.value) * 16), child: child),
-      ),
-      child: w,
-    );
-  }
-
-  // ── Landing: deretan tombol ───────────────────────────────────────────
-  Widget _buildRail() {
-    return Column(
-      key: const Key('fab-rail'),
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (var i = widget.actions.length - 1; i >= 0; i--) ...[
-          _item(i),
-          if (i > 0) const SizedBox(height: 6),
-        ],
-      ],
-    );
-  }
-
-  // ── Non-landing: lingkaran -> deretan ──────────────────────────────────
-  Widget _buildCollapsible() {
-    return Column(
-      key: const Key('fab-collapsible'),
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        if (_open)
-          for (var i = widget.actions.length - 1; i >= 0; i--) ...[
-            _item(i, staggered: true),
-            const SizedBox(height: 6),
-          ],
-        _MainFab(
-          open: _open,
-          badge: _totalBadge,
-          anim: _c,
-          onTap: () => _setOpen(!_open),
-        ),
-      ],
-    );
-  }
-}
-
-/// Lingkaran utama (tertutup/terbuka): ikon berputar jadi X.
-class _MainFab extends StatelessWidget {
-  const _MainFab(
-      {required this.open,
-      required this.badge,
-      required this.anim,
-      required this.onTap});
-  final bool open;
-  final int badge;
-  final Animation<double> anim;
-  final VoidCallback onTap;
+/// Tombol bulat berwarna (aksen tiap fungsi). Landing: keterangan kecil di
+/// bawahnya; kompak: hanya lingkaran (tetap ber-tooltip & Semantics).
+class _HeaderBtn extends StatelessWidget {
+  const _HeaderBtn({super.key, required this.action, required this.labeled});
+  final _HeaderAction action;
+  final bool labeled;
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return PressScale(
+    final circle = PressScale(
       depth: 0.06,
       child: Badge(
-        isLabelVisible: badge > 0 && !open,
-        label: Text('$badge'),
+        isLabelVisible: action.badge > 0,
+        label: Text('${action.badge}'),
         child: Material(
-          key: const Key('fab-main'),
-          color: cs.primary,
-          elevation: 6,
-          shadowColor: const Color(0x59C96442),
-          shape: const CircleBorder(),
+          color: action.bg,
+          elevation: 2,
+          shadowColor: Colors.black38,
+          shape: CircleBorder(
+              side: BorderSide(color: action.fg.withOpacity(0.25))),
           child: InkWell(
             customBorder: const CircleBorder(),
-            onTap: onTap,
+            onTap: action.onTap,
             child: SizedBox(
-              width: 56,
-              height: 56,
-              child: AnimatedBuilder(
-                animation: anim,
-                builder: (_, __) => Transform.rotate(
-                  angle: anim.value * math.pi / 2,
-                  child: Icon(open ? Icons.close_rounded : Icons.apps_rounded,
-                      color: cs.onPrimary),
-                ),
-              ),
+              width: 40,
+              height: 40,
+              child: Icon(action.icon, size: 20, color: action.fg),
             ),
           ),
         ),
       ),
     );
-  }
-}
-
-/// Tombol bulat berwarna (aksen tiap fungsi) + keterangan kecil di bawahnya.
-class _FabItem extends StatelessWidget {
-  const _FabItem({super.key, required this.action, required this.onTap});
-  final _FabAction action;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return SizedBox(
-      width: 60,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          PressScale(
-            depth: 0.06,
-            child: Badge(
-              isLabelVisible: action.badge > 0,
-              label: Text('${action.badge}'),
-              child: Material(
-                color: action.bg,
-                elevation: 2,
-                shadowColor: Colors.black38,
-                shape: CircleBorder(
-                    side: BorderSide(color: action.fg.withOpacity(0.25))),
-                child: InkWell(
-                  customBorder: const CircleBorder(),
-                  onTap: onTap,
-                  child: SizedBox(
-                    width: 44,
-                    height: 44,
-                    child: Icon(action.icon, size: 21, color: action.fg),
+    return Tooltip(
+      message: action.label,
+      child: Semantics(
+        button: true,
+        label: action.label,
+        excludeSemantics: true,
+        child: SizedBox(
+          width: labeled ? 42 : 40,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              circle,
+              if (labeled) ...[
+                const SizedBox(height: 2),
+                // FittedBox: keterangan menyusut (bukan terpotong) bila Ukuran
+                // Teks besar.
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    action.label,
+                    maxLines: 1,
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w600,
+                      height: 1.1,
+                      color: cs.onSurfaceVariant,
+                    ),
                   ),
                 ),
-              ),
-            ),
+              ],
+            ],
           ),
-          const SizedBox(height: 2),
-          Text(
-            action.label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 9.5,
-              fontWeight: FontWeight.w600,
-              height: 1.1,
-              color: cs.onSurfaceVariant,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -1269,55 +1141,77 @@ class _RotatingHintState extends State<_RotatingHint>
       );
     }
     final cur = widget.names[_i % widget.names.length];
-    const lineH = 22.0;
-    return ClipRect(
-      child: SizedBox(
-        height: lineH * 2,
-        child: AnimatedBuilder(
-          animation: _c,
-          builder: (context, _) {
-            final t = Curves.easeInOutCubic.transform(_c.value);
-            final animating = _prev != null;
-            return Stack(
-              alignment: Alignment.centerLeft,
-              children: [
-                if (animating)
+    // Tinggi baris DIUKUR dari gaya & skala font sebenarnya (Ukuran Teks besar
+    // + line-height font aplikasi) - bukan angka tetap - supaya huruf tidak
+    // terpotong jendela. Jendela = 2 baris, dipusatkan di pil.
+    final measure = TextPainter(
+      text: TextSpan(
+          text: 'Cari Xg',
+          style: DefaultTextStyle.of(context).style.merge(
+              const TextStyle(fontSize: 15, fontWeight: FontWeight.w700))),
+      textScaler: MediaQuery.textScalerOf(context),
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+    )..layout();
+    final lineH = measure.height.ceilToDouble() + 2;
+    measure.dispose();
+    // OverflowBox: Stack induk hanya setinggi TextField (~18dp) - tanpa ini
+    // jendela terjepit setinggi itu dan huruf terpotong (akar bug 'hint
+    // terpotong').
+    return OverflowBox(
+      alignment: Alignment.center,
+      minHeight: 0,
+      maxHeight: lineH * 2,
+      child: ClipRect(
+        child: SizedBox(
+          height: lineH * 2,
+          child: AnimatedBuilder(
+            animation: _c,
+            builder: (context, _) {
+              final t = Curves.easeInOutCubic.transform(_c.value);
+              final animating = _prev != null;
+              return Stack(
+                alignment: Alignment.centerLeft,
+                children: [
+                  if (animating)
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      top: lineH / 2,
+                      height: lineH,
+                      child: Opacity(
+                        opacity: (1 - t).clamp(0.0, 1.0),
+                        child: Transform.translate(
+                          offset: Offset(0, -lineH * 0.6 * t),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: _line(context,
+                                widget.names[_prev! % widget.names.length]),
+                          ),
+                        ),
+                      ),
+                    ),
                   Positioned(
                     left: 0,
                     right: 0,
                     top: lineH / 2,
                     height: lineH,
                     child: Opacity(
-                      opacity: (1 - t).clamp(0.0, 1.0),
+                      opacity: animating ? t.clamp(0.0, 1.0) : 1,
                       child: Transform.translate(
-                        offset: Offset(0, -lineH * 0.9 * t),
+                        offset:
+                            Offset(0, animating ? lineH * 0.6 * (1 - t) : 0),
                         child: Align(
                           alignment: Alignment.centerLeft,
-                          child: _line(context,
-                              widget.names[_prev! % widget.names.length]),
+                          child: _line(context, cur),
                         ),
                       ),
                     ),
                   ),
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  top: lineH / 2,
-                  height: lineH,
-                  child: Opacity(
-                    opacity: animating ? t.clamp(0.0, 1.0) : 1,
-                    child: Transform.translate(
-                      offset: Offset(0, animating ? lineH * 0.9 * (1 - t) : 0),
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: _line(context, cur),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            );
-          },
+                ],
+              );
+            },
+          ),
         ),
       ),
     );
@@ -1563,13 +1457,21 @@ class _ModernCartBar extends ConsumerWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisSize: MainAxisSize.min,
                               children: [
+                                // Nominal mengecil otomatis (satu baris)
+                                // mengikuti panjang angka.
                                 BumpOnChange(
                                   value: total,
                                   peak: 1.08,
-                                  child: Text(
-                                    formatRupiah(total),
-                                    style: AppTheme.numStyle(context,
-                                        size: 22, weight: FontWeight.w700),
+                                  child: FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(
+                                      formatRupiah(total),
+                                      maxLines: 1,
+                                      softWrap: false,
+                                      style: AppTheme.numStyle(context,
+                                          size: 22, weight: FontWeight.w700),
+                                    ),
                                   ),
                                 ),
                                 if (lastLine != null)

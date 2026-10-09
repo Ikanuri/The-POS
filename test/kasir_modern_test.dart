@@ -22,6 +22,7 @@ int _seq = 0;
 Future<String> _addProduct(AppDatabase db, String name,
     {String? parentProductId,
     bool isActive = true,
+    int price = 10000,
     bool markedOutOfStock = false}) async {
   final id = 'p${_seq++}';
   await db.into(db.products).insert(ProductsCompanion.insert(
@@ -39,7 +40,7 @@ Future<String> _addProduct(AppDatabase db, String name,
   await db.into(db.priceTiers).insert(PriceTiersCompanion.insert(
         id: '$id-u-t1',
         productUnitId: '$id-u',
-        price: 10000,
+        price: price,
       ));
   return id;
 }
@@ -77,6 +78,7 @@ Future<void> _pumpKasir(WidgetTester tester, AppDatabase db,
     Size size = const Size(430, 2400),
     bool stickers = false,
     bool reduced = false,
+    double textScale = 1.0,
     String deviceRole = 'owner'}) async {
   await tester.binding.setSurfaceSize(size);
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -102,7 +104,9 @@ Future<void> _pumpKasir(WidgetTester tester, AppDatabase db,
       child: MaterialApp(
         theme: AppTheme.light(),
         builder: (c, child) => MediaQuery(
-            data: MediaQuery.of(c).copyWith(disableAnimations: reduced),
+            data: MediaQuery.of(c).copyWith(
+                disableAnimations: reduced,
+                textScaler: TextScaler.linear(textScale)),
             child: child!),
         home: const KasirScreen(),
       ),
@@ -231,75 +235,114 @@ void main() {
   });
 
   group('tombol pojok', () {
+    const keys = ['sync', 'paste', 'held', 'history'];
+
     testWidgets(
-        'landing = deretan tombol berwarna + keterangan kecil di '
-        'bawahnya; mengetik = lingkaran tunggal yang mengembang saat diketuk',
-        (tester) async {
+        'tombol bulat PERMANEN di header (kiri->kanan Sync, Tempel, Antrian, '
+        'Riwayat); landing berketerangan + saklar tema, kompak tanpa '
+        'keterangan + grid/list; tanpa FAB', (tester) async {
       final db = AppDatabase(NativeDatabase.memory());
       await _addProduct(db, 'Gula Pasir');
       await _pumpKasir(tester, db, prefs: modern);
 
-      expect(find.byKey(const Key('fab-rail')), findsOneWidget);
-      for (final k in ['history', 'held', 'paste', 'sync']) {
-        expect(find.byKey(Key('fab-$k')), findsOneWidget, reason: k);
-      }
-      // Grid/list & saklar tema pindah ke header kanan atas.
-      expect(find.byKey(const Key('fab-grid')), findsNothing);
-      expect(find.byKey(const Key('fab-theme')), findsNothing);
-      expect(find.byKey(const Key('hdr-grid')), findsOneWidget);
-      expect(find.byKey(const Key('hdr-theme')), findsOneWidget);
+      expect(find.byKey(const Key('fab-rail')), findsNothing);
       expect(find.byKey(const Key('fab-main')), findsNothing);
-      expect(find.byKey(const Key('modern-scan')), findsOneWidget);
+      expect(find.byKey(const Key('fab-scrim')), findsNothing);
 
-      // Keterangan kecil DI BAWAH lingkaran, dan lingkaran berwarna aksen.
-      for (final k in ['history', 'held', 'paste', 'sync']) {
-        final item = find.byKey(Key('fab-$k'));
+      void expectOrder() {
+        final xs = [
+          for (final k in keys) tester.getCenter(find.byKey(Key('hdr-$k'))).dx
+        ];
+        for (var i = 1; i < xs.length; i++) {
+          expect(xs[i], greaterThan(xs[i - 1]), reason: 'urutan kiri->kanan');
+        }
+      }
+
+      Color bgOf(String k) => tester
+          .widget<Material>(find
+              .descendant(
+                  of: find.byKey(Key('hdr-$k')),
+                  matching: find.byType(Material))
+              .first)
+          .color!;
+      void expectColors() {
+        expect(bgOf('history'), AppTheme.riwayatBg(false));
+        expect(bgOf('held'), AppTheme.antrianBg(false));
+        expect(bgOf('paste'), AppTheme.tempelBg(false));
+        expect(bgOf('sync'), AppTheme.scanBg(false));
+      }
+
+      // Landing: keterangan kecil di bawah lingkaran, saklar ada, grid tidak.
+      for (final k in keys) {
+        expect(find.byKey(Key('hdr-$k')), findsOneWidget, reason: k);
+        final item = find.byKey(Key('hdr-$k'));
         final label = find.descendant(of: item, matching: find.byType(Text));
         final circle =
             find.descendant(of: item, matching: find.byType(Material));
         expect(tester.getCenter(label.first).dy,
-            greaterThan(tester.getCenter(circle.first).dy),
-            reason: 'label $k di bawah tombol');
-        expect(tester.widget<Text>(label.first).style!.fontSize!, lessThan(11),
-            reason: 'keterangan kecil');
+            greaterThan(tester.getCenter(circle.first).dy));
+        expect(tester.widget<Text>(label.first).style!.fontSize!, lessThan(11));
       }
-      Color bgOf(String k) => tester
-          .widget<Material>(find
-              .descendant(
-                  of: find.byKey(Key('fab-$k')),
-                  matching: find.byType(Material))
-              .first)
-          .color!;
-      final colors = {
-        for (final k in ['history', 'held', 'paste', 'sync']) k: bgOf(k)
-      };
-      expect(colors.values.toSet().length, 4,
-          reason: 'tiap fungsi punya warna aksen sendiri');
-      expect(colors['history'], AppTheme.riwayatBg(false));
-      expect(colors['held'], AppTheme.antrianBg(false));
-      expect(colors['paste'], AppTheme.tempelBg(false));
+      expectOrder();
+      expectColors();
+      expect(find.byKey(const Key('hdr-theme')), findsOneWidget);
+      expect(find.byKey(const Key('hdr-grid')), findsNothing);
+      expect(find.text('The POS'), findsOneWidget);
+      expect(tester.getCenter(find.byKey(const Key('hdr-history'))).dx,
+          lessThan(tester.getCenter(find.byKey(const Key('hdr-theme'))).dx));
 
+      // Mengetik: kompak.
       await tester.enterText(find.byKey(const Key('modern-search')), 'gula');
       await tester.pumpAndSettle();
-      expect(find.byKey(const Key('fab-rail')), findsNothing);
-      expect(find.byKey(const Key('fab-main')), findsOneWidget);
-      expect(find.byKey(const Key('fab-history')), findsNothing,
-          reason: 'menyusut: harus diketuk dulu untuk mengembang');
+      for (final k in keys) {
+        expect(find.byKey(Key('hdr-$k')), findsOneWidget, reason: k);
+        expect(
+            find.descendant(
+                of: find.byKey(Key('hdr-$k')), matching: find.byType(Text)),
+            findsNothing,
+            reason: 'tanpa keterangan teks di mode kompak');
+      }
+      expectOrder();
+      expectColors();
+      expect(find.byKey(const Key('hdr-theme')), findsNothing);
+      expect(find.byKey(const Key('hdr-grid')), findsOneWidget);
+      expect(find.text('The POS'), findsNothing);
+      expect(find.byIcon(Icons.shopping_basket_rounded), findsOneWidget);
+      expect(find.byKey(const Key('fab-main')), findsNothing);
 
-      await tester.tap(find.byKey(const Key('fab-main')));
+      await _drain(tester);
+      await db.close();
+    });
+
+    testWidgets('badge jumlah antrian di tombol Antrian header',
+        (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      await _addProduct(db, 'Gula Pasir');
+      await db.into(db.heldOrders).insert(HeldOrdersCompanion.insert(
+            id: 'h1',
+            label: 'Bu Sari',
+            cartJson: jsonEncode({'items': [], 'meta': {}}),
+          ));
+      await _pumpKasir(tester, db, prefs: modern);
+      expect(
+          find.descendant(
+              of: find.byKey(const Key('hdr-held')), matching: find.text('1')),
+          findsOneWidget);
+      await _drain(tester);
+      await db.close();
+    });
+
+    testWidgets(
+        'muat di lebar 360 tanpa overflow (landing & kompak, skala 1.3)',
+        (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      await _addProduct(db, 'Gula Pasir');
+      await _pumpKasir(tester, db,
+          prefs: modern, size: const Size(360, 800), textScale: 1.3);
+      expect(tester.takeException(), isNull);
+      await tester.enterText(find.byKey(const Key('modern-search')), 'gula');
       await tester.pumpAndSettle();
-      double y(String t) => tester.getCenter(find.text(t)).dy;
-      expect(y('Riwayat'), greaterThan(y('Antrian')));
-      expect(y('Antrian'), greaterThan(y('Tempel')));
-      expect(y('Tempel'), greaterThan(y('Sync LAN')),
-          reason: 'urutan dari bawah: Riwayat, Antrian, Tempel, Sync');
-      expect(find.byKey(const Key('fab-scrim')), findsOneWidget);
-
-      await tester.tapAt(const Offset(200, 200));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('fab-history')), findsNothing);
-      expect(find.byKey(const Key('fab-main')), findsOneWidget);
-
+      expect(tester.takeException(), isNull);
       await _drain(tester);
       await db.close();
     });
@@ -311,13 +354,13 @@ void main() {
       await _addProduct(db, 'Gula Pasir');
       await _pumpKasir(tester, db, prefs: modern);
 
-      await tester.tap(find.byKey(const Key('fab-paste')));
+      await tester.tap(find.byKey(const Key('hdr-paste')));
       await tester.pumpAndSettle();
       expect(find.byType(PasteOrderSheet), findsOneWidget);
       Navigator.of(tester.element(find.byType(PasteOrderSheet))).pop();
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const Key('fab-sync')));
+      await tester.tap(find.byKey(const Key('hdr-sync')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('quick-sync-dialog')), findsOneWidget);
       expect(find.byKey(const Key('quick-sync-host')), findsOneWidget);
@@ -332,7 +375,7 @@ void main() {
       final db = AppDatabase(NativeDatabase.memory());
       await _addProduct(db, 'Gula Pasir');
       await _pumpKasir(tester, db, prefs: modern, deviceRole: 'kasir');
-      await tester.tap(find.byKey(const Key('fab-sync')));
+      await tester.tap(find.byKey(const Key('hdr-sync')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('quick-sync-ip')), findsOneWidget);
       expect(find.byKey(const Key('quick-sync-token')), findsOneWidget);
@@ -359,6 +402,9 @@ void main() {
       expect(container.read(themeModeProvider), ThemeMode.dark);
 
       final before = container.read(kasirGridProvider);
+      // grid/list hanya di mode non-landing.
+      await tester.enterText(find.byKey(const Key('modern-search')), 'gula');
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('hdr-grid')));
       await tester.pump();
       expect(container.read(kasirGridProvider), !before);
@@ -409,6 +455,56 @@ void main() {
       await _drain(tester);
       await db.close();
     });
+
+    for (final scale in [1.0, 1.3]) {
+      testWidgets('hint bergilir tidak terpotong (skala font $scale)',
+          (tester) async {
+        final db = AppDatabase(NativeDatabase.memory());
+        final gula = await _addProduct(db, 'Gula Pasir');
+        final beras = await _addProduct(db, 'Beras Rojolele');
+        await saleFor(db, 'c1', gula, 3);
+        await saleFor(db, 'c1', beras, 1);
+        await _pumpKasir(tester, db,
+            prefs: modern, size: const Size(360, 800), textScale: scale);
+        ProviderScope.containerOf(tester.element(find.byType(KasirScreen)))
+            .read(cartMetaProvider(kMainCartId).notifier)
+            .setCustomer('c1', 'Bu Rina');
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.pump(const Duration(milliseconds: 400));
+
+        final hint = find.textContaining('Cari Gula Pasir', findRichText: true);
+        expect(hint, findsOneWidget);
+        final el = tester.element(hint);
+        final tp = TextPainter(
+          text: TextSpan(
+              text: 'Cari Xg',
+              style: DefaultTextStyle.of(el).style.merge(
+                  const TextStyle(fontSize: 15, fontWeight: FontWeight.w700))),
+          textScaler: MediaQuery.textScalerOf(el),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        final window = tester
+            .getSize(
+                find.ancestor(of: hint, matching: find.byType(ClipRect)).first)
+            .height;
+        expect(window, greaterThanOrEqualTo(tp.height),
+            reason: 'jendela hint >= tinggi teks');
+        expect(
+            tester.getSize(hint).height, greaterThanOrEqualTo(tp.height - 0.5),
+            reason: 'baris teks tidak dijepit lebih rendah dari tingginya');
+        // Teks tetap rata-tengah vertikal di pil.
+        expect(
+            tester.getCenter(hint).dy,
+            closeTo(
+                tester
+                    .getCenter(find.byKey(const Key('modern-search-pill')))
+                    .dy,
+                2));
+        await _drain(tester);
+        await db.close();
+      });
+    }
 
     testWidgets(
         'dengan pelanggan: hint bergilir produk yang sering dibeli '
@@ -504,7 +600,7 @@ void main() {
       await _addProduct(db, 'Gula Pasir');
       await _pumpKasir(tester, db, prefs: modern);
 
-      await tester.tap(find.byKey(const Key('fab-held')));
+      await tester.tap(find.byKey(const Key('hdr-held')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('modern-held-sheet')), findsOneWidget);
       expect(find.text('Tidak ada pesanan ditahan'), findsOneWidget);
@@ -517,7 +613,7 @@ void main() {
             label: 'Bu Sari',
             cartJson: jsonEncode({'items': [], 'meta': {}}),
           ));
-      await tester.tap(find.byKey(const Key('fab-held')));
+      await tester.tap(find.byKey(const Key('hdr-held')));
       await tester.pumpAndSettle();
       expect(find.text('Bu Sari'), findsOneWidget);
       expect(find.textContaining('Ditahan'), findsOneWidget);
@@ -588,8 +684,8 @@ void main() {
       const w = 430.0;
       expect(tester.getCenter(find.byKey(const Key('hdr-theme'))).dx,
           greaterThan(w * 0.8));
-      expect(tester.getCenter(find.byKey(const Key('hdr-grid'))).dx,
-          greaterThan(w * 0.6));
+      expect(find.byKey(const Key('hdr-grid')), findsNothing,
+          reason: 'grid/list tidak tampil di landing');
       // Saklar = pelat dengan tuas matahari/bulan, bukan Switch/toggle.
       expect(find.byType(Switch), findsNothing);
       expect(find.byIcon(Icons.wb_sunny_rounded), findsOneWidget);
@@ -779,6 +875,107 @@ void main() {
         expect(AppDatabase.syncableSettingKeys.contains(k), isTrue,
             reason: '$k harus ikut sync');
       }
+      await _drain(tester);
+      await db.close();
+    });
+  });
+
+  group('fokus & kursor kolom cari (9 Okt)', () {
+    testWidgets(
+        'ketik -> hapus sampai kosong (backspace) -> landing, KEYBOARD '
+        'TETAP (fokus tetap)', (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      await _addProduct(db, 'Gula Pasir');
+      await _pumpKasir(tester, db, prefs: modern);
+      final field = find.byKey(const Key('modern-search'));
+      FocusNode node() => tester.widget<TextField>(field).focusNode!;
+
+      await tester.tap(field);
+      await tester.pump();
+      await tester.enterText(field, 'g');
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('kasir-landing')), findsNothing);
+      expect(node().hasFocus, isTrue);
+
+      await tester.enterText(field, '');
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('kasir-landing')), findsOneWidget);
+      expect(node().hasFocus, isTrue, reason: 'fokus tak boleh hilang');
+
+      // Tombol X saat ada teks: hapus + tetap fokus.
+      await tester.enterText(field, 'gula');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('modern-search-clear')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('kasir-landing')), findsOneWidget);
+      expect(node().hasFocus, isTrue);
+      await _drain(tester);
+      await db.close();
+    });
+
+    testWidgets(
+        'regresi kursor: EditableText TIDAK dibangun ulang saat seleksi-semua '
+        'dan kosong/berisi berganti (state identik, fokus tetap)',
+        (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      await _addProduct(db, 'Gula Pasir');
+      await _pumpKasir(tester, db, prefs: modern);
+      final field = find.byKey(const Key('modern-search'));
+      EditableTextState st() =>
+          tester.state<EditableTextState>(find.byType(EditableText));
+      FocusNode node() => tester.widget<TextField>(field).focusNode!;
+
+      await tester.tap(field);
+      await tester.pump();
+      final first = st();
+      await tester.enterText(field, 'gula');
+      await tester.pumpAndSettle();
+      expect(identical(st(), first), isTrue, reason: 'berisi');
+
+      // Keluar lalu ketuk lagi -> seleksi-semua (blok membulat muncul).
+      node().unfocus();
+      await tester.pumpAndSettle();
+      await tester.tap(field);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('modern-search-selection')), findsOneWidget);
+      expect(identical(st(), first), isTrue, reason: 'seleksi-semua');
+      expect(node().hasFocus, isTrue);
+
+      // Seleksi-semua -> kosong (slot hint masuk, slot seleksi keluar).
+      await tester.tap(find.byKey(const Key('modern-search-clear')));
+      await tester.pumpAndSettle();
+      expect(identical(st(), first), isTrue, reason: 'kosong');
+      expect(node().hasFocus, isTrue);
+
+      await tester.enterText(field, 'abc');
+      await tester.pumpAndSettle();
+      expect(identical(st(), first), isTrue);
+      await _drain(tester);
+      await db.close();
+    });
+  });
+
+  group('cart bar: nominal dinamis (9 Okt)', () {
+    testWidgets('nominal 9 digit tetap SATU baris & tidak overflow di 360dp',
+        (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      await _addProduct(db, 'Emas Batang', price: 999999999);
+      await _pumpKasir(tester, db,
+          prefs: modern, size: const Size(360, 800), textScale: 1.3);
+      await tester.enterText(find.byKey(const Key('modern-search')), 'emas');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.add_rounded).first);
+      await tester.pumpAndSettle();
+
+      final amount = find.descendant(
+          of: find.byKey(const Key('modern-cart-bar')),
+          matching: find.text(formatRupiah(999999999)));
+      expect(amount, findsOneWidget);
+      expect(tester.takeException(), isNull);
+      final h = tester.getSize(amount).height;
+      expect(h, lessThan(60), reason: 'satu baris (tidak pecah dua)');
+      final bar = tester.getRect(find.byKey(const Key('modern-cart-bar')));
+      expect(tester.getRect(amount).right, lessThan(bar.right));
       await _drain(tester);
       await db.close();
     });

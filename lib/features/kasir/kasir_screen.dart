@@ -2360,9 +2360,9 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
                             }
                             if (isGrid) {
                               return GridView.builder(
-                                // Gaya Baru: ruang bawah untuk tombol pojok.
+                                // Gaya Baru: sedikit ruang bawah di atas cart bar.
                                 padding: EdgeInsets.fromLTRB(
-                                    12, 12, 12, modern ? 96 : 12),
+                                    12, 12, 12, modern ? 24 : 12),
                                 gridDelegate:
                                     const SliverGridDelegateWithMaxCrossAxisExtent(
                                   maxCrossAxisExtent: 180,
@@ -2399,7 +2399,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
                               // (tanpa garis pemisah), isi/aksi tile sama.
                               return ListView.separated(
                                 padding:
-                                    const EdgeInsets.fromLTRB(12, 6, 12, 96),
+                                    const EdgeInsets.fromLTRB(12, 6, 12, 24),
                                 itemCount: prods.length,
                                 separatorBuilder: (_, __) =>
                                     const SizedBox(height: 8),
