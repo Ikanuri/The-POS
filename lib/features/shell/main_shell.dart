@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/diagnostics/perf_diag.dart';
 import '../../core/providers/device_provider.dart';
 import '../kasir/kasir_style.dart';
 import '../../core/providers/laci_meja_provider.dart';
@@ -105,14 +104,14 @@ class _MainShellState extends ConsumerState<MainShell> {
     final kasirIndex = tabs.indexWhere((t) => t.path == '/kasir');
     final laciMejaCount = ref.watch(laciMejaOpenCountProvider).valueOrNull ?? 0;
 
-    // Diagnostik performa: Scaffold shell ikut mengecilkan body saat keyboard
-    // muncul (itu yang membuat layar Kasir di dalamnya di-layout ulang tiap
-    // frame). Saklar uji `keyboardResize=false` mematikannya KHUSUS tab Kasir
-    // gaya Baru.
+    // Kasir gaya Baru: keyboard TIDAK mengecilkan layar - cart bar tetap di
+    // bawah (tertutup keyboard), kolom cari tidak digeser. Mengecilkan body
+    // membuat landing di-layout ulang tiap frame selama keyboard naik (terasa
+    // lag di HP uji). Hanya tab Kasir persis ('/kasir'); sub-rute (bayar,
+    // laci meja, dst.) tetap mengecil seperti biasa untuk kolom isiannya.
     final shellResize = shellResizesForKeyboard(
-      onKasirTab: location.startsWith('/kasir'),
+      onKasirTab: location == '/kasir',
       modernStyle: ref.watch(kasirStyleProvider) == KasirStyle.modern,
-      diag: PerfDiag.s,
     );
 
     return Scaffold(
@@ -413,11 +412,9 @@ class _QuickMenuIcon extends StatelessWidget {
 }
 
 /// Apakah `Scaffold` shell boleh mengecilkan body saat keyboard muncul. Normal
-/// selalu true; false HANYA bila saklar uji `keyboardResize` dimatikan di tab
-/// Kasir gaya Baru (lihat Pengaturan > Diagnostik Performa).
+/// true; false HANYA di tab Kasir ('/kasir') bergaya Baru.
 bool shellResizesForKeyboard({
   required bool onKasirTab,
   required bool modernStyle,
-  required PerfDiagState diag,
 }) =>
-    !(onKasirTab && modernStyle && !diag.keyboardResize);
+    !(onKasirTab && modernStyle);

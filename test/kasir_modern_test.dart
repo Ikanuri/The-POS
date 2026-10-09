@@ -1046,4 +1046,72 @@ void main() {
       await db.close();
     });
   });
+
+  group('keyboard & cart bar tetap di bawah', () {
+    testWidgets(
+        'Scaffold tidak mengecil; cart bar TETAP di bawah saat '
+        'keyboard terbuka; list diberi ruang bawah setinggi keyboard',
+        (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      await _addProduct(db, 'Gula Pasir');
+      await _pumpKasir(tester, db,
+          prefs: {...modern, 'kasir_grid_view': false},
+          size: const Size(430, 900));
+      await tester.enterText(find.byKey(const Key('modern-search')), 'gula');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.add_rounded).first);
+      await tester.pumpAndSettle();
+
+      final scaffold = tester.widget<Scaffold>(find.descendant(
+          of: find.byType(KasirScreen), matching: find.byType(Scaffold)));
+      expect(scaffold.resizeToAvoidBottomInset, isFalse);
+
+      double barY() =>
+          tester.getTopLeft(find.byKey(const Key('modern-cart-bar'))).dy;
+      final yBefore = barY();
+      double listBottomPad() {
+        final lv = tester.widget<ListView>(find
+            .descendant(
+                of: find.byType(KasirScreen), matching: find.byType(ListView))
+            .first);
+        return (lv.padding as EdgeInsets).bottom;
+      }
+
+      final padBefore = listBottomPad();
+      tester.view.viewInsets = const FakeViewPadding(bottom: 420);
+      addTearDown(tester.view.resetViewInsets);
+      await tester.pumpAndSettle();
+      expect(barY(), closeTo(yBefore, 1),
+          reason: 'cart bar tidak naik oleh keyboard (tertutup keyboard)');
+      expect(listBottomPad(), greaterThan(padBefore + 100),
+          reason: 'daftar diberi ruang bawah agar baris terakhir bisa '
+              'digulir ke atas keyboard');
+      await _drain(tester);
+      await db.close();
+    });
+
+    testWidgets('cart bar: ada jarak ke tepi & kartu kontras dgn latar',
+        (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      await _addProduct(db, 'Gula Pasir');
+      await _pumpKasir(tester, db, prefs: modern, size: const Size(430, 900));
+      await tester.enterText(find.byKey(const Key('modern-search')), 'gula');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.add_rounded).first);
+      await tester.pumpAndSettle();
+
+      final r = tester.getRect(find.byKey(const Key('modern-cart-bar')));
+      expect(r.left, greaterThanOrEqualTo(12), reason: 'jarak kiri');
+      expect(430 - r.right, greaterThanOrEqualTo(12), reason: 'jarak kanan');
+      final scaffold = tester.widget<Scaffold>(find.descendant(
+          of: find.byType(KasirScreen), matching: find.byType(Scaffold)));
+      final card = tester
+          .widget<Container>(find.byKey(const Key('modern-cart-bar')))
+          .decoration as BoxDecoration;
+      expect(card.color, isNot(scaffold.backgroundColor),
+          reason: 'kartu putih beda dgn latar -> tidak menyatu');
+      await _drain(tester);
+      await db.close();
+    });
+  });
 }

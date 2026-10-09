@@ -103,20 +103,6 @@ class PerfDiagScreen extends StatelessWidget {
                   'Baca riwayat transaksi saat landing tampil',
                   s.recentQuery,
                   (v) => s.copyWith(recentQuery: v)),
-              header('KEYBOARD'),
-              tile(
-                  'keyboardResize',
-                  'Layar ikut mengecil saat keyboard muncul',
-                  'MATIKAN untuk uji: body tidak dikecilkan (cart bar tidak '
-                      'ikut naik, tanpa layout ulang per frame)',
-                  s.keyboardResize,
-                  (v) => s.copyWith(keyboardResize: v)),
-              tile(
-                  'hideCart',
-                  'Sembunyikan cart bar selagi keyboard terbuka',
-                  'NYALAKAN untuk uji (default mati)',
-                  s.hideCartWhileTyping,
-                  (v) => s.copyWith(hideCartWhileTyping: v)),
               header('PENGUKURAN'),
               tile(
                   'meter',

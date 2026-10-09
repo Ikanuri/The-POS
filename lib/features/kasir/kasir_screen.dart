@@ -2312,7 +2312,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
   /// Hasil produk (grid/list/kosong/memuat) — dipakai tampilan Klasik & Baru.
   Widget _buildProductResults(BuildContext context,
       AsyncValue<List<Product>> productsAsync, String query, bool isGrid,
-      {bool modern = false}) {
+      {bool modern = false, double extraBottom = 0}) {
     final cs = Theme.of(context).colorScheme;
     return StepperActiveScope(
                         child: productsAsync.when(
@@ -2365,7 +2365,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
                               return GridView.builder(
                                 // Gaya Baru: sedikit ruang bawah di atas cart bar.
                                 padding: EdgeInsets.fromLTRB(
-                                    12, 12, 12, modern ? 24 : 12),
+                                    12, 12, 12, modern ? 24 + extraBottom : 12),
                                 gridDelegate:
                                     const SliverGridDelegateWithMaxCrossAxisExtent(
                                   maxCrossAxisExtent: 180,
@@ -2402,7 +2402,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
                               // (tanpa garis pemisah), isi/aksi tile sama.
                               return ListView.separated(
                                 padding:
-                                    const EdgeInsets.fromLTRB(12, 6, 12, 24),
+                                    EdgeInsets.fromLTRB(12, 6, 12, 24 + extraBottom),
                                 itemCount: prods.length,
                                 separatorBuilder: (_, __) =>
                                     const SizedBox(height: 8),

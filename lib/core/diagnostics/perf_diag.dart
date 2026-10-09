@@ -19,8 +19,6 @@ class PerfDiagState {
     this.hintRotate = true,
     this.tileDecor = true,
     this.recentQuery = true,
-    this.keyboardResize = true,
-    this.hideCartWhileTyping = false,
     this.perfOverlay = false,
     this.meter = false,
   });
@@ -52,13 +50,6 @@ class PerfDiagState {
   /// Query "terakhir dijual"/"sering dibeli" + saran pelanggan.
   final bool recentQuery;
 
-  /// `true` = Scaffold mengecil saat keyboard muncul (normal, cart bar ikut
-  /// naik); `false` = body TIDAK dikecilkan (tanpa layout ulang per frame).
-  final bool keyboardResize;
-
-  /// Uji: cart bar disembunyikan selagi keyboard terbuka.
-  final bool hideCartWhileTyping;
-
   /// Overlay performa bawaan Flutter (grafik build/raster).
   final bool perfOverlay;
 
@@ -77,8 +68,6 @@ class PerfDiagState {
     bool? hintRotate,
     bool? tileDecor,
     bool? recentQuery,
-    bool? keyboardResize,
-    bool? hideCartWhileTyping,
     bool? perfOverlay,
     bool? meter,
   }) =>
@@ -92,8 +81,6 @@ class PerfDiagState {
         hintRotate: hintRotate ?? this.hintRotate,
         tileDecor: tileDecor ?? this.tileDecor,
         recentQuery: recentQuery ?? this.recentQuery,
-        keyboardResize: keyboardResize ?? this.keyboardResize,
-        hideCartWhileTyping: hideCartWhileTyping ?? this.hideCartWhileTyping,
         perfOverlay: perfOverlay ?? this.perfOverlay,
         meter: meter ?? this.meter,
       );
@@ -108,8 +95,6 @@ class PerfDiagState {
         'hintRotate': hintRotate,
         'tileDecor': tileDecor,
         'recentQuery': recentQuery,
-        'keyboardResize': keyboardResize,
-        'hideCartWhileTyping': hideCartWhileTyping,
         'perfOverlay': perfOverlay,
         'meter': meter,
       };
@@ -126,8 +111,6 @@ class PerfDiagState {
       hintRotate: b('hintRotate', true),
       tileDecor: b('tileDecor', true),
       recentQuery: b('recentQuery', true),
-      keyboardResize: b('keyboardResize', true),
-      hideCartWhileTyping: b('hideCartWhileTyping', false),
       perfOverlay: b('perfOverlay', false),
       meter: b('meter', false),
     );

@@ -173,8 +173,6 @@ void main() {
       'hintRotate',
       'tileDecor',
       'recentQuery',
-      'keyboardResize',
-      'hideCart',
       'meter',
       'overlay',
     ]) {
@@ -183,9 +181,9 @@ void main() {
     await tester.tap(find.byKey(const Key('diag-stickers')));
     await tester.pumpAndSettle();
     expect(PerfDiag.s.stickers, isFalse);
-    await tester.tap(find.byKey(const Key('diag-hideCart')));
+    await tester.tap(find.byKey(const Key('diag-meter')));
     await tester.pumpAndSettle();
-    expect(PerfDiag.s.hideCartWhileTyping, isTrue);
+    expect(PerfDiag.s.meter, isTrue);
 
     await tester.tap(find.byKey(const Key('diag-reset')));
     await tester.pumpAndSettle();
@@ -196,27 +194,23 @@ void main() {
   });
 
   test('summaryAll: SEMUA saklar tampil, yang beda dari normal bertanda *', () {
-    final all =
-        const PerfDiagState(keyboardResize: false, meter: true).summaryAll();
+    final all = const PerfDiagState(shadows: false, meter: true).summaryAll();
     expect(all, contains('stickers=ON,'));
-    expect(all, contains('keyboardResize=OFF*'));
+    expect(all, contains('shadows=OFF*'));
     expect(all, contains('meter=ON*'));
     expect(all, contains('perfOverlay=OFF,'),
         reason: 'saklar uji yang normalnya OFF tetap tercantum');
-    expect(all.split(',').length, 13);
+    expect(all.split(',').length, 11);
     expect(PerfDiagState.normal.summaryAll().contains('*'), isFalse);
   });
 
-  test(
-      'Scaffold shell: hanya TIDAK mengecil bila Kasir gaya Baru + saklar '
-      'keyboardResize dimatikan', () {
-    const off = PerfDiagState(keyboardResize: false);
-    bool f(bool kasir, bool modern, PerfDiagState d) => shellResizesForKeyboard(
-        onKasirTab: kasir, modernStyle: modern, diag: d);
-    expect(f(true, true, PerfDiagState.normal), isTrue);
-    expect(f(true, true, off), isFalse);
-    expect(f(true, false, off), isTrue, reason: 'Klasik tidak terpengaruh');
-    expect(f(false, true, off), isTrue, reason: 'tab lain tidak terpengaruh');
+  test('Scaffold shell: TIDAK mengecil hanya di tab Kasir gaya Baru', () {
+    bool f(bool kasir, bool modern) =>
+        shellResizesForKeyboard(onKasirTab: kasir, modernStyle: modern);
+    expect(f(true, true), isFalse);
+    expect(f(true, false), isTrue, reason: 'Klasik tidak terpengaruh');
+    expect(f(false, true), isTrue,
+        reason: 'tab/sub-rute lain tidak terpengaruh');
   });
 
   group('efek saklar pada layar Kasir gaya Baru', () {
@@ -250,48 +244,6 @@ void main() {
       expect(find.byType(Lottie), findsNothing);
       expect(_countShadowed(tester), 0,
           reason: 'semua BoxShadow modern dimatikan');
-      await _drain(tester);
-      await db.close();
-    });
-
-    testWidgets('keyboardResize=false: Scaffold tidak mengecil oleh keyboard',
-        (tester) async {
-      final db = AppDatabase(NativeDatabase.memory());
-      await _addProduct(db, 'Gula Pasir');
-      await _pumpKasir(tester, db, prefs: modern);
-      bool resize() => tester
-          .widget<Scaffold>(find.descendant(
-              of: find.byType(KasirScreen), matching: find.byType(Scaffold)))
-          .resizeToAvoidBottomInset!;
-      expect(resize(), isTrue);
-      PerfDiag.notifier.value = const PerfDiagState(keyboardResize: false);
-      await tester.pump();
-      expect(resize(), isFalse);
-      await _drain(tester);
-      await db.close();
-    });
-
-    testWidgets(
-        'hideCartWhileTyping: cart bar hilang selagi keyboard '
-        'terbuka', (tester) async {
-      final db = AppDatabase(NativeDatabase.memory());
-      await _addProduct(db, 'Gula Pasir');
-      await _pumpKasir(tester, db, prefs: modern);
-      await tester.enterText(find.byKey(const Key('modern-search')), 'gula');
-      await tester.pumpAndSettle();
-      await tester.tap(find.byIcon(Icons.add_rounded).first);
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('modern-cart-bar')), findsOneWidget);
-
-      PerfDiag.notifier.value = const PerfDiagState(hideCartWhileTyping: true);
-      tester.view.viewInsets = const FakeViewPadding(bottom: 600);
-      addTearDown(tester.view.resetViewInsets);
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('modern-cart-bar')), findsNothing);
-
-      tester.view.resetViewInsets();
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('modern-cart-bar')), findsOneWidget);
       await _drain(tester);
       await db.close();
     });

@@ -78,15 +78,14 @@ extension _KasirModernX on _KasirScreenState {
       _searchFocus.unfocus();
     }
 
-    // Diagnostik: keyboard memicu layout ulang tiap frame (cart bar ikut
-    // naik). Saklar menguji: body tidak dikecilkan / cart bar disembunyikan.
-    final diag = PerfDiag.s;
-    // viewInsets HANYA dibaca bila saklar uji aktif: membacanya membuat seluruh
-    // layar dibangun ulang tiap frame selama keyboard bergeser.
-    final hideCart =
-        diag.hideCartWhileTyping && MediaQuery.viewInsetsOf(context).bottom > 0;
+    // Keyboard TIDAK mengecilkan layar (shell juga tidak, lihat
+    // `shellResizesForKeyboard`): cart bar tetap di bawah (tertutup keyboard)
+    // dan kolom cari tidak digeser - mengecilkan body membuat landing
+    // di-layout ulang tiap frame selama keyboard naik (lag di HP uji). Daftar
+    // produk diberi ruang bawah setinggi keyboard supaya baris terakhir tetap
+    // bisa digulir ke atas keyboard.
     return Scaffold(
-      resizeToAvoidBottomInset: diag.keyboardResize,
+      resizeToAvoidBottomInset: false,
       body: Stack(
         children: [
           Positioned.fill(child: _ModernBlobs(strong: isLanding)),
@@ -147,6 +146,15 @@ extension _KasirModernX on _KasirScreenState {
                       .read(themeModeProvider.notifier)
                       .set(dark ? ThemeMode.light : ThemeMode.dark),
                 ),
+                // Notifikasi inline (sync di latar, info kasir) di ATAS stiker/
+                // kolom cari, tepat di bawah header.
+                const SyncStatusBanner(),
+                InlineBanner(
+                  message: _bannerMsg,
+                  type: _bannerType,
+                  duration: _bannerDuration,
+                  onDismiss: () => _clearBanner(),
+                ),
                 Expanded(
                   // Tinggi area di bawah header menentukan posisi kolom cari
                   // di landing: dipusatkan secara vertikal (seperti katalog
@@ -203,17 +211,13 @@ extension _KasirModernX on _KasirScreenState {
                               },
                               child: Column(
                                 children: [
-                                  const SyncStatusBanner(),
-                                  InlineBanner(
-                                    message: _bannerMsg,
-                                    type: _bannerType,
-                                    duration: _bannerDuration,
-                                    onDismiss: () => _clearBanner(),
-                                  ),
                                   Expanded(
                                     child: isLanding
                                         ? _ModernLanding(
                                             cartId: _cartId,
+                                            extraBottom:
+                                                MediaQuery.viewInsetsOf(context)
+                                                    .bottom,
                                             onShowAll: () => ref
                                                 .read(_kasirShowAllProvider(
                                                         _cartId)
@@ -232,9 +236,19 @@ extension _KasirModernX on _KasirScreenState {
                                                   _highlightSearchIfActive,
                                             ),
                                           )
-                                        : _buildProductResults(context,
-                                            productsAsync, query, isGrid,
-                                            modern: true),
+                                        : Builder(
+                                            builder: (ctx) =>
+                                                _buildProductResults(
+                                                    ctx,
+                                                    productsAsync,
+                                                    query,
+                                                    isGrid,
+                                                    modern: true,
+                                                    extraBottom:
+                                                        MediaQuery.viewInsetsOf(
+                                                                ctx)
+                                                            .bottom),
+                                          ),
                                   ),
                                 ],
                               ),
@@ -250,8 +264,10 @@ extension _KasirModernX on _KasirScreenState {
           ),
         ],
       ),
-      backgroundColor: cs.surface,
-      bottomNavigationBar: (cart.isEmpty || hideCart)
+      // Latar sedikit lebih gelap dari kartu (seperti kanvas katalog HTML) agar
+      // cart bar & kartu produk terlihat terpisah dari latar.
+      backgroundColor: Color.lerp(cs.surface, AppTheme.canvasColor(dark), 0.4),
+      bottomNavigationBar: cart.isEmpty
           ? null
           : _buildModernCartBottom(context, cart, cartNotifier, cartMeta),
     );
@@ -775,11 +791,16 @@ class _ModernSearchStageState extends ConsumerState<_ModernSearchStage> {
 class _ModernLanding extends ConsumerWidget {
   const _ModernLanding({
     required this.cartId,
+    this.extraBottom = 0,
     required this.onShowAll,
     required this.tileBuilder,
   });
 
   final String cartId;
+
+  /// Tinggi keyboard: ruang bawah list agar baris terakhir bisa digulir ke
+  /// atas keyboard (layar tidak dikecilkan oleh keyboard).
+  final double extraBottom;
   final VoidCallback onShowAll;
   final Widget Function(Product) tileBuilder;
 
@@ -797,7 +818,7 @@ class _ModernLanding extends ConsumerWidget {
 
     return ListView(
       key: const Key('kasir-landing'),
-      padding: const EdgeInsets.only(bottom: 24),
+      padding: EdgeInsets.only(bottom: 24 + extraBottom),
       children: [
         // Satu baris saja, digeser mendatar bila kategori banyak; bila muat,
         // terpusat.
@@ -1372,20 +1393,22 @@ class _ModernCartBar extends ConsumerWidget {
     }
 
     return Padding(
+      // Jarak ke tepi kiri/kanan/bawah (kartu melayang, bukan bar penuh).
       padding: EdgeInsets.fromLTRB(
-          12, 0, 12, 10 + MediaQuery.paddingOf(context).bottom),
+          14, 6, 14, 12 + MediaQuery.paddingOf(context).bottom),
       child: Container(
         key: const Key('modern-cart-bar'),
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
         decoration: BoxDecoration(
           color: cs.surface,
           borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: cs.outlineVariant, width: 0.6),
+          border: Border.all(
+              color: cs.outlineVariant.withOpacity(dark ? 0.9 : 1), width: 1),
           boxShadow: _sh([
             BoxShadow(
-              color: dark ? const Color(0x80000000) : const Color(0x2E5A3C1E),
-              blurRadius: 24,
-              offset: const Offset(0, 8),
+              color: dark ? const Color(0x99000000) : const Color(0x385A3C1E),
+              blurRadius: 22,
+              offset: const Offset(0, 6),
             ),
           ]),
         ),
