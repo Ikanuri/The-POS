@@ -9,6 +9,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-10-09 (penyesuaian desain Kasir gaya Baru)
 
+- feat(ui): `054c3ef` — sub-layar Pengaturan tahap 2 (v3.11.1+216)
 - feat(ui): `f99a741` — redesain sub-layar Pengaturan tahap 1 (v3.11.0+215)
 - feat(ui): `ae60711` — redesain Pengaturan (v3.10.0+214)
 - feat(eksperimental): `58a9f8f` — bingkai scanner ala Telegram (v3.9.0+213)
