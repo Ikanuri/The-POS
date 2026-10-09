@@ -9,6 +9,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-10-09 (penyesuaian desain Kasir gaya Baru)
 
+- feat(ui): `ae60711` — redesain Pengaturan (v3.10.0+214)
 - feat(eksperimental): `58a9f8f` — bingkai scanner ala Telegram (v3.9.0+213)
 - docs/test: `cbfc9b7` — analisis QR scanner Telegram + generator & berkas backup dummy BPOP2
 - feat: `db6d7b1` — revolver vertikal, stiker empty, chart_kit Telegram, font angka, redesain Pelanggan (v3.8.0+212)
