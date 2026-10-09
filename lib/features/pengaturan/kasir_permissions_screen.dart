@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
+import '../../core/theme/app_theme.dart';
+import 'pengaturan_screen.dart' show SettingsIconBubble;
 
 /// Izin yang fiturnya BELUM ada di aplikasi (input pengeluaran & pembelian
 /// supplier) — disembunyikan dari UI agar owner tidak menyalakan toggle yang
@@ -53,7 +55,17 @@ class KasirPermissionsScreen extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 8),
-            ...perms.map((p) => _PermissionTile(permission: p)),
+            Card(
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                children: [
+                  for (var i = 0; i < perms.length; i++) ...[
+                    if (i > 0) const Divider(height: 1, indent: 66),
+                    _PermissionTile(permission: perms[i]),
+                  ],
+                ],
+              ),
+            ),
           ],
         ),
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -69,7 +81,10 @@ class _PermissionTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return SwitchListTile(
+      secondary: SettingsIconBubble(Icons.verified_user_outlined,
+          AppTheme.changeFg(isDark), AppTheme.changeBg(isDark)),
       title: Text(_label(permission.permissionKey)),
       subtitle: Text(_desc(permission.permissionKey),
           style: TextStyle(

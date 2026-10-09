@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/widgets/app_form_section.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -99,76 +100,89 @@ class _StoreInfoScreenState extends ConsumerState<StoreInfoScreen>
       body: Column(
         children: [
           inlineBanner(),
-          Expanded(child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          TextFormField(
-            controller: _nameCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Nama Toko *',
-              hintText: 'Contoh: Berkah Grosir',
-            ),
-            textCapitalization: TextCapitalization.words,
-          ),
-          const SizedBox(height: 12),
-          TextFormField(
-            controller: _addressCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Alamat',
-              hintText: 'Jl. Contoh No. 1',
-            ),
-            maxLines: 2,
-          ),
-          const SizedBox(height: 12),
-          TextFormField(
-            controller: _phoneCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Telepon',
-              hintText: '0xx-xxxx-xxxx',
-            ),
-            keyboardType: TextInputType.phone,
-          ),
-          const SizedBox(height: 12),
-          TextFormField(
-            controller: _waCtrl,
-            decoration: const InputDecoration(
-              labelText: 'WhatsApp',
-              hintText: '08xx-xxxx-xxxx',
-            ),
-            keyboardType: TextInputType.phone,
-          ),
-          const SizedBox(height: 12),
-          TextFormField(
-            controller: _telegramCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Telegram',
-              hintText: '@tokoku atau t.me/tokoku',
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextFormField(
-            controller: _headerCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Teks Header Struk',
-              hintText: 'Mis. cabang, slogan, jam buka…',
-              helperText: 'Tampil di bagian atas struk, di bawah info toko',
-            ),
-            maxLines: 3,
-            textCapitalization: TextCapitalization.sentences,
-          ),
-          const SizedBox(height: 12),
-          TextFormField(
-            controller: _strukturCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Catatan di Struk',
-              hintText: 'Terima kasih telah berbelanja…',
-              helperText: 'Tampil di bagian bawah struk',
-            ),
-            maxLines: 3,
-          ),
-          const SizedBox(height: 80),
-        ],
-      )),
+          Expanded(
+              child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              AppFormSection(
+                title: 'Identitas Toko',
+                children: [
+                  TextFormField(
+                    controller: _nameCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Nama Toko *',
+                      hintText: 'Contoh: Berkah Grosir',
+                    ),
+                    textCapitalization: TextCapitalization.words,
+                  ),
+                  TextFormField(
+                    controller: _addressCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Alamat',
+                      hintText: 'Jl. Contoh No. 1',
+                    ),
+                    maxLines: 2,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              AppFormSection(
+                title: 'Kontak',
+                children: [
+                  TextFormField(
+                    controller: _phoneCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Telepon',
+                      hintText: '0xx-xxxx-xxxx',
+                    ),
+                    keyboardType: TextInputType.phone,
+                  ),
+                  TextFormField(
+                    controller: _waCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'WhatsApp',
+                      hintText: '08xx-xxxx-xxxx',
+                    ),
+                    keyboardType: TextInputType.phone,
+                  ),
+                  TextFormField(
+                    controller: _telegramCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Telegram',
+                      hintText: '@tokoku atau t.me/tokoku',
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              AppFormSection(
+                title: 'Struk',
+                children: [
+                  TextFormField(
+                    controller: _headerCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Teks Header Struk',
+                      hintText: 'Mis. cabang, slogan, jam buka…',
+                      helperText:
+                          'Tampil di bagian atas struk, di bawah info toko',
+                    ),
+                    maxLines: 3,
+                    textCapitalization: TextCapitalization.sentences,
+                  ),
+                  TextFormField(
+                    controller: _strukturCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Catatan di Struk',
+                      hintText: 'Terima kasih telah berbelanja…',
+                      helperText: 'Tampil di bagian bawah struk',
+                    ),
+                    maxLines: 3,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 80),
+            ],
+          )),
         ],
       ),
       bottomNavigationBar: Padding(

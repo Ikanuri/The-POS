@@ -217,7 +217,6 @@ class _TutupBukuScreenState extends ConsumerState<TutupBukuScreen>
                   children: [
                     // Info card
                     Card(
-                      color: scheme.surfaceContainerLow,
                       child: Padding(
                         padding: const EdgeInsets.all(16),
                         child: Column(

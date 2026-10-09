@@ -308,10 +308,12 @@ class AppTheme {
         scrolledUnderElevation: 0,
         shadowColor: sh1,
         centerTitle: false,
-        titleTextStyle: GoogleFonts.hankenGrotesk(
-          fontSize: 19,
-          fontWeight: FontWeight.w700,
+        // Judul layar: serif (Newsreader) 21/600 — seragam di semua sub-layar.
+        titleTextStyle: GoogleFonts.newsreader(
+          fontSize: 21,
+          fontWeight: FontWeight.w600,
           color: ink,
+          letterSpacing: -0.2,
         ),
         iconTheme: IconThemeData(color: isDark ? _dInk2 : _lInk2),
       ),

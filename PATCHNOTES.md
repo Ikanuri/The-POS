@@ -8,6 +8,14 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 9 Oktober 2026 (v3.11.0 — Sub-layar Pengaturan dirapikan)
+
+- **Judul semua layar kini bergaya serif** seragam dengan angka & header baru.
+- **Informasi Toko** dikelompokkan jadi kartu: Identitas Toko, Kontak, Struk.
+- **Izin Pegawai/Asisten**: semua izin dalam satu kartu putih dengan ikon bulat hijau.
+- **Pegawai Toko**: tampilan kosong lebih ramah, ada tombol "Tambah Pegawai".
+- **Antrean persetujuan Sync & kartu info Tutup Buku** kini putih bersih, tanpa warna blok.
+
 ## 9 Oktober 2026 (v3.10.0 — Halaman Pengaturan baru)
 
 - **Pengaturan didesain ulang**: header berisi nama toko dan judul, kartu perangkat bergradien (kode, nama, peran), tiap baris pengaturan punya ikon bulat berwarna sesuai kelompoknya (Toko hijau, Sinkronisasi ungu, Manajemen Data merah, Perangkat teal), dan kartu seksi kini putih bersih.

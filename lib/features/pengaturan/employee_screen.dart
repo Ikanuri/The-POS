@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/theme/app_overlays.dart';
+import '../../core/widgets/app_empty_state.dart';
 
 const _empUuid = Uuid();
 
@@ -33,24 +34,16 @@ class EmployeeScreen extends ConsumerWidget {
         error: (e, _) => Center(child: Text('Error: $e')),
         data: (list) {
           if (list.isEmpty) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.badge_outlined,
-                        size: 48, color: scheme.onSurfaceVariant),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Belum ada pegawai.\nTambah pegawai agar bisa dicatat '
-                      'di tiap nota — berguna menelusuri siapa yang melayani '
-                      'bila ada salah ambil / input.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: scheme.onSurfaceVariant),
-                    ),
-                  ],
-                ),
+            return AppEmptyState(
+              'Belum ada pegawai',
+              icon: Icons.badge_outlined,
+              hint: 'Tambah pegawai agar bisa dicatat di tiap nota — berguna '
+                  'menelusuri siapa yang melayani bila ada salah ambil / input.',
+              action: FilledButton.icon(
+                style: FilledButton.styleFrom(minimumSize: const Size(0, 44)),
+                onPressed: () => _showForm(context, ref),
+                icon: const Icon(Icons.person_add_outlined),
+                label: const Text('Tambah Pegawai'),
               ),
             );
           }
@@ -150,9 +143,9 @@ class EmployeeScreen extends ConsumerWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Hapus Pegawai'),
-        content: Text(
-            'Hapus "${e.name}" dari daftar pegawai? Nota lama yang sudah '
-            'mencatat nama ini tetap utuh.'),
+        content:
+            Text('Hapus "${e.name}" dari daftar pegawai? Nota lama yang sudah '
+                'mencatat nama ini tetap utuh.'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),

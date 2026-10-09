@@ -428,13 +428,13 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
                         Row(
                           children: [
                             Icon(Icons.devices_outlined, size: 16,
-                                color: scheme.onTertiaryContainer),
+                                color: scheme.onSurface),
                             const SizedBox(width: 6),
                             Expanded(
                               child: Text(item.fromIp,
                                   style: TextStyle(
                                       fontWeight: FontWeight.w700,
-                                      color: scheme.onTertiaryContainer)),
+                                      color: scheme.onSurface)),
                             ),
                             Text(
                                 mins == 0
@@ -442,7 +442,7 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
                                     : '$mins menit lalu',
                                 style: TextStyle(
                                     fontSize: 11,
-                                    color: scheme.onTertiaryContainer
+                                    color: scheme.onSurface
                                         .withOpacity(0.6))),
                           ],
                         ),
@@ -450,7 +450,7 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
                         Text(item.tablesSummary,
                             style: TextStyle(
                                 fontSize: 12,
-                                color: scheme.onTertiaryContainer
+                                color: scheme.onSurface
                                     .withOpacity(0.8))),
                         const SizedBox(height: 10),
                         Row(
