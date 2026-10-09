@@ -65,3 +65,45 @@ class KasirStickerService {
     }
   }
 }
+
+/// Teks di bawah stiker pada landing Kasir (judul + subjudul). Diubah HANYA
+/// oleh owner (UI dibatasi di Pengaturan) dan ikut tersinkron ke perangkat
+/// lain lewat setting toko (`AppDatabase.syncableSettingKeys`, arah
+/// host -> klien). Kosong = pakai teks bawaan.
+class KasirLandingText {
+  const KasirLandingText({required this.title, required this.subtitle});
+
+  final String title;
+  final String subtitle;
+
+  static const titleKey = 'kasir_landing_title';
+  static const subtitleKey = 'kasir_landing_subtitle';
+  static const maxTitle = 40;
+  static const maxSubtitle = 80;
+
+  static const defaults = KasirLandingText(
+    title: 'Mau jual apa hari ini?',
+    subtitle: 'Scan barang, ketik nama, atau pilih kategori',
+  );
+
+  static Future<KasirLandingText> load(AppDatabase db) async {
+    final t = (await db.getSetting(titleKey))?.trim() ?? '';
+    final s = (await db.getSetting(subtitleKey))?.trim() ?? '';
+    return KasirLandingText(
+      title: t.isEmpty ? defaults.title : t,
+      subtitle: s.isEmpty ? defaults.subtitle : s,
+    );
+  }
+
+  /// Teks kosong = kembali ke bawaan (disimpan sbg string kosong).
+  static Future<void> save(
+      AppDatabase db, {required String title, required String subtitle}) async {
+    await db.setSetting(titleKey, title.trim());
+    await db.setSetting(subtitleKey, subtitle.trim());
+  }
+
+  /// true bila teks yang tersimpan bukan bawaan.
+  static Future<bool> isCustom(AppDatabase db) async =>
+      ((await db.getSetting(titleKey)) ?? '').trim().isNotEmpty ||
+      ((await db.getSetting(subtitleKey)) ?? '').trim().isNotEmpty;
+}

@@ -71,4 +71,72 @@ void main() {
     await tester.pump(const Duration(milliseconds: 10));
     await db.close();
   });
+
+  Future<void> pumpSheet(
+      WidgetTester tester, AppDatabase db, String role) async {
+    await tester.binding.setSurfaceSize(const Size(360, 1000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        kasirStickerProvider.overrideWith((ref, slot) async => null),
+        deviceProvider.overrideWith((ref) => DeviceNotifier()
+          ..state = DeviceIdentity(
+            storeUuid: 'u',
+            storeKey: 'k',
+            deviceName: 'X',
+            deviceCode: 'K1',
+            deviceRole: role,
+          )),
+      ],
+      child: MaterialApp(
+        theme: AppTheme.light(),
+        home: const Scaffold(
+            body: SingleChildScrollView(child: KasirStickerSheet())),
+      ),
+    ));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets(
+      'teks landing: OWNER dapat mengubah & menyimpan; kosong = '
+      'bawaan', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    await pumpSheet(tester, db, 'owner');
+    expect(find.byKey(const Key('landing-text-title')), findsOneWidget);
+
+    await tester.enterText(
+        find.byKey(const Key('landing-text-title')), 'Selamat Datang');
+    await tester.enterText(
+        find.byKey(const Key('landing-text-subtitle')), 'Silakan scan');
+    await tester.tap(find.byKey(const Key('landing-text-save')));
+    await tester.pumpAndSettle();
+    expect(await db.getSetting('kasir_landing_title'), 'Selamat Datang');
+    expect(await db.getSetting('kasir_landing_subtitle'), 'Silakan scan');
+
+    await tester.tap(find.byKey(const Key('landing-text-reset')));
+    await tester.pumpAndSettle();
+    expect((await db.getSetting('kasir_landing_title')) ?? '', isEmpty);
+    expect((await KasirLandingText.load(db)).title,
+        KasirLandingText.defaults.title);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+    await db.close();
+  });
+
+  testWidgets('teks landing: kasir/asisten TIDAK melihat editor (owner only)',
+      (tester) async {
+    for (final role in ['kasir', 'asisten']) {
+      final db = AppDatabase(NativeDatabase.memory());
+      await pumpSheet(tester, db, role);
+      expect(find.byKey(const Key('landing-text-title')), findsNothing,
+          reason: role);
+      expect(find.text('Teks landing hanya dapat diubah oleh owner.'),
+          findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(milliseconds: 10));
+      await db.close();
+    }
+  });
 }

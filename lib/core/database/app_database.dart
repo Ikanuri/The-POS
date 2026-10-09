@@ -395,6 +395,12 @@ class AppDatabase extends _$AppDatabase {
     'katalog_sticker_notfound',
     'katalog_sticker_closed',
     'katalog_sticker_sent',
+    // Stiker & teks landing Kasir (gaya Baru) - ditetapkan owner, tampil di
+    // semua perangkat. Lihat `KasirStickerService` / `KasirLandingText`.
+    'kasir_sticker_landing',
+    'kasir_sticker_notfound',
+    'kasir_landing_title',
+    'kasir_landing_subtitle',
     // Kuota antrian pre-order per produk — ditetapkan owner, dibaca kasir
     // saat memutuskan siapa yang diprioritaskan di dashboard Laci Meja.
     // BEDA dari `saved_catalogs` (scratchpad pribadi per device, sengaja

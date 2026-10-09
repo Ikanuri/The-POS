@@ -502,15 +502,18 @@ class PengaturanScreen extends ConsumerWidget {
                         onChanged: (v) =>
                             ref.read(kasirLandingProvider.notifier).set(v),
                       ),
-                      ListTile(
-                        key: const Key('setting-kasir-sticker'),
-                        leading: const Icon(Icons.emoji_emotions_outlined),
-                        title: const Text('Stiker Animasi Kasir'),
-                        subtitle: const Text(
-                            'Landing & "Produk tidak ditemukan" (.tgs)'),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () => KasirStickerSheet.show(context),
-                      ),
+                      // Stiker & teks landing ikut tersinkron ke perangkat
+                      // lain -> hanya owner yang boleh mengubahnya.
+                      if (ref.watch(deviceProvider).isOwner)
+                        ListTile(
+                          key: const Key('setting-kasir-sticker'),
+                          leading: const Icon(Icons.emoji_emotions_outlined),
+                          title: const Text('Stiker & Teks Landing Kasir'),
+                          subtitle: const Text(
+                              'Stiker .tgs + teks di bawahnya (tersinkron)'),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () => KasirStickerSheet.show(context),
+                        ),
                     ],
                   ),
                 ),

@@ -232,22 +232,52 @@ void main() {
 
   group('tombol pojok', () {
     testWidgets(
-        'landing = rail ikon (tanpa header Klasik, tanpa tombol scan '
-        'di rail); mengetik = lingkaran tunggal yang mengembang saat diketuk',
+        'landing = deretan tombol berwarna + keterangan kecil di '
+        'bawahnya; mengetik = lingkaran tunggal yang mengembang saat diketuk',
         (tester) async {
       final db = AppDatabase(NativeDatabase.memory());
       await _addProduct(db, 'Gula Pasir');
       await _pumpKasir(tester, db, prefs: modern);
 
       expect(find.byKey(const Key('fab-rail')), findsOneWidget);
-      for (final k in ['history', 'held', 'paste', 'sync', 'grid', 'theme']) {
+      for (final k in ['history', 'held', 'paste', 'sync']) {
         expect(find.byKey(Key('fab-$k')), findsOneWidget, reason: k);
       }
+      // Grid/list & saklar tema pindah ke header kanan atas.
+      expect(find.byKey(const Key('fab-grid')), findsNothing);
+      expect(find.byKey(const Key('fab-theme')), findsNothing);
+      expect(find.byKey(const Key('hdr-grid')), findsOneWidget);
+      expect(find.byKey(const Key('hdr-theme')), findsOneWidget);
       expect(find.byKey(const Key('fab-main')), findsNothing);
-      // Scan hanya di kolom cari.
       expect(find.byKey(const Key('modern-scan')), findsOneWidget);
-      // Header Klasik tidak ada (label tombol Klasik).
-      expect(find.text('Antrian'), findsNothing);
+
+      // Keterangan kecil DI BAWAH lingkaran, dan lingkaran berwarna aksen.
+      for (final k in ['history', 'held', 'paste', 'sync']) {
+        final item = find.byKey(Key('fab-$k'));
+        final label = find.descendant(of: item, matching: find.byType(Text));
+        final circle =
+            find.descendant(of: item, matching: find.byType(Material));
+        expect(tester.getCenter(label.first).dy,
+            greaterThan(tester.getCenter(circle.first).dy),
+            reason: 'label $k di bawah tombol');
+        expect(tester.widget<Text>(label.first).style!.fontSize!, lessThan(11),
+            reason: 'keterangan kecil');
+      }
+      Color bgOf(String k) => tester
+          .widget<Material>(find
+              .descendant(
+                  of: find.byKey(Key('fab-$k')),
+                  matching: find.byType(Material))
+              .first)
+          .color!;
+      final colors = {
+        for (final k in ['history', 'held', 'paste', 'sync']) k: bgOf(k)
+      };
+      expect(colors.values.toSet().length, 4,
+          reason: 'tiap fungsi punya warna aksen sendiri');
+      expect(colors['history'], AppTheme.riwayatBg(false));
+      expect(colors['held'], AppTheme.antrianBg(false));
+      expect(colors['paste'], AppTheme.tempelBg(false));
 
       await tester.enterText(find.byKey(const Key('modern-search')), 'gula');
       await tester.pumpAndSettle();
@@ -259,13 +289,12 @@ void main() {
       await tester.tap(find.byKey(const Key('fab-main')));
       await tester.pumpAndSettle();
       double y(String t) => tester.getCenter(find.text(t)).dy;
-      expect(y('Riwayat Transaksi'), greaterThan(y('Antrian Pesanan')));
-      expect(y('Antrian Pesanan'), greaterThan(y('Tempel Pesanan')));
-      expect(y('Tempel Pesanan'), greaterThan(y('Sync LAN')),
+      expect(y('Riwayat'), greaterThan(y('Antrian')));
+      expect(y('Antrian'), greaterThan(y('Tempel')));
+      expect(y('Tempel'), greaterThan(y('Sync LAN')),
           reason: 'urutan dari bawah: Riwayat, Antrian, Tempel, Sync');
       expect(find.byKey(const Key('fab-scrim')), findsOneWidget);
 
-      // Ketuk latar menutup lagi.
       await tester.tapAt(const Offset(200, 200));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('fab-history')), findsNothing);
@@ -325,12 +354,12 @@ void main() {
       final container =
           ProviderScope.containerOf(tester.element(find.byType(KasirScreen)));
 
-      await tester.tap(find.byKey(const Key('fab-theme')));
+      await tester.tap(find.byKey(const Key('hdr-theme')));
       await tester.pump();
       expect(container.read(themeModeProvider), ThemeMode.dark);
 
       final before = container.read(kasirGridProvider);
-      await tester.tap(find.byKey(const Key('fab-grid')));
+      await tester.tap(find.byKey(const Key('hdr-grid')));
       await tester.pump();
       expect(container.read(kasirGridProvider), !before);
 
@@ -540,6 +569,216 @@ void main() {
       expect(chip.selectedColor, AppTheme.accent);
       expect(chip.shape, isA<StadiumBorder>());
       expect(chip.showCheckmark, isFalse);
+      await _drain(tester);
+      await db.close();
+    });
+  });
+
+  group('penyesuaian desain (9 Okt)', () {
+    testWidgets(
+        'header: ikon + nama aplikasi di kiri, grid/list & saklar '
+        'listrik di kanan atas; kolom cari TANPA border kedua; aksen fokus '
+        'memudar', (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      await _addProduct(db, 'Gula Pasir');
+      await _pumpKasir(tester, db, prefs: modern);
+
+      expect(find.text('The POS'), findsOneWidget);
+      expect(find.byIcon(Icons.shopping_basket_rounded), findsOneWidget);
+      const w = 430.0;
+      expect(tester.getCenter(find.byKey(const Key('hdr-theme'))).dx,
+          greaterThan(w * 0.8));
+      expect(tester.getCenter(find.byKey(const Key('hdr-grid'))).dx,
+          greaterThan(w * 0.6));
+      // Saklar = pelat dengan tuas matahari/bulan, bukan Switch/toggle.
+      expect(find.byType(Switch), findsNothing);
+      expect(find.byIcon(Icons.wb_sunny_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.nightlight_round), findsOneWidget);
+
+      // Tidak ada lingkaran kedua: semua border TextField dimatikan.
+      final dec = tester
+          .widget<TextField>(find.byKey(const Key('modern-search')))
+          .decoration!;
+      for (final b in [
+        dec.border,
+        dec.enabledBorder,
+        dec.focusedBorder,
+        dec.errorBorder,
+        dec.disabledBorder,
+        dec.focusedErrorBorder,
+      ]) {
+        expect(b, InputBorder.none);
+      }
+      BoxDecoration pill() => tester
+          .widget<AnimatedContainer>(
+              find.byKey(const Key('modern-search-pill')))
+          .decoration! as BoxDecoration;
+      final idle = (pill().border! as Border).top;
+      await tester.tap(find.byKey(const Key('modern-search')));
+      await tester.pumpAndSettle();
+      final focus = (pill().border! as Border).top;
+      expect(focus.color.alpha, lessThan(255),
+          reason: 'aksen fokus memudar (tidak tegas)');
+      expect(focus.color.red, AppTheme.accent.red);
+      expect(focus.color, isNot(idle.color));
+      await _drain(tester);
+      await db.close();
+    });
+
+    testWidgets(
+        'landing: kolom cari dipusatkan vertikal; mengetik -> naik '
+        'ke atas', (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      await _addProduct(db, 'Gula Pasir');
+      await _pumpKasir(tester, db, prefs: modern, size: const Size(430, 900));
+      double cy() =>
+          tester.getCenter(find.byKey(const Key('modern-search-pill'))).dy;
+      expect(cy(), inInclusiveRange(900 * 0.30, 900 * 0.58),
+          reason: 'landing: pil di sekitar tengah layar');
+      await tester.enterText(find.byKey(const Key('modern-search')), 'gula');
+      await tester.pumpAndSettle();
+      expect(cy(), lessThan(900 * 0.20), reason: 'mengetik: pil di atas');
+      await _drain(tester);
+      await db.close();
+    });
+
+    testWidgets('chip kategori landing: SATU baris, bisa digeser mendatar',
+        (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      await _addProduct(db, 'Gula Pasir');
+      for (var i = 0; i < 9; i++) {
+        await db.into(db.productGroups).insert(ProductGroupsCompanion.insert(
+            id: Value(800 + i), name: Value('Kategori Panjang $i')));
+      }
+      await _pumpKasir(tester, db, prefs: modern, size: const Size(360, 800));
+      final scroll = tester.widget<SingleChildScrollView>(
+          find.byKey(const Key('landing-chips')));
+      expect(scroll.scrollDirection, Axis.horizontal);
+      final ys = {
+        for (var i = 0; i < 3; i++)
+          tester.getCenter(find.byKey(Key('landing-cat-${800 + i}'))).dy
+      };
+      expect(ys.length, 1, reason: 'semua chip sejajar di satu baris');
+      expect(tester.getCenter(find.byKey(const Key('landing-cat-808'))).dx,
+          greaterThan(360),
+          reason: 'chip ujung di luar layar (harus digeser)');
+      await tester.drag(
+          find.byKey(const Key('landing-chips')), const Offset(-3000, 0));
+      await tester.pumpAndSettle();
+      expect(tester.getCenter(find.byKey(const Key('landing-cat-808'))).dx,
+          lessThan(360));
+      await _drain(tester);
+      await db.close();
+    });
+
+    testWidgets(
+        'blok seleksi-semua pada kolom cari membulat (digambar '
+        'sendiri), bukan seleksi lancip bawaan', (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      await _addProduct(db, 'Gula Pasir');
+      await _pumpKasir(tester, db, prefs: modern);
+      await tester.enterText(find.byKey(const Key('modern-search')), 'gula');
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('modern-search-selection')), findsNothing);
+
+      final ctrl = tester
+          .widget<TextField>(find.byKey(const Key('modern-search')))
+          .controller!;
+      ctrl.selection = const TextSelection(baseOffset: 0, extentOffset: 4);
+      await tester.pump();
+      final box = tester
+          .widget<Container>(find.byKey(const Key('modern-search-selection')));
+      final r =
+          (box.decoration! as BoxDecoration).borderRadius! as BorderRadius;
+      expect(r.topLeft.x, greaterThanOrEqualTo(8));
+      await _drain(tester);
+      await db.close();
+    });
+
+    testWidgets(
+        'teks sugesti berganti mulus: tidak bergeser horizontal '
+        'selama transisi', (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      final gula = await _addProduct(db, 'Gula Pasir');
+      final beras = await _addProduct(db, 'Beras Rojolele');
+      for (final (p, n) in [(gula, 3), (beras, 2)]) {
+        for (var i = 0; i < n; i++) {
+          final tx = 'tx${_seq++}';
+          await db.into(db.transactions).insert(TransactionsCompanion.insert(
+                id: tx,
+                localId: 'K-$tx',
+                status: 'lunas',
+                total: 1000,
+                paid: 1000,
+                changeAmount: 0,
+                paymentMethod: 'tunai',
+                customerId: const Value('c9'),
+                createdAt: Value(DateTime.now()),
+              ));
+          await db.into(db.transactionItems).insert(
+              TransactionItemsCompanion.insert(
+                  id: '$tx-0',
+                  transactionId: tx,
+                  productId: p,
+                  productUnitId: '$p-u',
+                  qty: 1,
+                  priceAtSale: 1000,
+                  originalPrice: 1000,
+                  subtotal: 1000));
+        }
+      }
+      await _pumpKasir(tester, db, prefs: modern);
+      ProviderScope.containerOf(tester.element(find.byType(KasirScreen)))
+          .read(cartMetaProvider(kMainCartId).notifier)
+          .setCustomer('c9', 'Pak Budi');
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 500));
+
+      final rich = find.textContaining('Cari ', findRichText: true);
+      expect(rich, findsOneWidget);
+      final x0 = tester.getTopLeft(rich).dx;
+
+      // Lewati ke tengah transisi (timer 3,4 dtk + ~300 ms).
+      await tester.pump(const Duration(milliseconds: 3200));
+      await tester.pump(const Duration(milliseconds: 250));
+      final during = find.textContaining('Cari ', findRichText: true);
+      expect(during, findsNWidgets(2), reason: 'lama & baru tampil bersama');
+      for (final e in during.evaluate()) {
+        expect(tester.getTopLeft(find.byWidget(e.widget)).dx, closeTo(x0, 0.5),
+            reason: 'tidak ada geseran horizontal (hanya vertikal)');
+      }
+      await tester.pump(const Duration(milliseconds: 800));
+      expect(find.textContaining('Cari ', findRichText: true), findsOneWidget);
+      await _drain(tester);
+      await db.close();
+    });
+
+    testWidgets(
+        'teks di bawah stiker: bawaan, kustom dari setting (hasil '
+        'sync), dan kunci ikut tersinkron', (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      await _addProduct(db, 'Gula Pasir');
+      await _pumpKasir(tester, db, prefs: modern);
+      expect(find.text('Mau jual apa hari ini?'), findsOneWidget);
+      await _drain(tester);
+
+      await db.setSetting('kasir_landing_title', 'Selamat datang di Toko Maju');
+      await db.setSetting('kasir_landing_subtitle', 'Silakan scan barang Anda');
+      await _pumpKasir(tester, db, prefs: modern);
+      expect(find.text('Selamat datang di Toko Maju'), findsOneWidget);
+      expect(find.text('Silakan scan barang Anda'), findsOneWidget);
+      expect(find.text('Mau jual apa hari ini?'), findsNothing);
+
+      for (final k in [
+        'kasir_landing_title',
+        'kasir_landing_subtitle',
+        'kasir_sticker_landing',
+        'kasir_sticker_notfound',
+      ]) {
+        expect(AppDatabase.syncableSettingKeys.contains(k), isTrue,
+            reason: '$k harus ikut sync');
+      }
       await _drain(tester);
       await db.close();
     });

@@ -629,6 +629,13 @@ final kasirStickerProvider = FutureProvider.autoDispose
     .family<String?, KasirStickerSlot>((ref, slot) =>
         KasirStickerService.loadJson(ref.watch(databaseProvider), slot));
 
+/// Teks di bawah stiker landing (judul + subjudul) - bawaan atau kustom
+/// owner (tersinkron antar perangkat). autoDispose: dibaca ulang tiap landing
+/// tampil, jadi perubahan hasil sync / Pengaturan langsung berlaku.
+final kasirLandingTextProvider =
+    FutureProvider.autoDispose<KasirLandingText>(
+        (ref) => KasirLandingText.load(ref.watch(databaseProvider)));
+
 /// Produk INDUK terlaris 30 hari terakhir (skor = jumlah nota berbeda) —
 /// sumber yang sama dengan saran terlaris katalog HTML. Dipetakan ke daftar
 /// produk kasir (urutan peringkat dijaga). autoDispose: dihitung ulang tiap
