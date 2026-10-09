@@ -1,3 +1,4 @@
+import '../../core/widgets/app_empty_state.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/services/lan_sync_service.dart';
@@ -246,7 +247,7 @@ class _LaciMejaProposalReviewScreenState
                     events.isEmpty)
                   const Padding(
                     padding: EdgeInsets.all(24),
-                    child: Center(child: Text('Tidak ada usulan')),
+                    child: AppEmptyState('Tidak ada usulan'),
                   ),
               ],
             ),

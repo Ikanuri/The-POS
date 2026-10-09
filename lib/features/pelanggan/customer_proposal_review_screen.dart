@@ -1,3 +1,4 @@
+import '../../core/widgets/app_empty_state.dart';
 import '../../core/theme/app_overlays.dart';
 import 'package:flutter/material.dart';
 
@@ -61,7 +62,7 @@ class _CustomerProposalReviewScreenState
             child: rows.isEmpty
                 ? const Padding(
                     padding: EdgeInsets.all(24),
-                    child: Center(child: Text('Tidak ada usulan')),
+                    child: AppEmptyState('Tidak ada usulan'),
                   )
                 : ListView(
                     padding: const EdgeInsets.all(12),

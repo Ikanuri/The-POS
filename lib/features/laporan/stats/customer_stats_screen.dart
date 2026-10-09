@@ -1,3 +1,4 @@
+import '../../../core/widgets/app_empty_state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -67,7 +68,6 @@ class _CustomerStatsScreenState extends ConsumerState<CustomerStatsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.customerName,
@@ -90,10 +90,7 @@ class _CustomerStatsScreenState extends ConsumerState<CustomerStatsScreen> {
                 final d = snap.data!;
                 final s = d.summary;
                 if (s.txCount == 0) {
-                  return Center(
-                    child: Text('Belum ada belanja di rentang ini',
-                        style: TextStyle(color: scheme.onSurfaceVariant)),
-                  );
+                  return const AppEmptyState('Belum ada belanja di rentang ini');
                 }
                 return ListView(
                   padding: const EdgeInsets.only(bottom: 24),

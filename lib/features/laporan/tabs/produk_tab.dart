@@ -1,3 +1,4 @@
+import '../../../core/widgets/app_empty_state.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -29,10 +30,7 @@ class ProdukTab extends ConsumerWidget {
     return dataAsync.when(
       data: (stats) {
         if (stats.isEmpty) {
-          return Center(
-            child: Text('Tidak ada data untuk periode ini',
-                style: TextStyle(color: scheme.onSurfaceVariant)),
-          );
+          return const AppEmptyState('Tidak ada data untuk periode ini');
         }
         return ListView(
           padding: const EdgeInsets.symmetric(vertical: 8),

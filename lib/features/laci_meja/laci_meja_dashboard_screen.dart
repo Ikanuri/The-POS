@@ -1,3 +1,4 @@
+import '../../core/widgets/app_empty_state.dart';
 import 'preorder_fulfill_confirm.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -1126,9 +1127,7 @@ class LaciMejaDashboardScreen extends ConsumerWidget {
         Map<String, int> queueNumbers,
       }) stats) {
     if (items.isEmpty) {
-      return Center(
-          child: Text('Tidak ada pre-order aktif.',
-              style: TextStyle(color: scheme.onSurfaceVariant)));
+      return const AppEmptyState('Tidak ada pre-order aktif.');
     }
     final labels = ref.watch(preorderProductUnitLabelsProvider).valueOrNull ?? {};
     final query = ref.watch(_laciMejaSearchProvider).trim().toLowerCase();

@@ -217,6 +217,7 @@ class AppTheme {
         displayColor: ink,
       ),
       cardTheme: CardTheme(
+        clipBehavior: Clip.antiAlias,
         elevation: 2,
         shadowColor: isDark ? const Color(0x66000000) : const Color(0x3D5A3C1E),
         color: card,
@@ -308,7 +309,13 @@ class AppTheme {
         ),
         iconTheme: IconThemeData(color: isDark ? _dInk2 : _lInk2),
       ),
-      dividerTheme: DividerThemeData(color: line, thickness: 0.5),
+      dividerTheme: DividerThemeData(
+        color: line,
+        thickness: 0.75,
+        space: 1,
+        indent: 16,
+        endIndent: 16,
+      ),
       chipTheme: ChipThemeData(
         shape: const StadiumBorder(),
         side: BorderSide(color: line, width: 0.75),

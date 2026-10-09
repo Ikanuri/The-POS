@@ -1,3 +1,4 @@
+import '../../core/widgets/app_empty_state.dart';
 import '../../core/theme/app_overlays.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -352,7 +353,7 @@ class _ProductProposalReviewScreenState
                       if (_rows.isEmpty)
                         const Padding(
                           padding: EdgeInsets.all(24),
-                          child: Center(child: Text('Tidak ada usulan')),
+                          child: AppEmptyState('Tidak ada usulan'),
                         ),
                     ],
                   ),

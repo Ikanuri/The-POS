@@ -1,3 +1,4 @@
+import '../../core/widgets/app_empty_state.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -206,10 +207,7 @@ class _CategoryAssignProductsScreenState
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : _results.isEmpty
-                    ? Center(
-                        child: Text('Tidak ada produk ditemukan',
-                            style: TextStyle(color: scheme.onSurfaceVariant)),
-                      )
+                    ? const AppEmptyState('Tidak ada produk ditemukan')
                     : ListView.builder(
                         itemCount: _results.length,
                         itemBuilder: (_, i) {

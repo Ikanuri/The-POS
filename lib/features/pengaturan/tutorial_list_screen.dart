@@ -1,3 +1,4 @@
+import '../../core/widgets/app_empty_state.dart';
 import 'package:flutter/material.dart';
 
 /// Satu bab panduan — judul + isi singkat + (opsional) satu atau lebih
@@ -273,7 +274,7 @@ class _TutorialListScreenState extends State<TutorialListScreen> {
           ),
           Expanded(
             child: filtered.isEmpty
-                ? const Center(child: Text('Tidak ada panduan yang cocok'))
+                ? const AppEmptyState('Tidak ada panduan yang cocok')
                 : ListView.separated(
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
                     itemCount: filtered.length,

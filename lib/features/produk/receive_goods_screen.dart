@@ -1,3 +1,4 @@
+import '../../core/widgets/app_empty_state.dart';
 import 'package:drift/drift.dart' show Variable;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -1143,7 +1144,7 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
             const Divider(height: 1),
             Expanded(
               child: _results.isEmpty
-                  ? const Center(child: Text('Tidak ada produk cocok'))
+                  ? const AppEmptyState('Tidak ada produk cocok')
                   : ListView.builder(
                       itemCount: _results.length,
                       itemBuilder: (context, i) => ListTile(

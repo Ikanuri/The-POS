@@ -1,3 +1,4 @@
+import '../../../core/widgets/app_empty_state.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -88,10 +89,7 @@ class StokTab extends ConsumerWidget {
     return dataAsync.when(
       data: (report) {
         if (report.perCategory.isEmpty) {
-          return Center(
-            child: Text('Belum ada produk berstok',
-                style: TextStyle(color: scheme.onSurfaceVariant)),
-          );
+          return const AppEmptyState('Belum ada produk berstok');
         }
         return ListView(
           padding: const EdgeInsets.all(16),

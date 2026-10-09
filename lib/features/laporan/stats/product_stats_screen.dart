@@ -1,3 +1,4 @@
+import '../../../core/widgets/app_empty_state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -90,10 +91,7 @@ class _ProductStatsScreenState extends ConsumerState<ProductStatsScreen> {
                 // akuntansi presisi per-bulan-kalender.
                 final avgMonthly = avgDaily * 30;
                 if (s.txCount == 0) {
-                  return Center(
-                    child: Text('Belum ada penjualan di rentang ini',
-                        style: TextStyle(color: scheme.onSurfaceVariant)),
-                  );
+                  return const AppEmptyState('Belum ada penjualan di rentang ini');
                 }
                 return ListView(
                   padding: const EdgeInsets.only(bottom: 24),

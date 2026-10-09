@@ -1,3 +1,4 @@
+import '../../core/widgets/app_empty_state.dart';
 import '../../core/theme/app_overlays.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -550,7 +551,7 @@ class StockOpnameHistoryScreen extends ConsumerWidget {
           }
           final sessions = snap.data!;
           if (sessions.isEmpty) {
-            return const Center(child: Text('Belum ada sesi opname'));
+            return const AppEmptyState('Belum ada sesi opname');
           }
           return ListView.builder(
             padding: const EdgeInsets.all(12),

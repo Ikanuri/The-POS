@@ -1,3 +1,4 @@
+import '../../core/widgets/app_empty_state.dart';
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -423,7 +424,7 @@ class _PricePreviewScreenState extends ConsumerState<PricePreviewScreen>
     final unchanged = _matched.where((m) => !m.hasChanges).toList();
 
     if (_matched.isEmpty) {
-      return const Center(child: Text('Tidak ada produk yang cocok'));
+      return const AppEmptyState('Tidak ada produk yang cocok');
     }
 
     return ListView(
@@ -532,7 +533,7 @@ class _PricePreviewScreenState extends ConsumerState<PricePreviewScreen>
 
   Widget _buildAmbiguousTab(ColorScheme scheme) {
     if (_ambiguous.isEmpty) {
-      return const Center(child: Text('Tidak ada yang perlu ditinjau'));
+      return const AppEmptyState('Tidak ada yang perlu ditinjau');
     }
 
     // Kandidat tunggal (nama+satuan cocok persis, cuma 1 kemungkinan) —
