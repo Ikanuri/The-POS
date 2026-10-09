@@ -4,6 +4,8 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 
 import '../../core/services/printer_service.dart';
+import '../../core/theme/app_theme.dart';
+import 'pengaturan_screen.dart' show SettingsIconBubble;
 import '../../core/widgets/inline_banner.dart';
 import '../../core/theme/app_overlays.dart';
 
@@ -249,18 +251,24 @@ class _PrinterScreenState extends State<PrinterScreen>
             margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: scheme.primaryContainer,
-              borderRadius: BorderRadius.circular(8),
+              color: AppTheme.changeBg(
+                  Theme.of(context).brightness == Brightness.dark),
+              borderRadius: BorderRadius.circular(14),
             ),
             child: Row(
               children: [
-                Icon(Icons.print, size: 16, color: scheme.onPrimaryContainer),
+                Icon(Icons.print,
+                    size: 16,
+                    color: AppTheme.changeFg(
+                        Theme.of(context).brightness == Brightness.dark)),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     'Printer aktif: $_savedMac',
                     style: TextStyle(
-                        fontSize: 12, color: scheme.onPrimaryContainer),
+                        fontSize: 12,
+                        color: AppTheme.changeFg(
+                            Theme.of(context).brightness == Brightness.dark)),
                   ),
                 ),
               ],
@@ -343,8 +351,10 @@ class _PrinterScreenState extends State<PrinterScreen>
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
           tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-          leading: Icon(Icons.receipt_long_outlined,
-              size: 20, color: scheme.onSurfaceVariant),
+          leading: SettingsIconBubble(
+              Icons.receipt_long_outlined,
+              AppTheme.tealFg(Theme.of(context).brightness == Brightness.dark),
+              AppTheme.tealBg(Theme.of(context).brightness == Brightness.dark)),
           title: const Text('Format Nota',
               style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
           subtitle: Text(subtitle,
@@ -420,8 +430,10 @@ class _PrinterScreenState extends State<PrinterScreen>
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
           tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-          leading: Icon(Icons.bluetooth_connected_outlined,
-              size: 20, color: scheme.onSurfaceVariant),
+          leading: SettingsIconBubble(
+              Icons.bluetooth_connected_outlined,
+              AppTheme.tealFg(Theme.of(context).brightness == Brightness.dark),
+              AppTheme.tealBg(Theme.of(context).brightness == Brightness.dark)),
           title: const Text('Koneksi Printer',
               style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
           subtitle: Text(

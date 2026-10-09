@@ -186,18 +186,18 @@ class _PairingScreenState extends ConsumerState<PairingScreen> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: scheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(8),
+                  color: scheme.primary.withOpacity(0.10),
+                  borderRadius: BorderRadius.circular(14),
                 ),
                 child: Row(
                   children: [
                     Icon(Icons.store_outlined,
-                        color: scheme.onPrimaryContainer),
+                        color: scheme.primary),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         'Bergabung ke "${payload.storeName}" sebagai $roleLabel.',
-                        style: TextStyle(color: scheme.onPrimaryContainer),
+                        style: TextStyle(color: scheme.onSurface),
                       ),
                     ),
                   ],

@@ -1,3 +1,4 @@
+import '../../core/widgets/app_form_section.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -58,6 +59,7 @@ class _SetupTokoScreenState extends ConsumerState<SetupTokoScreen> {
                     ),
               ),
               const SizedBox(height: 24),
+              AppFormSection(title: 'Identitas Toko & Device', gap: 16, children: [
               TextFormField(
                 controller: _storeName,
                 decoration: const InputDecoration(
@@ -68,7 +70,6 @@ class _SetupTokoScreenState extends ConsumerState<SetupTokoScreen> {
                 validator: (v) =>
                     (v == null || v.trim().isEmpty) ? 'Nama toko wajib diisi' : null,
               ),
-              const SizedBox(height: 16),
               TextFormField(
                 controller: _deviceName,
                 decoration: const InputDecoration(labelText: 'Nama Device'),
@@ -76,7 +77,6 @@ class _SetupTokoScreenState extends ConsumerState<SetupTokoScreen> {
                 validator: (v) =>
                     (v == null || v.trim().isEmpty) ? 'Nama device wajib diisi' : null,
               ),
-              const SizedBox(height: 16),
               TextFormField(
                 controller: _deviceCode,
                 decoration: const InputDecoration(
@@ -89,6 +89,7 @@ class _SetupTokoScreenState extends ConsumerState<SetupTokoScreen> {
                 validator: (v) =>
                     (v == null || v.trim().isEmpty) ? 'Kode device wajib diisi' : null,
               ),
+              ]),
               const SizedBox(height: 24),
               FilledButton(
                 onPressed: _saving ? null : _submit,

@@ -1,3 +1,4 @@
+import '../../core/widgets/app_empty_state.dart';
 import '../../core/theme/app_overlays.dart';
 import 'package:barcode_widget/barcode_widget.dart';
 import 'package:drift/drift.dart' hide Column;
@@ -108,12 +109,9 @@ class _BarcodeScreenState extends ConsumerState<BarcodeScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _entries.isEmpty
-              ? Center(
-                  child: Text(
-                    'Tidak ada satuan untuk produk ini.',
-                    style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant),
-                  ),
+              ? const AppEmptyState(
+                  'Tidak ada satuan untuk produk ini',
+                  icon: Icons.qr_code_2_outlined,
                 )
               : ListView(
                   padding: const EdgeInsets.all(16),

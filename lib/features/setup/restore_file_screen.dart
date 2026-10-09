@@ -214,13 +214,13 @@ class _RestoreFileScreenState extends ConsumerState<RestoreFileScreen> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: scheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(8),
+                  color: scheme.primary.withOpacity(0.10),
+                  borderRadius: BorderRadius.circular(14),
                 ),
                 child: Row(
                   children: [
                     Icon(Icons.storefront_outlined,
-                        color: scheme.onPrimaryContainer),
+                        color: scheme.primary),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -229,7 +229,7 @@ class _RestoreFileScreenState extends ConsumerState<RestoreFileScreen> {
                                 'menjadi "${_payload!['storeName']}" (Owner).'
                             : 'File backup biasa terdeteksi — device ini akan '
                                 'jadi toko BARU berisi data dari file ini.',
-                        style: TextStyle(color: scheme.onPrimaryContainer),
+                        style: TextStyle(color: scheme.onSurface),
                       ),
                     ),
                   ],

@@ -463,19 +463,11 @@ class _CekStokScreenState extends ConsumerState<CekStokScreen> {
                     allRows.where((r) => !r.markedOutOfStock).toList(),
                 };
                 if (rows.isEmpty) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Text(
-                        statusFilter == _StockFilter.checked
-                            ? 'Belum ada produk yang dicentang di sini.'
-                            : 'Semua produk di sini sudah dicentang.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                            color:
-                                Theme.of(context).colorScheme.onSurfaceVariant),
-                      ),
-                    ),
+                  return AppEmptyState(
+                    statusFilter == _StockFilter.checked
+                        ? 'Belum ada produk yang dicentang di sini'
+                        : 'Semua produk di sini sudah dicentang',
+                    icon: Icons.fact_check_outlined,
                   );
                 }
                 return ListView.builder(

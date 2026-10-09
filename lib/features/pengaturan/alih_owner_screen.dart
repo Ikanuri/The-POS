@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/device_provider.dart';
 import '../../core/services/db_export_service.dart';
+import '../../core/theme/app_theme.dart';
+import 'pengaturan_screen.dart' show SettingsIconBubble;
 import '../../core/utils/export_destination.dart';
 import '../../core/widgets/inline_banner.dart';
 import '../../core/theme/app_overlays.dart';
@@ -69,8 +71,7 @@ class _AlihOwnerScreenState extends ConsumerState<AlihOwnerScreen>
             FilledButton(
               onPressed: () {
                 if (pwCtrl.text.trim().length < 8) {
-                  setDialogState(
-                      () => pwError = 'Password minimal 8 karakter');
+                  setDialogState(() => pwError = 'Password minimal 8 karakter');
                   return;
                 }
                 Navigator.pop(ctx, true);
@@ -141,12 +142,14 @@ class _AlihOwnerScreenState extends ConsumerState<AlihOwnerScreen>
               controller: pwCtrl,
               autofocus: true,
               obscureText: true,
-              decoration: const InputDecoration(labelText: 'Password', isDense: true),
+              decoration:
+                  const InputDecoration(labelText: 'Password', isDense: true),
             ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
           FilledButton(
             onPressed: () {
               final v = pwCtrl.text.trim();
@@ -249,9 +252,11 @@ class _AlihOwnerScreenState extends ConsumerState<AlihOwnerScreen>
               const SizedBox(height: 12),
               TextFormField(
                 controller: nameCtrl,
-                decoration: const InputDecoration(labelText: 'Nama Device', isDense: true),
-                validator: (v) =>
-                    (v == null || v.trim().isEmpty) ? 'Nama device wajib diisi' : null,
+                decoration: const InputDecoration(
+                    labelText: 'Nama Device', isDense: true),
+                validator: (v) => (v == null || v.trim().isEmpty)
+                    ? 'Nama device wajib diisi'
+                    : null,
               ),
               const SizedBox(height: 12),
               TextFormField(
@@ -263,14 +268,16 @@ class _AlihOwnerScreenState extends ConsumerState<AlihOwnerScreen>
                 ),
                 textCapitalization: TextCapitalization.characters,
                 maxLength: 4,
-                validator: (v) =>
-                    (v == null || v.trim().isEmpty) ? 'Kode device wajib diisi' : null,
+                validator: (v) => (v == null || v.trim().isEmpty)
+                    ? 'Kode device wajib diisi'
+                    : null,
               ),
             ],
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Batal')),
           FilledButton(
             onPressed: () {
               if (!formKey.currentState!.validate()) return;
@@ -319,7 +326,9 @@ class _AlihOwnerScreenState extends ConsumerState<AlihOwnerScreen>
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Batal')),
             FilledButton(
               style: FilledButton.styleFrom(
                   backgroundColor: Theme.of(ctx).colorScheme.error),
@@ -356,12 +365,19 @@ class _AlihOwnerScreenState extends ConsumerState<AlihOwnerScreen>
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Row(children: [
-                                  Icon(Icons.upload_outlined,
-                                      color: scheme.primary),
-                                  const SizedBox(width: 8),
+                                  SettingsIconBubble(
+                                      Icons.upload_outlined,
+                                      AppTheme.changeFg(
+                                          Theme.of(context).brightness ==
+                                              Brightness.dark),
+                                      AppTheme.changeBg(
+                                          Theme.of(context).brightness ==
+                                              Brightness.dark)),
+                                  const SizedBox(width: 10),
                                   Text('Buat File Alihan',
-                                      style:
-                                          Theme.of(context).textTheme.titleMedium),
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleMedium),
                                 ]),
                                 const SizedBox(height: 8),
                                 Text(
@@ -392,11 +408,19 @@ class _AlihOwnerScreenState extends ConsumerState<AlihOwnerScreen>
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(children: [
-                                Icon(Icons.download_outlined,
-                                    color: scheme.error),
-                                const SizedBox(width: 8),
+                                SettingsIconBubble(
+                                    Icons.download_outlined,
+                                    AppTheme.debtFg(
+                                        Theme.of(context).brightness ==
+                                            Brightness.dark),
+                                    AppTheme.debtBg(
+                                        Theme.of(context).brightness ==
+                                            Brightness.dark)),
+                                const SizedBox(width: 10),
                                 Text('Terima Alihan',
-                                    style: Theme.of(context).textTheme.titleMedium),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium),
                               ]),
                               const SizedBox(height: 8),
                               Text(

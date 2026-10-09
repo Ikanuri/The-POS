@@ -8,6 +8,13 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 9 Oktober 2026 (v3.14.0 — Rapikan layar Setup, Backup, Printer)
+
+- **Setup Toko Baru**: isian dikelompokkan dalam satu kartu; kartu info di layar Gabung Toko dan Pulihkan File kini bernuansa terracotta lembut.
+- **Backup & Alih Owner**: judul kartu Export/Restore dan Buat/Terima Alihan kini berikon bulat berwarna.
+- **Printer**: ikon Format Nota & Koneksi berikon bulat teal; banner printer aktif berwarna hijau lembut.
+- **Cek Stok & Barcode**: tampilan kosong lebih ramah.
+
 ## 9 Oktober 2026 (v3.13.0 — Form Produk dirapikan)
 
 - **Form Produk**: isian nama, kode, stok minimum, dan kategori kini dikelompokkan dalam satu kartu "Info Produk"; label "Dasar" pada satuan jadi pil terracotta lembut.

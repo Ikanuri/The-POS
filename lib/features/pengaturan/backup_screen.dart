@@ -2,6 +2,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'pengaturan_screen.dart' show SettingsIconBubble;
 import '../../core/providers/device_provider.dart';
 import '../../core/services/backup_reminder.dart';
 import '../../core/services/db_export_service.dart';
@@ -63,8 +64,7 @@ class _BackupScreenState extends ConsumerState<BackupScreen>
             FilledButton(
               onPressed: () {
                 if (pwCtrl.text.trim().length < 8) {
-                  setDialogState(
-                      () => pwError = 'Password minimal 8 karakter');
+                  setDialogState(() => pwError = 'Password minimal 8 karakter');
                   return;
                 }
                 Navigator.pop(ctx, true);
@@ -144,12 +144,15 @@ class _BackupScreenState extends ConsumerState<BackupScreen>
               controller: pwCtrl,
               autofocus: true,
               obscureText: true,
-              decoration: const InputDecoration(labelText: 'Password', isDense: true),
+              decoration:
+                  const InputDecoration(labelText: 'Password', isDense: true),
             ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Batal')),
           FilledButton(
             style: FilledButton.styleFrom(
               backgroundColor: Theme.of(ctx).colorScheme.error,
@@ -215,106 +218,127 @@ class _BackupScreenState extends ConsumerState<BackupScreen>
             child: _busy
                 ? const Center(child: CircularProgressIndicator())
                 : ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                _BackupStatusCard(
-                  onToggleAuto: (v) async {
-                    final db = ref.read(databaseProvider);
-                    await BackupReminder.setAutoEnabled(db, v);
-                    ref.invalidate(_backupStatusProvider);
-                  },
-                  onIntervalChanged: (d) async {
-                    final db = ref.read(databaseProvider);
-                    await BackupReminder.setIntervalDays(db, d);
-                    ref.invalidate(_backupStatusProvider);
-                  },
-                ),
-                const SizedBox(height: 12),
-                Card(
-                  child: Padding(
                     padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(children: [
-                          Icon(Icons.upload_outlined, color: scheme.primary),
-                          const SizedBox(width: 8),
-                          Text('Export Backup',
-                              style: Theme.of(context).textTheme.titleMedium),
-                        ]),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Ekspor semua data ke file terenkripsi (.berkahpos). '
-                          'File ini hanya bisa dibuka dengan password yang Anda tentukan.',
-                          style: TextStyle(
-                              fontSize: 13, color: scheme.onSurfaceVariant),
-                        ),
-                        const SizedBox(height: 12),
-                        FilledButton.icon(
-                          onPressed: _export,
-                          icon: const Icon(Icons.save_alt_outlined),
-                          label: const Text('Buat Backup'),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(children: [
-                          Icon(Icons.download_outlined, color: scheme.error),
-                          const SizedBox(width: 8),
-                          Text('Import / Restore',
-                              style: Theme.of(context).textTheme.titleMedium),
-                        ]),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Kembalikan data dari file backup .berkahpos. '
-                          'Data saat ini akan ditimpa sepenuhnya.',
-                          style: TextStyle(
-                              fontSize: 13, color: scheme.onSurfaceVariant),
-                        ),
-                        const SizedBox(height: 4),
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: scheme.errorContainer,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Row(children: [
-                            Icon(Icons.warning_amber_rounded,
-                                size: 16, color: scheme.onErrorContainer),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                'Operasi ini tidak bisa dibatalkan.',
+                    children: [
+                      _BackupStatusCard(
+                        onToggleAuto: (v) async {
+                          final db = ref.read(databaseProvider);
+                          await BackupReminder.setAutoEnabled(db, v);
+                          ref.invalidate(_backupStatusProvider);
+                        },
+                        onIntervalChanged: (d) async {
+                          final db = ref.read(databaseProvider);
+                          await BackupReminder.setIntervalDays(db, d);
+                          ref.invalidate(_backupStatusProvider);
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(children: [
+                                SettingsIconBubble(
+                                    Icons.upload_outlined,
+                                    AppTheme.changeFg(
+                                        Theme.of(context).brightness ==
+                                            Brightness.dark),
+                                    AppTheme.changeBg(
+                                        Theme.of(context).brightness ==
+                                            Brightness.dark)),
+                                const SizedBox(width: 10),
+                                Text('Export Backup',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium),
+                              ]),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Ekspor semua data ke file terenkripsi (.berkahpos). '
+                                'File ini hanya bisa dibuka dengan password yang Anda tentukan.',
                                 style: TextStyle(
-                                    fontSize: 11, color: scheme.onErrorContainer),
+                                    fontSize: 13,
+                                    color: scheme.onSurfaceVariant),
                               ),
-                            ),
-                          ]),
-                        ),
-                        const SizedBox(height: 12),
-                        OutlinedButton.icon(
-                          onPressed: _import,
-                          icon: const Icon(Icons.restore_outlined),
-                          label: const Text('Pilih File & Restore'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: scheme.error,
-                            side: BorderSide(color: scheme.error),
+                              const SizedBox(height: 12),
+                              FilledButton.icon(
+                                onPressed: _export,
+                                icon: const Icon(Icons.save_alt_outlined),
+                                label: const Text('Buat Backup'),
+                              ),
+                            ],
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(height: 12),
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(children: [
+                                SettingsIconBubble(
+                                    Icons.download_outlined,
+                                    AppTheme.debtFg(
+                                        Theme.of(context).brightness ==
+                                            Brightness.dark),
+                                    AppTheme.debtBg(
+                                        Theme.of(context).brightness ==
+                                            Brightness.dark)),
+                                const SizedBox(width: 10),
+                                Text('Import / Restore',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium),
+                              ]),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Kembalikan data dari file backup .berkahpos. '
+                                'Data saat ini akan ditimpa sepenuhnya.',
+                                style: TextStyle(
+                                    fontSize: 13,
+                                    color: scheme.onSurfaceVariant),
+                              ),
+                              const SizedBox(height: 4),
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: scheme.errorContainer,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(children: [
+                                  Icon(Icons.warning_amber_rounded,
+                                      size: 16, color: scheme.onErrorContainer),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      'Operasi ini tidak bisa dibatalkan.',
+                                      style: TextStyle(
+                                          fontSize: 11,
+                                          color: scheme.onErrorContainer),
+                                    ),
+                                  ),
+                                ]),
+                              ),
+                              const SizedBox(height: 12),
+                              OutlinedButton.icon(
+                                onPressed: _import,
+                                icon: const Icon(Icons.restore_outlined),
+                                label: const Text('Pilih File & Restore'),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: scheme.error,
+                                  side: BorderSide(color: scheme.error),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ],
-            ),
           ),
         ],
       ),
