@@ -4,6 +4,7 @@ import '../kasir/kasir_style.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import '../../core/widgets/revolver_picker.dart';
 import '../../core/theme/app_style.dart';
 import '../../core/providers/scan_frame_provider.dart';
 import 'package:flutter/services.dart';
@@ -559,6 +560,30 @@ class PengaturanScreen extends ConsumerWidget {
                         onChanged: (v) =>
                             ref.read(scanFrameTelegramProvider.notifier).set(v),
                       ),
+                      Builder(builder: (context) {
+                        final lockMs = ref.watch(scanLockMsProvider);
+                        const steps = ScanLockNotifier.steps;
+                        final idx = steps.indexOf(lockMs).clamp(0, steps.length - 1);
+                        return ListTile(
+                          key: const Key('setting-scan-lock'),
+                          leading: SettingsIconBubble(Icons.lock_outline_rounded, AppTheme.tealFg(isDark), AppTheme.tealBg(isDark)),
+                          title: const Text('Kunci Target Scanner'),
+                          subtitle: Text(lockMs == 0
+                              ? 'Eksperimental — mati: tiap frame memilih barcode terdekat tengah'
+                              : 'Terkunci ke satu barcode, barcode lain diabaikan; lepas bila hilang ${(lockMs / 1000).toStringAsFixed(1).replaceAll('.', ',')} dtk'),
+                          trailing: RevolverPicker(
+                            width: 112,
+                            count: steps.length,
+                            index: idx,
+                            labelOf: (i) => steps[i] == 0
+                                ? 'Mati'
+                                : '${(steps[i] / 1000).toStringAsFixed(1).replaceAll('.', ',')} dtk',
+                            onChanged: (i) => ref
+                                .read(scanLockMsProvider.notifier)
+                                .set(steps[i]),
+                          ),
+                        );
+                      }),
                       SwitchListTile(
                         key: const Key('setting-kasir-landing'),
                         secondary: SettingsIconBubble(Icons.home_outlined, AppTheme.tealFg(isDark), AppTheme.tealBg(isDark)),

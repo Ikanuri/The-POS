@@ -8,6 +8,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 9 Oktober 2026 (v3.16.0 — Kunci target scanner, eksperimental)
+
+- **Kunci Target Scanner** (Pengaturan, di bawah Bingkai Scanner): scanner mengunci SATU barcode yang paling dekat ke tengah dan mengabaikan barcode lain di sampingnya, sampai barcode itu menghilang beberapa saat. Lama jeda diatur dengan dial gaya revolver: geser kiri/kanan atau ketuk panah. Default MATI (perilaku lama tidak berubah). Berlaku di Kasir, form produk, dan Sync QR.
+
 ## 9 Oktober 2026 (v3.15.0 — Sisa layar Pengaturan)
 
 - **Tutup Kasir**: uang fisik, selisih, dan catatan dikelompokkan dalam kartu "Hitung Uang Laci".

@@ -6,6 +6,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../providers/scan_frame_provider.dart';
 import 'scan_follow_frame.dart';
+import 'scan_target_lock.dart';
 
 /// Pembungkus `MobileScanner` untuk SEMUA pemindai app. Bila "Bingkai
 /// pemindai ala Telegram" (eksperimental) aktif, menumpuk [ScanFollowOverlay]
@@ -82,6 +83,7 @@ class _AppScannerState extends ConsumerState<AppScanner> {
   Timer? _lockTimer;
   Timer? _releaseTimer;
   BarcodeCapture? _latest;
+  final _lock = ScanTargetLock(release: Duration.zero);
 
   @override
   void initState() {
@@ -113,15 +115,30 @@ class _AppScannerState extends ConsumerState<AppScanner> {
 
   void _handle(BarcodeCapture cap) {
     final telegram = ref.read(scanFrameTelegramProvider);
+    final lockMs = ref.read(scanLockMsProvider);
+    final size = _imageSize(cap);
+    final accept = widget.accept;
+    final candidates =
+        accept == null ? cap.barcodes : cap.barcodes.where(accept).toList();
+
+    // Kunci target (eksperimental, 0 = mati): hanya kode terkunci yang
+    // diteruskan; barcode lain di sampingnya diabaikan.
+    Barcode? locked;
+    if (lockMs > 0) {
+      _lock.release = Duration(milliseconds: lockMs);
+      locked = _lock.select(candidates, size, DateTime.now());
+      if (locked == null) return;
+      cap = BarcodeCapture(
+          barcodes: [locked], image: cap.image, raw: cap.raw, size: cap.size);
+    } else {
+      _lock.reset();
+    }
+
     if (!telegram) {
       widget.onDetect(cap);
       return;
     }
-    final size = _imageSize(cap);
-    final accept = widget.accept;
-    final b = AppScanner.pickBarcode(
-        accept == null ? cap.barcodes : cap.barcodes.where(accept).toList(),
-        size);
+    final b = locked ?? AppScanner.pickBarcode(candidates, size);
     if (b != null) _follow.report(b.corners, size);
 
     if (widget.lockDelay > Duration.zero) {
