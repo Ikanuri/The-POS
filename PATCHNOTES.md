@@ -8,6 +8,9 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 9 Oktober 2026 (v3.10.0 — Halaman Pengaturan baru)
+
+- **Pengaturan didesain ulang**: header berisi nama toko dan judul, kartu perangkat bergradien (kode, nama, peran), tiap baris pengaturan punya ikon bulat berwarna sesuai kelompoknya (Toko hijau, Sinkronisasi ungu, Manajemen Data merah, Perangkat teal), dan kartu seksi kini putih bersih.
 ## 9 Oktober 2026 (v3.9.0 — Bingkai scanner ala Telegram, eksperimental)
 
 - **Bingkai scanner yang mengikuti kode** (Pengaturan > "Bingkai Scanner ala Telegram", bawaan MATI): bingkai putih bersudut membulat muncul dari kotak tengah dengan efek pegas, lalu bergeser halus mengikuti posisi barcode/QR di kamera; latar di luar bingkai meredup lebih gelap saat terkunci. Berlaku di scan barcode Kasir, scan barcode di form produk, dan QR Sync LAN / Gabung Toko / pair device. Untuk QR sync, bingkai menempel ±1 detik sebelum layar menutup; di Kasir bingkai dilepas 0,5 detik setelah barang diproses lalu mengikuti barang berikutnya.

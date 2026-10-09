@@ -4,6 +4,7 @@ import '../kasir/kasir_style.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import '../../core/theme/app_style.dart';
 import '../../core/providers/scan_frame_provider.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -107,11 +108,6 @@ class PengaturanScreen extends ConsumerWidget {
     // kartu SEKSI diwarnai menurut domainnya — hue sama dgn Ringkasan/
     // Laporan (bukan warna baru per layar).
     // "Device Ini" SENGAJA netral (tanpa aksen) — permintaan user.
-    final tokoBg = AppTheme.changeBg(isDark); // Toko → hijau (usaha)
-    final perangkatBg = AppTheme.tealBg(isDark); // Perangkat → teal (hardware)
-    final syncBg = AppTheme.riwayatBg(isDark); // Sinkronisasi → ungu
-    final dataMgmtBg =
-        AppTheme.debtBg(isDark); // Manajemen Data → merah (berisiko tinggi)
 
     // Item 24d — label "Pegawai" KOSMETIK saja. Nilai internal deviceRole
     // TETAP 'kasir' (lihat catatan di kKasirPermissionKeys/PLAN.md) — jangan
@@ -124,7 +120,29 @@ class PengaturanScreen extends ConsumerWidget {
         };
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Pengaturan')),
+      appBar: AppBar(
+        toolbarHeight: 68,
+        titleSpacing: 18,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+                device.storeName.isNotEmpty
+                    ? device.storeName
+                    : roleLabel(device.deviceRole),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w500,
+                    color: scheme.onSurfaceVariant)),
+            Text('Pengaturan',
+                style: AppTheme.numStyle(context,
+                    size: 21, weight: FontWeight.w600)),
+          ],
+        ),
+      ),
       body: Column(
         children: [
           const SyncStatusBanner(),
@@ -133,39 +151,68 @@ class PengaturanScreen extends ConsumerWidget {
               padding: const EdgeInsets.all(16),
               children: [
                 const _SectionHeader('Device Ini'),
-                Card(
-                  child: Column(
+                Container(
+                  key: const Key('setting-device-hero'),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(AppStyle.rPanel),
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Color(0xFFD97757), Color(0xFFC96442)],
+                    ),
+                    boxShadow: AppStyle.accentShadow,
+                  ),
+                  child: Row(
                     children: [
-                      ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: scheme.primary.withOpacity(0.14),
-                          child: Text(
-                            device.deviceCode.isEmpty ? '?' : device.deviceCode,
-                            style: TextStyle(
-                              color: scheme.primary,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 13,
-                            ),
-                          ),
+                      Container(
+                        width: 52,
+                        height: 52,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.white.withOpacity(0.22),
                         ),
-                        title: Text(device.deviceName),
-                        subtitle: Text(
-                            '${roleLabel(device.deviceRole)} · ${device.storeName}'),
+                        child: Text(
+                          device.deviceCode.isEmpty ? '?' : device.deviceCode,
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15),
+                        ),
                       ),
-                      // Item 14 — sisa waktu lisensi, unit menyesuaikan (hari →
-                      // jam → menit). Tidak tampil sama sekali kalau gerbang
-                      // lisensi nonaktif (kill-switch) atau belum pernah aktivasi.
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(device.deviceName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700)),
+                            const SizedBox(height: 2),
+                            Text(
+                                '${roleLabel(device.deviceRole)} · ${device.storeName}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    color: Colors.white70, fontSize: 12.5)),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 8),
                 const _SectionHeader('Toko'),
                 Card(
-                  color: tokoBg,
                   child: Column(
                     children: [
                       ListTile(
-                        leading: const Icon(Icons.store_outlined),
+                        leading: SettingsIconBubble(Icons.store_outlined, AppTheme.changeFg(isDark), AppTheme.changeBg(isDark)),
                         title: const Text('Informasi Toko'),
                         subtitle:
                             const Text('Nama, alamat, telepon, catatan struk'),
@@ -173,7 +220,7 @@ class PengaturanScreen extends ConsumerWidget {
                         onTap: () => context.push('/pengaturan/toko'),
                       ),
                       ListTile(
-                        leading: const Icon(Icons.payments_outlined),
+                        leading: SettingsIconBubble(Icons.payments_outlined, AppTheme.changeFg(isDark), AppTheme.changeBg(isDark)),
                         title: const Text('Metode Pembayaran'),
                         subtitle: const Text('QRIS, transfer bank, e-wallet'),
                         trailing: const Icon(Icons.chevron_right),
@@ -191,7 +238,7 @@ class PengaturanScreen extends ConsumerWidget {
                                 false;
                         if (!canExpense) return const SizedBox.shrink();
                         return ListTile(
-                          leading: const Icon(Icons.money_off_outlined),
+                          leading: SettingsIconBubble(Icons.money_off_outlined, AppTheme.changeFg(isDark), AppTheme.changeBg(isDark)),
                           title: const Text('Pengeluaran'),
                           subtitle: const Text(
                               'Catat biaya operasional & kas keluar'),
@@ -200,7 +247,7 @@ class PengaturanScreen extends ConsumerWidget {
                         );
                       }),
                       ListTile(
-                        leading: const Icon(Icons.badge_outlined),
+                        leading: SettingsIconBubble(Icons.badge_outlined, AppTheme.changeFg(isDark), AppTheme.changeBg(isDark)),
                         title: const Text('Pegawai Toko'),
                         subtitle:
                             const Text('Dicatat di tiap nota (yang melayani)'),
@@ -213,7 +260,7 @@ class PengaturanScreen extends ConsumerWidget {
                               ref.watch(_showEmployeeProvider).valueOrNull ??
                                   true;
                           return SwitchListTile(
-                            secondary: const Icon(Icons.receipt_long_outlined),
+                            secondary: SettingsIconBubble(Icons.receipt_long_outlined, AppTheme.changeFg(isDark), AppTheme.changeBg(isDark)),
                             title: const Text('Pegawai di Struk'),
                             subtitle: const Text(
                                 'Tampilkan nama pegawai di struk share & cetak'),
@@ -232,7 +279,7 @@ class PengaturanScreen extends ConsumerWidget {
                                   .valueOrNull ??
                               false;
                           return SwitchListTile(
-                            secondary: const Icon(Icons.inventory_2_outlined),
+                            secondary: SettingsIconBubble(Icons.inventory_2_outlined, AppTheme.changeFg(isDark), AppTheme.changeBg(isDark)),
                             title: const Text('Izinkan Stok Minus'),
                             subtitle: const Text(
                                 'Pegawai bisa jual meski stok 0 (pre-order) — owner selalu bisa terlepas dari ini'),
@@ -248,7 +295,7 @@ class PengaturanScreen extends ConsumerWidget {
                       ],
                       if (device.isOwner) ...[
                         ListTile(
-                          leading: const Icon(Icons.tune_outlined),
+                          leading: SettingsIconBubble(Icons.tune_outlined, AppTheme.changeFg(isDark), AppTheme.changeBg(isDark)),
                           title: const Text('Izin Pegawai'),
                           subtitle:
                               const Text('Override harga, input stok, dll'),
@@ -256,7 +303,7 @@ class PengaturanScreen extends ConsumerWidget {
                           onTap: () => context.push('/pengaturan/izin-kasir'),
                         ),
                         ListTile(
-                          leading: const Icon(Icons.badge_outlined),
+                          leading: SettingsIconBubble(Icons.badge_outlined, AppTheme.changeFg(isDark), AppTheme.changeBg(isDark)),
                           title: const Text('Izin Asisten'),
                           subtitle: const Text('Izinkan stok minus, dll'),
                           trailing: const Icon(Icons.chevron_right),
@@ -270,7 +317,7 @@ class PengaturanScreen extends ConsumerWidget {
                               : 'Setiap belanja ${formatRupiah(rule.threshold)} '
                                   '→ ${rule.pointsPer} poin';
                           return ListTile(
-                            leading: const Icon(Icons.stars_outlined),
+                            leading: SettingsIconBubble(Icons.stars_outlined, AppTheme.changeFg(isDark), AppTheme.changeBg(isDark)),
                             title: const Text('Poin Loyalitas'),
                             subtitle: Text(subtitle),
                             trailing: const Icon(Icons.chevron_right),
@@ -284,11 +331,10 @@ class PengaturanScreen extends ConsumerWidget {
                 const SizedBox(height: 8),
                 const _SectionHeader('Sinkronisasi'),
                 Card(
-                  color: syncBg,
                   child: Column(
                     children: [
                       ListTile(
-                        leading: const Icon(Icons.wifi_outlined),
+                        leading: SettingsIconBubble(Icons.wifi_outlined, AppTheme.riwayatFg(isDark), AppTheme.riwayatBg(isDark)),
                         title: const Text('Sync WiFi'),
                         subtitle: const Text(
                             'Sinkronisasi antar HP via jaringan lokal'),
@@ -301,7 +347,7 @@ class PengaturanScreen extends ConsumerWidget {
                                 false;
                         if (!canBackup) return const SizedBox.shrink();
                         return ListTile(
-                          leading: const Icon(Icons.save_alt_outlined),
+                          leading: SettingsIconBubble(Icons.save_alt_outlined, AppTheme.riwayatFg(isDark), AppTheme.riwayatBg(isDark)),
                           title: const Text('Backup & Restore'),
                           subtitle: const Text('File terenkripsi .berkahpos'),
                           trailing: const Icon(Icons.chevron_right),
@@ -314,7 +360,7 @@ class PengaturanScreen extends ConsumerWidget {
                       // owner-only murni (lihat dok `_canAccessBackupProvider`).
                       if (device.isOwner)
                         ListTile(
-                          leading: const Icon(Icons.swap_horiz_outlined),
+                          leading: SettingsIconBubble(Icons.swap_horiz_outlined, AppTheme.riwayatFg(isDark), AppTheme.riwayatBg(isDark)),
                           title: const Text('Alihkan Owner'),
                           subtitle: const Text(
                               'Pindahkan seluruh data & identitas toko ke device lain'),
@@ -328,7 +374,7 @@ class PengaturanScreen extends ConsumerWidget {
                         if (!canCsv) return const SizedBox.shrink();
                         return Column(children: [
                           ListTile(
-                            leading: const Icon(Icons.upload_file_outlined),
+                            leading: SettingsIconBubble(Icons.upload_file_outlined, AppTheme.riwayatFg(isDark), AppTheme.riwayatBg(isDark)),
                             title: const Text('Import Produk CSV'),
                             subtitle:
                                 const Text('Impor daftar produk dari file CSV'),
@@ -336,7 +382,7 @@ class PengaturanScreen extends ConsumerWidget {
                             onTap: () => context.push('/pengaturan/import-csv'),
                           ),
                           ListTile(
-                            leading: const Icon(Icons.download_outlined),
+                            leading: SettingsIconBubble(Icons.download_outlined, AppTheme.riwayatFg(isDark), AppTheme.riwayatBg(isDark)),
                             title: const Text('Export Produk CSV'),
                             subtitle: const Text(
                                 'Ekspor seluruh produk aktif ke CSV'),
@@ -347,7 +393,7 @@ class PengaturanScreen extends ConsumerWidget {
                       }),
                       if (device.isOwner) ...[
                         ListTile(
-                          leading: const Icon(Icons.storefront_outlined),
+                          leading: SettingsIconBubble(Icons.storefront_outlined, AppTheme.riwayatFg(isDark), AppTheme.riwayatBg(isDark)),
                           title: const Text('Katalog Pesanan'),
                           subtitle: const Text(
                               'Bagikan katalog HTML agar pelanggan bisa pesan sendiri'),
@@ -356,7 +402,7 @@ class PengaturanScreen extends ConsumerWidget {
                               context.push('/pengaturan/katalog-pesanan'),
                         ),
                         ListTile(
-                          leading: const Icon(Icons.qr_code_2_outlined),
+                          leading: SettingsIconBubble(Icons.qr_code_2_outlined, AppTheme.riwayatFg(isDark), AppTheme.riwayatBg(isDark)),
                           title: const Text('Pair Device Baru'),
                           subtitle:
                               const Text('Tambah HP kasir / asisten via QR'),
@@ -371,11 +417,10 @@ class PengaturanScreen extends ConsumerWidget {
                   const SizedBox(height: 8),
                   const _SectionHeader('Manajemen Data'),
                   Card(
-                    color: dataMgmtBg,
                     child: Column(
                       children: [
                         ListTile(
-                          leading: const Icon(Icons.point_of_sale_outlined),
+                          leading: SettingsIconBubble(Icons.point_of_sale_outlined, AppTheme.debtFg(isDark), AppTheme.debtBg(isDark)),
                           title: const Text('Tutup Kasir'),
                           subtitle: const Text(
                               'Rekap kas harian: sistem vs uang fisik'),
@@ -383,14 +428,14 @@ class PengaturanScreen extends ConsumerWidget {
                           onTap: () => context.push('/pengaturan/tutup-kasir'),
                         ),
                         ListTile(
-                          leading: const Icon(Icons.archive_outlined),
+                          leading: SettingsIconBubble(Icons.archive_outlined, AppTheme.debtFg(isDark), AppTheme.debtBg(isDark)),
                           title: const Text('Tutup Buku'),
                           subtitle: const Text('Arsipkan transaksi tahun lalu'),
                           trailing: const Icon(Icons.chevron_right),
                           onTap: () => context.push('/pengaturan/tutup-buku'),
                         ),
                         ListTile(
-                          leading: const Icon(Icons.folder_zip_outlined),
+                          leading: SettingsIconBubble(Icons.folder_zip_outlined, AppTheme.debtFg(isDark), AppTheme.debtBg(isDark)),
                           title: const Text('Buka Arsip'),
                           subtitle: const Text(
                               'Lihat laporan tahun yang sudah diarsipkan'),
@@ -402,7 +447,7 @@ class PengaturanScreen extends ConsumerWidget {
                               ref.watch(_stockPauseProvider).valueOrNull ??
                                   false;
                           return SwitchListTile(
-                            secondary: const Icon(Icons.inventory_2_outlined),
+                            secondary: SettingsIconBubble(Icons.inventory_2_outlined, AppTheme.debtFg(isDark), AppTheme.debtBg(isDark)),
                             title: const Text('Jeda Pelacakan Stok'),
                             subtitle: Text(paused
                                 ? 'Aktif — semua produk yang tadinya dilacak sementara jadi non-stok'
@@ -419,11 +464,10 @@ class PengaturanScreen extends ConsumerWidget {
                 const SizedBox(height: 8),
                 const _SectionHeader('Perangkat'),
                 Card(
-                  color: perangkatBg,
                   child: Column(
                     children: [
                       ListTile(
-                        leading: const Icon(Icons.print_outlined),
+                        leading: SettingsIconBubble(Icons.print_outlined, AppTheme.tealFg(isDark), AppTheme.tealBg(isDark)),
                         title: const Text('Printer Bluetooth'),
                         subtitle: const Text('Pilih printer & test cetak'),
                         trailing: const Icon(Icons.chevron_right),
@@ -434,7 +478,7 @@ class PengaturanScreen extends ConsumerWidget {
                       if (appFlavor != 'production')
                         ListTile(
                           key: const Key('setting-perf-diag'),
-                          leading: const Icon(Icons.speed_outlined),
+                          leading: SettingsIconBubble(Icons.speed_outlined, AppTheme.tealFg(isDark), AppTheme.tealBg(isDark)),
                           title: const Text('Diagnostik Performa'),
                           subtitle: const Text(
                               'Matikan fitur satu per satu untuk mencari biang lag'),
@@ -446,7 +490,7 @@ class PengaturanScreen extends ConsumerWidget {
                       if (ref.watch(kasirStyleProvider) != KasirStyle.modern)
                         SwitchListTile(
                           key: const Key('setting-dark-mode'),
-                          secondary: const Icon(Icons.dark_mode_outlined),
+                          secondary: SettingsIconBubble(Icons.dark_mode_outlined, AppTheme.tealFg(isDark), AppTheme.tealBg(isDark)),
                           title: const Text('Mode Gelap'),
                           value: themeMode == ThemeMode.dark,
                           onChanged: (_) =>
@@ -455,7 +499,7 @@ class PengaturanScreen extends ConsumerWidget {
                       Builder(builder: (context) {
                         final scale = ref.watch(fontScaleProvider);
                         return ListTile(
-                          leading: const Icon(Icons.text_fields_outlined),
+                          leading: SettingsIconBubble(Icons.text_fields_outlined, AppTheme.tealFg(isDark), AppTheme.tealBg(isDark)),
                           title: const Text('Ukuran Teks'),
                           subtitle: Text(scale.label),
                           trailing: const Icon(Icons.chevron_right),
@@ -506,7 +550,7 @@ class PengaturanScreen extends ConsumerWidget {
                       ),
                       SwitchListTile(
                         key: const Key('setting-scan-frame'),
-                        secondary: const Icon(Icons.center_focus_strong_outlined),
+                        secondary: SettingsIconBubble(Icons.center_focus_strong_outlined, AppTheme.tealFg(isDark), AppTheme.tealBg(isDark)),
                         title: const Text('Bingkai Scanner ala Telegram'),
                         subtitle: const Text(
                             'Eksperimental — bingkai mengikuti posisi barcode/QR '
@@ -517,7 +561,7 @@ class PengaturanScreen extends ConsumerWidget {
                       ),
                       SwitchListTile(
                         key: const Key('setting-kasir-landing'),
-                        secondary: const Icon(Icons.home_outlined),
+                        secondary: SettingsIconBubble(Icons.home_outlined, AppTheme.tealFg(isDark), AppTheme.tealBg(isDark)),
                         title: const Text('Tampilan Awal Kasir'),
                         subtitle: Text(ref.watch(kasirLandingProvider)
                             ? 'Landing — Terlaris, Terakhir dijual & kategori'
@@ -531,7 +575,7 @@ class PengaturanScreen extends ConsumerWidget {
                       if (ref.watch(deviceProvider).isOwner)
                         ListTile(
                           key: const Key('setting-kasir-sticker'),
-                          leading: const Icon(Icons.emoji_emotions_outlined),
+                          leading: SettingsIconBubble(Icons.emoji_emotions_outlined, AppTheme.tealFg(isDark), AppTheme.tealBg(isDark)),
                           title: const Text('Stiker & Teks Landing Kasir'),
                           subtitle: const Text(
                               'Stiker .tgs + teks di bawahnya (tersinkron)'),
@@ -547,7 +591,7 @@ class PengaturanScreen extends ConsumerWidget {
                   child: Column(
                     children: [
                       ListTile(
-                        leading: const Icon(Icons.bug_report_outlined),
+                        leading: SettingsIconBubble(Icons.bug_report_outlined, AppTheme.antrianFg(isDark), AppTheme.antrianBg(isDark)),
                         title: const Text('Log Error Terakhir'),
                         subtitle: const Text(
                             'Catatan error yang tertangkap otomatis, bisa dibagikan ke developer'),
@@ -791,6 +835,22 @@ Future<void> _exportProductsCsv(BuildContext context, WidgetRef ref) async {
       SnackBar(content: Text('Gagal ekspor: $e')),
     );
   }
+}
+
+/// Ikon bulat berwarna fungsi di depan tiap baris pengaturan (gaya landing).
+class SettingsIconBubble extends StatelessWidget {
+  const SettingsIconBubble(this.icon, this.fg, this.bg, {super.key});
+  final IconData icon;
+  final Color fg;
+  final Color bg;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: 38,
+        height: 38,
+        decoration: BoxDecoration(shape: BoxShape.circle, color: bg),
+        child: Icon(icon, size: 20, color: fg),
+      );
 }
 
 class _SectionHeader extends StatelessWidget {

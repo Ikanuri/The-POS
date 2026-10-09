@@ -46,7 +46,8 @@ void main() {
   // "Import dari Griyo POS", dihapus atas permintaan user, jadi seksinya ikut
   // dibuang. Assersi amber-nya SUPERSEDED, bukan regresi.
   testWidgets(
-      'Pengaturan: kartu seksi "Sinkronisasi" ungu, "Manajemen Data" merah',
+      'Pengaturan: kartu seksi putih (tanpa tint), ikon bulat berwarna fungsi '
+      '(Sinkronisasi ungu, Manajemen Data merah), kartu profil perangkat',
       (tester) async {
     final db = AppDatabase(NativeDatabase.memory());
     await pumpWithFakeApp(tester, db: db, child: const PengaturanScreen());
@@ -54,11 +55,19 @@ void main() {
     final syncBg = AppTheme.riwayatBg(isDark);
     final dataMgmtBg = AppTheme.debtBg(isDark);
     final cards = tester.widgetList<Card>(find.byType(Card));
+    expect(cards.where((c) => c.color == syncBg || c.color == dataMgmtBg),
+        isEmpty,
+        reason: 'tint penuh kartu seksi dihapus (gaya landing)');
 
-    expect(cards.where((c) => c.color == syncBg), isNotEmpty,
-        reason: 'kartu seksi Sinkronisasi harus pakai latar ungu');
-    expect(cards.where((c) => c.color == dataMgmtBg), isNotEmpty,
-        reason: 'kartu seksi Manajemen Data harus pakai latar merah');
+    final bubbles = tester
+        .widgetList<Container>(find.descendant(
+            of: find.byType(SettingsIconBubble),
+            matching: find.byType(Container)))
+        .map((c) => (c.decoration as BoxDecoration?)?.color)
+        .toSet();
+    expect(bubbles, contains(syncBg), reason: 'ikon Sinkronisasi ungu');
+    expect(bubbles, contains(dataMgmtBg), reason: 'ikon Manajemen Data merah');
+    expect(find.byKey(const Key('setting-device-hero')), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));
