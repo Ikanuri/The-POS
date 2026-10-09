@@ -9,8 +9,9 @@ import '../../../core/providers/device_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../stats/product_stats_screen.dart';
 
-final _produkTabProvider = FutureProvider.family<List<ProductRevenueStat>,
-    DateTimeRange>((ref, range) async {
+final _produkTabProvider =
+    FutureProvider.family<List<ProductRevenueStat>, DateTimeRange>(
+        (ref, range) async {
   // Lihat dok `dataSyncedTickProvider` — provider ini tidak reaktif thd DB.
   ref.watch(dataSyncedTickProvider);
   final db = ref.watch(databaseProvider);
@@ -33,24 +34,32 @@ class ProdukTab extends ConsumerWidget {
           return const AppEmptyState('Tidak ada data untuk periode ini');
         }
         return ListView(
-          padding: const EdgeInsets.symmetric(vertical: 8),
+          padding: const EdgeInsets.all(16),
           children: [
             if (stats.length >= 2)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                child: _TopDonut(
-                  slices: [
-                    for (final s in stats.take(5))
-                      _Slice(_short(s.name.isNotEmpty ? s.name : s.productId),
-                          s.revenue),
-                  ],
-                  otherValue: stats.skip(5).fold(0, (a, s) => a + s.revenue),
+              Card(
+                margin: const EdgeInsets.only(bottom: 12),
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: _TopDonut(
+                    slices: [
+                      for (final s in stats.take(5))
+                        _Slice(_short(s.name.isNotEmpty ? s.name : s.productId),
+                            s.revenue),
+                    ],
+                    otherValue: stats.skip(5).fold(0, (a, s) => a + s.revenue),
+                  ),
                 ),
               ),
-            for (var i = 0; i < stats.length; i++) ...[
-              if (i > 0) const Divider(height: 1, indent: 60),
-              _row(context, scheme, stats[i], i),
-            ],
+            Card(
+              margin: EdgeInsets.zero,
+              child: Column(children: [
+                for (var i = 0; i < stats.length; i++) ...[
+                  if (i > 0) const Divider(height: 1, indent: 60),
+                  _row(context, scheme, stats[i], i),
+                ],
+              ]),
+            ),
           ],
         );
       },
@@ -59,8 +68,8 @@ class ProdukTab extends ConsumerWidget {
     );
   }
 
-  Widget _row(BuildContext context, ColorScheme scheme,
-      ProductRevenueStat s, int i) {
+  Widget _row(
+      BuildContext context, ColorScheme scheme, ProductRevenueStat s, int i) {
     final sold = s.qtySold % 1 == 0 ? s.qtySold.toInt() : s.qtySold;
     return ListTile(
       leading: CircleAvatar(
@@ -82,7 +91,8 @@ class ProdukTab extends ConsumerWidget {
       ),
       trailing: Text(
         formatRupiah(s.revenue),
-        style: TextStyle(color: scheme.primary, fontWeight: FontWeight.w600),
+        style: AppTheme.numStyle(context,
+            size: 14.5, weight: FontWeight.w700, color: scheme.primary),
       ),
       // Baris ini dulu BUNTU (tidak bisa diketuk sama sekali) — sekarang
       // membuka statistik detail produknya, rentang tanggal tab ikut
@@ -99,7 +109,8 @@ class ProdukTab extends ConsumerWidget {
     );
   }
 
-  static String _short(String s) => s.length <= 12 ? s : '${s.substring(0, 12)}…';
+  static String _short(String s) =>
+      s.length <= 12 ? s : '${s.substring(0, 12)}…';
 }
 
 class _Slice {

@@ -9,6 +9,7 @@ import '../../core/providers/device_provider.dart';
 import '../../core/theme/app_motion.dart';
 import '../../core/theme/app_style.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/app_filter_chip.dart';
 import '../../core/utils/chart_utils.dart';
 import '../shell/sync_status_banner.dart';
 
@@ -833,18 +834,10 @@ class _MiniChip extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 6),
-      child: ChoiceChip(
-        label: Text(label, style: const TextStyle(fontSize: 11.5)),
-        selected: selected,
-        onSelected: (_) => onTap(),
-        visualDensity: VisualDensity.compact,
-        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(right: 6),
+        child: AppFilterChip(label: label, selected: selected, onTap: onTap),
+      );
 }
 
 class _RingkasanData {

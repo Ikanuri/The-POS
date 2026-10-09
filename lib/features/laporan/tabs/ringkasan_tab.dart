@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/providers/data_refresh_provider.dart';
 import '../../../core/providers/device_provider.dart';
 import '../../../core/theme/app_theme.dart';
+import '../report_widgets.dart';
 import '../stats/stats_common.dart';
 import '../stats/trend_aggregation.dart';
 
@@ -68,10 +69,6 @@ class RingkasanTab extends ConsumerWidget {
     final dataAsync = ref.watch(_ringkasanTabProvider(range));
     final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    // Aksen warna soft per fungsi (mockup Varian B): KPI uang & metode
-    // pembayaran → hijau (fungsi Uang & Kas), konsisten dgn layar Ringkasan
-    // utama & tab Laporan lain.
-    final uangBg = AppTheme.changeBg(isDark);
 
     return dataAsync.when(
       data: (data) => ListView(
@@ -82,58 +79,68 @@ class RingkasanTab extends ConsumerWidget {
         // TabAlignment.start). Padding di sini dikembalikan ke nilai normal.
         padding: const EdgeInsets.all(16),
         children: [
-          // Main KPIs
-          _KpiRow(
-            bg: uangBg,
-            items: [
-              _KpiItem('Omzet', formatRupiah(data.revenue), scheme.primary),
-              _KpiItem('Transaksi', '${data.txCount}', scheme.secondary),
-            ],
+          ReportHero(
+            label: 'Laba Bersih',
+            value: formatRupiah(data.netProfit),
+            sub: '${data.txCount} transaksi',
+            negative: data.netProfit < 0,
           ),
           const SizedBox(height: 12),
-          _KpiRow(
-            bg: uangBg,
-            items: [
-              _KpiItem('HPP', formatRupiah(data.cogs), scheme.onSurfaceVariant),
-              _KpiItem('Laba Kotor', formatRupiah(data.profit),
-                  data.profit >= 0 ? scheme.tertiary : scheme.error),
-            ],
-          ),
+          _KpiRow(items: [
+            _KpiItem('Omzet', formatRupiah(data.revenue), Icons.payments_rounded,
+                AppTheme.changeFg(isDark), AppTheme.changeBg(isDark), null),
+            _KpiItem('HPP', formatRupiah(data.cogs), Icons.inventory_2_rounded,
+                AppTheme.scanFg(isDark), AppTheme.scanBg(isDark), null),
+          ]),
           const SizedBox(height: 12),
-          _KpiRow(
-            bg: uangBg,
-            items: [
-              _KpiItem('Pengeluaran', formatRupiah(data.expenses),
-                  data.expenses > 0 ? scheme.error : scheme.onSurfaceVariant),
-              _KpiItem('Laba Bersih', formatRupiah(data.netProfit),
-                  data.netProfit >= 0 ? scheme.tertiary : scheme.error),
-            ],
-          ),
+          _KpiRow(items: [
+            _KpiItem(
+                'Laba Kotor',
+                formatRupiah(data.profit),
+                Icons.trending_up_rounded,
+                AppTheme.changeFg(isDark),
+                AppTheme.changeBg(isDark),
+                data.profit >= 0 ? null : AppTheme.debtFg(isDark)),
+            _KpiItem(
+                'Pengeluaran',
+                formatRupiah(data.expenses),
+                Icons.north_east_rounded,
+                AppTheme.debtFg(isDark),
+                AppTheme.debtBg(isDark),
+                data.expenses > 0 ? AppTheme.debtFg(isDark) : null),
+          ]),
           const SizedBox(height: 12),
           // Selisih Kas Operasional = Omzet - Pengeluaran (TANPA kurangi
           // HPP) — beda dari Laba Bersih, jadi disendirikan barisnya biar
-          // tak tertukar maknanya. Label eksplisit spy tak disalahartikan
-          // sbg laba sebenarnya.
-          _KpiRow(
-            bg: uangBg,
-            items: [
-              _KpiItem(
-                  'Selisih Kas Operasional',
-                  formatRupiah(data.cashDifference),
-                  data.cashDifference >= 0 ? scheme.tertiary : scheme.error),
-            ],
-          ),
-          const SizedBox(height: 20),
+          // tak tertukar maknanya.
+          _KpiRow(items: [
+            _KpiItem(
+                'Selisih Kas Operasional',
+                formatRupiah(data.cashDifference),
+                Icons.account_balance_wallet_rounded,
+                AppTheme.antrianFg(isDark),
+                AppTheme.antrianBg(isDark),
+                data.cashDifference >= 0 ? null : AppTheme.debtFg(isDark)),
+            _KpiItem('Transaksi', '${data.txCount}', Icons.receipt_long_rounded,
+                AppTheme.riwayatFg(isDark), AppTheme.riwayatBg(isDark), null),
+          ]),
+          const SizedBox(height: 22),
 
           // Payment breakdown
           if (data.byMethod.isNotEmpty) ...[
             Text('Metode Pembayaran',
                 style: Theme.of(context).textTheme.titleSmall),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             if (data.byMethod.length >= 2)
-              _PaymentDonut(byMethod: data.byMethod, total: data.revenue),
+              Card(
+                margin: const EdgeInsets.only(bottom: 12),
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child:
+                      _PaymentDonut(byMethod: data.byMethod, total: data.revenue),
+                ),
+              ),
             Card(
-              color: uangBg,
               child: Column(
                 children: data.byMethod.entries.map((e) {
                   final pct = data.revenue > 0
@@ -170,10 +177,10 @@ class RingkasanTab extends ConsumerWidget {
 
           // Daily chart
           if (data.daily.isNotEmpty) ...[
-            const SizedBox(height: 20),
+            const SizedBox(height: 22),
             Text('Penjualan Harian',
                 style: Theme.of(context).textTheme.titleSmall),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(12),
@@ -249,52 +256,43 @@ class _PaymentDonut extends StatelessWidget {
 }
 
 class _KpiRow extends StatelessWidget {
-  const _KpiRow({required this.items, this.bg});
+  const _KpiRow({required this.items});
   final List<_KpiItem> items;
-  final Color? bg;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: items
-          .map((item) => Expanded(
-                child: Card(
-                  margin: EdgeInsets.zero,
-                  color: bg,
-                  child: Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(item.label,
-                            style: TextStyle(
-                                fontSize: 11,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant)),
-                        const SizedBox(height: 4),
-                        Text(item.value,
-                            style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                                color: item.color)),
-                      ],
-                    ),
-                  ),
-                ),
-              ))
-          .expand((w) => [w, const SizedBox(width: 12)])
-          .toList()
-        ..removeLast(),
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < items.length; i++) ...[
+            if (i > 0) const SizedBox(width: 12),
+            Expanded(
+              child: ReportKpiCard(
+                label: items[i].label,
+                value: items[i].value,
+                icon: items[i].icon,
+                fg: items[i].fg,
+                bg: items[i].bg,
+                valueColor: items[i].valueColor,
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
 
 class _KpiItem {
-  const _KpiItem(this.label, this.value, this.color);
+  const _KpiItem(
+      this.label, this.value, this.icon, this.fg, this.bg, this.valueColor);
   final String label;
   final String value;
-  final Color color;
+  final IconData icon;
+  final Color fg;
+  final Color bg;
+  final Color? valueColor;
 }
 
 class _DailyChart extends StatelessWidget {

@@ -1,5 +1,6 @@
 import '../../../core/theme/app_style.dart';
 import 'package:flutter/material.dart';
+import '../../../core/widgets/app_empty_state.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -101,14 +102,14 @@ class _HutangTabState extends ConsumerState<HutangTab> {
               ),
             Expanded(
               child: list.isEmpty
-                  ? Center(
-                      child: Text(
-                          all.isEmpty
-                              ? 'Tidak ada hutang. 🎉'
-                              : 'Tidak ada pelanggan cocok.',
-                          style: TextStyle(color: scheme.onSurfaceVariant)),
+                  ? AppEmptyState(
+                      all.isEmpty
+                          ? 'Tidak ada hutang. 🎉'
+                          : 'Tidak ada pelanggan cocok.',
+                      icon: Icons.verified_outlined,
                     )
                   : ListView(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                       children: [
                         if (tetap.isNotEmpty)
                           _groupSection(
@@ -148,46 +149,58 @@ class _HutangTabState extends ConsumerState<HutangTab> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          padding: const EdgeInsets.fromLTRB(4, 16, 4, 8),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(title,
-                  style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: scheme.primary)),
+              Text(title, style: Theme.of(context).textTheme.titleSmall),
               Text(formatRupiah(groupDebt),
                   style: AppTheme.numStyle(context,
-                      size: 13,
+                      size: 13.5,
                       weight: FontWeight.w700,
                       color: scheme.onSurfaceVariant)),
             ],
           ),
         ),
-        for (final e in entries)
-          Column(
+        Card(
+          margin: EdgeInsets.zero,
+          child: Column(
             children: [
-              ListTile(
-                title: Text(e.name,
-                    style: const TextStyle(fontWeight: FontWeight.w600)),
-                subtitle: Text(
-                  'menunggak ${e.daysOverdue} hari · ${e.count} nota',
-                  style: TextStyle(
-                      fontSize: 12,
-                      color: _overdueColor(e.daysOverdue, isDark),
-                      fontWeight: FontWeight.w600),
+              for (var i = 0; i < entries.length; i++) ...[
+                if (i > 0) const Divider(height: 1, indent: 68),
+                ListTile(
+                  leading: CircleAvatar(
+                    radius: 19,
+                    backgroundColor: AppTheme.debtBg(isDark),
+                    child: Text(
+                      entries[i].name.isNotEmpty
+                          ? entries[i].name.characters.first.toUpperCase()
+                          : '?',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.debtFg(isDark)),
+                    ),
+                  ),
+                  title: Text(entries[i].name,
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: Text(
+                    'menunggak ${entries[i].daysOverdue} hari · ${entries[i].count} nota',
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: _overdueColor(entries[i].daysOverdue, isDark),
+                        fontWeight: FontWeight.w600),
+                  ),
+                  trailing: Text(formatRupiah(entries[i].debt),
+                      style: AppTheme.numStyle(context,
+                          size: 15,
+                          weight: FontWeight.w700,
+                          color: AppTheme.debtFg(isDark))),
+                  onTap: () => _showDetail(entries[i]),
                 ),
-                trailing: Text(formatRupiah(e.debt),
-                    style: AppTheme.numStyle(context,
-                        size: 15,
-                        weight: FontWeight.w700,
-                        color: AppTheme.debtFg(isDark))),
-                onTap: () => _showDetail(e),
-              ),
-              const Divider(height: 1),
+              ],
             ],
           ),
+        ),
       ],
     );
   }

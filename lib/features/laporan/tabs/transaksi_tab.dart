@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../../core/widgets/app_filter_chip.dart';
+import '../../../core/widgets/app_empty_state.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -52,7 +54,6 @@ class _TransaksiTabState extends ConsumerState<TransaksiTab> {
   @override
   Widget build(BuildContext context) {
     final txAsync = ref.watch(_transaksiTabProvider(widget.range));
-    final scheme = Theme.of(context).colorScheme;
 
     return Column(
       children: [
@@ -80,20 +81,21 @@ class _TransaksiTabState extends ConsumerState<TransaksiTab> {
                   ? txList
                   : txList.where((tx) => _matchesStatus(tx, _filter)).toList();
               if (filtered.isEmpty) {
-                return Center(
-                  child: Text(
-                    txList.isEmpty
-                        ? 'Tidak ada transaksi pada periode ini'
-                        : 'Tidak ada transaksi dengan kategori ini',
-                    style: TextStyle(color: scheme.onSurfaceVariant),
-                  ),
+                return AppEmptyState(
+                  txList.isEmpty
+                      ? 'Tidak ada transaksi pada periode ini'
+                      : 'Tidak ada transaksi dengan kategori ini',
+                  icon: Icons.receipt_long_outlined,
                 );
               }
               return ListView.separated(
-                padding: const EdgeInsets.symmetric(vertical: 8),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                 itemCount: filtered.length,
-                separatorBuilder: (_, __) => const Divider(height: 1),
-                itemBuilder: (_, i) => _TxTile(tx: filtered[i]),
+                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                itemBuilder: (_, i) => Card(
+                  margin: EdgeInsets.zero,
+                  child: _TxTile(tx: filtered[i]),
+                ),
               );
             },
             loading: () => const Center(child: CircularProgressIndicator()),
@@ -106,11 +108,10 @@ class _TransaksiTabState extends ConsumerState<TransaksiTab> {
 
   Widget _statusChip(String label, _StatusFilter value) {
     final selected = _filter == value;
-    return FilterChip(
-      label: Text(label, style: const TextStyle(fontSize: 12)),
+    return AppFilterChip(
+      label: label,
       selected: selected,
-      visualDensity: VisualDensity.compact,
-      onSelected: (_) => setState(() => _filter = value),
+      onTap: () => setState(() => _filter = value),
     );
   }
 }
@@ -144,15 +145,15 @@ class _TxTile extends ConsumerWidget {
           Text(tx.localId, style: const TextStyle(fontSize: 13)),
           const SizedBox(width: 8),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
               color: statusColor.withOpacity(0.12),
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(999),
             ),
             child: Text(
               statusLabel,
               style: TextStyle(
-                  fontSize: 9,
+                  fontSize: 9.5,
                   color: statusColor,
                   fontWeight: FontWeight.w700),
             ),
@@ -173,9 +174,12 @@ class _TxTile extends ConsumerWidget {
       ),
       trailing: Text(
         formatRupiah(tx.total),
-        style: TextStyle(
+        style: AppTheme.numStyle(
+          context,
+          size: 15,
+          weight: FontWeight.w700,
           color: isVoid ? scheme.onSurfaceVariant : scheme.primary,
-          fontWeight: FontWeight.w600,
+        ).copyWith(
           decoration: isVoid ? TextDecoration.lineThrough : null,
         ),
       ),

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_motion.dart';
+import '../../core/theme/app_theme.dart';
+import '../../core/widgets/app_filter_chip.dart';
 import '../../core/providers/device_provider.dart';
 import '../shell/sync_status_banner.dart';
 import 'report_export.dart';
@@ -52,48 +54,87 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
   Widget build(BuildContext context) {
     final range = ref.watch(dateRangeProvider);
 
+    final cs = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Laporan'),
+        toolbarHeight: 68,
+        titleSpacing: 18,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('${_fmt(range.start)} – ${_fmt(range.end)}',
+                style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w500,
+                    color: cs.onSurfaceVariant)),
+            Text('Laporan',
+                style: AppTheme.numStyle(context,
+                    size: 24, weight: FontWeight.w700)),
+          ],
+        ),
         actions: [
-          TextButton.icon(
-            icon: const Icon(Icons.calendar_today_outlined, size: 16),
-            label: Text(
-              '${_fmt(range.start)} – ${_fmt(range.end)}',
-              style: const TextStyle(fontSize: 12),
+          Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: Material(
+              color: cs.primary.withOpacity(0.12),
+              shape: const CircleBorder(),
+              child: IconButton(
+                key: const Key('laporan-range'),
+                icon: Icon(Icons.calendar_today_rounded,
+                    size: 19, color: cs.primary),
+                tooltip: 'Pilih rentang tanggal',
+                onPressed: () => _pickRange(context, range),
+              ),
             ),
-            onPressed: () => _pickRange(context, range),
           ),
-          IconButton(
-            key: _exportButtonKey,
-            icon: const Icon(Icons.download_outlined),
-            tooltip: 'Export tab ini',
-            onPressed: () => _showExportMenu(range),
+          Padding(
+            padding: const EdgeInsets.only(right: 14),
+            child: Material(
+              color: cs.primary.withOpacity(0.12),
+              shape: const CircleBorder(),
+              child: IconButton(
+                key: _exportButtonKey,
+                icon: Icon(Icons.download_outlined, color: cs.primary),
+                tooltip: 'Export tab ini',
+                onPressed: () => _showExportMenu(range),
+              ),
+            ),
           ),
         ],
-        bottom: TabBar(
-          controller: _tabController,
-          isScrollable: true,
-          // Permintaan user (screenshot beranotasi panah ke-2) — gap yang
-          // dimaksud SEJAK AWAL bukan jarak vertikal ke kartu KPI (2
-          // percobaan sebelumnya salah sasaran), tapi jarak HORIZONTAL di
-          // KIRI tab "Ringkasan" itu sendiri. Akar: `TabBar(isScrollable:
-          // true)` Material 3 defaultnya `TabAlignment.startOffset` — inset
-          // ~52dp di depan tab pertama (dirancang utk sejajar dgn leading
-          // icon/drawer, TIDAK relevan di sini krn AppBar ini tanpa leading
-          // icon). `TabAlignment.start` menempelkan tab pertama flush ke
-          // kiri (sejajar judul "Laporan" di atasnya).
-          tabAlignment: TabAlignment.start,
-          tabs: const [
-            Tab(text: 'Ringkasan'),
-            Tab(text: 'Produk'),
-            Tab(text: 'Pelanggan'),
-            Tab(text: 'Transaksi'),
-            Tab(text: 'Hutang'),
-            Tab(text: 'Stok'),
-            Tab(text: 'Pengeluaran'),
-            Tab(text: 'Arus Kas'),
-          ],
+        // Pemilih tab = deretan chip pil (gaya chip kategori Kasir), tetap
+        // tersinkron dgn TabBarView (geser kiri/kanan juga berpindah).
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(46),
+          child: AnimatedBuilder(
+            animation: _tabController.animation!,
+            builder: (context, _) {
+              final cur = _tabController.animation!.value.round();
+              return SizedBox(
+                height: 46,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+                  child: Row(
+                    children: [
+                      for (var i = 0; i < 8; i++)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: AppFilterChip(
+                            label: _tabName(i),
+                            selected: cur == i,
+                            onTap: () => _tabController.animateTo(i,
+                                duration:
+                                    AppMotion.dur(context, AppMotion.medium),
+                                curve: AppMotion.easeOutQuint),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
         ),
       ),
       body: Column(

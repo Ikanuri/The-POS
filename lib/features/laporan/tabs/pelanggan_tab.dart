@@ -9,8 +9,9 @@ import '../../../core/providers/device_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../stats/customer_stats_screen.dart';
 
-final _pelangganTabProvider = FutureProvider.family<List<CustomerRevenueStat>,
-    DateTimeRange>((ref, range) async {
+final _pelangganTabProvider =
+    FutureProvider.family<List<CustomerRevenueStat>, DateTimeRange>(
+        (ref, range) async {
   // Lihat dok `dataSyncedTickProvider` — provider ini tidak reaktif thd DB.
   ref.watch(dataSyncedTickProvider);
   final db = ref.watch(databaseProvider);
@@ -33,24 +34,33 @@ class PelangganTab extends ConsumerWidget {
           return const AppEmptyState('Tidak ada transaksi pelanggan terdaftar');
         }
         return ListView(
-          padding: const EdgeInsets.symmetric(vertical: 8),
+          padding: const EdgeInsets.all(16),
           children: [
             if (stats.length >= 2)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                child: _TopDonut(
-                  slices: [
-                    for (final s in stats.take(5))
-                      _Slice(s.name.isNotEmpty ? s.name : 'Umum', s.totalSpent),
-                  ],
-                  otherValue:
-                      stats.skip(5).fold(0, (a, s) => a + s.totalSpent),
+              Card(
+                margin: const EdgeInsets.only(bottom: 12),
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: _TopDonut(
+                    slices: [
+                      for (final s in stats.take(5))
+                        _Slice(
+                            s.name.isNotEmpty ? s.name : 'Umum', s.totalSpent),
+                    ],
+                    otherValue:
+                        stats.skip(5).fold(0, (a, s) => a + s.totalSpent),
+                  ),
                 ),
               ),
-            for (var i = 0; i < stats.length; i++) ...[
-              if (i > 0) const Divider(height: 1, indent: 60),
-              _row(context, scheme, stats[i], i),
-            ],
+            Card(
+              margin: EdgeInsets.zero,
+              child: Column(children: [
+                for (var i = 0; i < stats.length; i++) ...[
+                  if (i > 0) const Divider(height: 1, indent: 60),
+                  _row(context, scheme, stats[i], i),
+                ],
+              ]),
+            ),
           ],
         );
       },
@@ -59,8 +69,8 @@ class PelangganTab extends ConsumerWidget {
     );
   }
 
-  Widget _row(BuildContext context, ColorScheme scheme,
-      CustomerRevenueStat s, int i) {
+  Widget _row(
+      BuildContext context, ColorScheme scheme, CustomerRevenueStat s, int i) {
     return ListTile(
       leading: CircleAvatar(
         backgroundColor: i == 0 ? scheme.primary : scheme.primaryContainer,
@@ -79,7 +89,8 @@ class PelangganTab extends ConsumerWidget {
       ),
       trailing: Text(
         formatRupiah(s.totalSpent),
-        style: TextStyle(color: scheme.primary, fontWeight: FontWeight.w600),
+        style: AppTheme.numStyle(context,
+            size: 14.5, weight: FontWeight.w700, color: scheme.primary),
       ),
       // Baris ini dulu BUNTU — sekarang membuka statistik belanja
       // pelanggannya, rentang tanggal tab ikut terbawa sbg rentang awal.

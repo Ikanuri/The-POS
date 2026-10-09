@@ -17,8 +17,8 @@ void main() {
   const isDark = false;
 
   testWidgets(
-      'tab Stok (Laporan): kartu nilai inventori pakai latar amber, kartu '
-      'Stok Negatif pakai latar merah (kritis)', (tester) async {
+      'tab Stok (Laporan): kartu putih (gaya landing, tanpa tint), baris stok '
+      'negatif tetap tampil dengan penanda merah', (tester) async {
     final db = AppDatabase(NativeDatabase.memory());
     const unitId = 'p1-u';
     await db.into(db.products).insert(ProductsCompanion.insert(id: 'p1', name: 'Gula'));
@@ -30,13 +30,12 @@ void main() {
 
     await pumpWithFakeApp(tester, db: db, child: const StokTab());
 
-    final stokBg = AppTheme.stockWarnBg(isDark);
-    final negBg = AppTheme.debtBg(isDark);
     final cards = tester.widgetList<Card>(find.byType(Card));
-    expect(cards.where((c) => c.color == stokBg), isNotEmpty,
-        reason: 'kartu nilai inventori/kategori harus pakai latar amber');
-    expect(cards.where((c) => c.color == negBg), isNotEmpty,
-        reason: 'kartu Stok Negatif harus pakai latar merah (kritis)');
+    expect(cards, isNotEmpty);
+    expect(cards.where((c) => c.color != null), isEmpty,
+        reason: 'kartu Laporan memakai warna kartu tema (tanpa tint penuh)');
+    expect(find.byIcon(Icons.error_outline), findsOneWidget,
+        reason: 'baris Stok Negatif memakai ikon error merah');
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));

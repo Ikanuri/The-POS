@@ -1,5 +1,6 @@
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:the_pos/core/widgets/app_filter_chip.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:the_pos/core/database/app_database.dart';
 import 'package:the_pos/core/theme/app_theme.dart';
@@ -67,7 +68,7 @@ void main() {
     // KPI berlabel "Pengeluaran", jadi find.text('Pengeluaran') polos akan
     // menangkap 2 widget kalau tidak di-scope ke Tab saja.
     final pengeluaranTabFinder = find.descendant(
-        of: find.byType(Tab), matching: find.text('Pengeluaran'));
+        of: find.byType(AppFilterChip), matching: find.text('Pengeluaran'));
     expect(pengeluaranTabFinder, findsOneWidget);
 
     // TabBar isScrollable:true + 7 tab — tab terakhir ("Pengeluaran") bisa

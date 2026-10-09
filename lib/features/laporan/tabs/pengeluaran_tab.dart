@@ -1,5 +1,7 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import '../report_widgets.dart';
+import '../../../core/widgets/app_empty_state.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/data_refresh_provider.dart';
@@ -53,24 +55,16 @@ class PengeluaranTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final dataAsync = ref.watch(_pengeluaranTabProvider(range));
     final scheme = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     // Domain Uang & Kas → hijau (konsisten dgn kartu Pengeluaran di tab
     // Ringkasan & sistem warna CLAUDE.md), foreground nominal tetap merah
     // (semantik "uang keluar").
-    final uangBg = AppTheme.changeBg(isDark);
 
     return dataAsync.when(
       data: (data) {
         if (data.total == 0) {
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Text(
-                'Belum ada pengeluaran tercatat pada rentang ini.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: scheme.onSurfaceVariant),
-              ),
-            ),
+          return const AppEmptyState(
+            'Belum ada pengeluaran tercatat pada rentang ini.',
+            icon: Icons.payments_outlined,
           );
         }
         final entries = data.byType.entries.toList()
@@ -78,34 +72,25 @@ class PengeluaranTab extends ConsumerWidget {
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            Card(
-              color: uangBg,
-              child: Padding(
-                padding: const EdgeInsets.all(14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Total Pengeluaran',
-                        style: TextStyle(
-                            fontSize: 11, color: scheme.onSurfaceVariant)),
-                    const SizedBox(height: 4),
-                    Text(formatRupiah(data.total),
-                        style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
-                            color: scheme.error)),
-                  ],
-                ),
-              ),
+            ReportHero(
+              label: 'Total Pengeluaran',
+              value: formatRupiah(data.total),
+              negative: true,
+              icon: Icons.north_east_rounded,
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 22),
             Text('Rincian per Jenis',
                 style: Theme.of(context).textTheme.titleSmall),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             if (entries.length >= 2)
-              _ExpenseDonut(entries: entries, total: data.total),
+              Card(
+                margin: const EdgeInsets.only(bottom: 12),
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: _ExpenseDonut(entries: entries, total: data.total),
+                ),
+              ),
             Card(
-              color: uangBg,
               child: Column(
                 children: entries.asMap().entries.map((indexed) {
                   final i = indexed.key;
@@ -131,7 +116,8 @@ class PengeluaranTab extends ConsumerWidget {
                                 color: scheme.onSurfaceVariant, fontSize: 12)),
                         const SizedBox(width: 8),
                         Text(formatRupiah(e.value),
-                            style: const TextStyle(fontWeight: FontWeight.w600)),
+                            style: AppTheme.numStyle(context,
+                                size: 14, weight: FontWeight.w700)),
                       ],
                     ),
                   );
@@ -139,10 +125,10 @@ class PengeluaranTab extends ConsumerWidget {
               ),
             ),
             if (data.daily.isNotEmpty) ...[
-              const SizedBox(height: 20),
+              const SizedBox(height: 22),
               Text('Tren Harian',
                   style: Theme.of(context).textTheme.titleSmall),
-              const SizedBox(height: 8),
+              const SizedBox(height: 10),
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(12),
