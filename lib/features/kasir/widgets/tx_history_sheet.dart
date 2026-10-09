@@ -1,3 +1,4 @@
+import '../../../core/widgets/app_empty_state.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -519,11 +520,8 @@ class _TxHistorySheetState extends ConsumerState<TxHistorySheet> {
                 final filtered = txs;
 
                 if (filtered.isEmpty) {
-                  return Center(
-                    child: Text('Tidak ada transaksi.',
-                        style: TextStyle(
-                            color: scheme.onSurfaceVariant, fontSize: 13)),
-                  );
+                  return const AppEmptyState('Tidak ada transaksi.',
+                      icon: Icons.receipt_long_outlined);
                 }
 
                 // Kelompokkan per hari untuk separator tanggal.

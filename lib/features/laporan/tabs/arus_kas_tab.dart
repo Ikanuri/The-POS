@@ -205,7 +205,7 @@ class _SectionTitle extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.only(top: 18, bottom: 6),
         child: Text(text,
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
       );
 }
 

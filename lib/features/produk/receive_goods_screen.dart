@@ -1,3 +1,4 @@
+import '../../core/theme/app_style.dart';
 import '../../core/widgets/app_empty_state.dart';
 import 'package:drift/drift.dart' show Variable;
 import 'package:flutter/material.dart';
@@ -1129,15 +1130,17 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: TextField(
-                controller: _q,
-                autofocus: true,
-                onChanged: (_) => _search(),
-                decoration: const InputDecoration(
-                  labelText: 'Cari produk',
-                  prefixIcon: Icon(Icons.search),
-                  isDense: true,
-                  border: OutlineInputBorder(),
+              child: AppStyle.pillSearch(
+                context,
+                TextField(
+                  controller: _q,
+                  autofocus: true,
+                  onChanged: (_) => _search(),
+                  decoration: const InputDecoration(
+                    labelText: 'Cari produk',
+                    prefixIcon: Icon(Icons.search),
+                    isDense: true,
+                  ),
                 ),
               ),
             ),

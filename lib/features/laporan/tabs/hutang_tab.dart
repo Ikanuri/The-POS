@@ -1,3 +1,4 @@
+import '../../../core/theme/app_style.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -64,13 +65,16 @@ class _HutangTabState extends ConsumerState<HutangTab> {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              child: TextField(
-                decoration: const InputDecoration(
-                  isDense: true,
-                  prefixIcon: Icon(Icons.search, size: 20),
-                  hintText: 'Cari nama pelanggan',
+              child: AppStyle.pillSearch(
+                context,
+                TextField(
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    prefixIcon: Icon(Icons.search, size: 20),
+                    hintText: 'Cari nama pelanggan',
+                  ),
+                  onChanged: (v) => setState(() => _query = v),
                 ),
-                onChanged: (v) => setState(() => _query = v),
               ),
             ),
             if (all.isNotEmpty)

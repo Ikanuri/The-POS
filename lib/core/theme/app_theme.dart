@@ -212,10 +212,16 @@ class AppTheme {
       splashFactory: InkRipple.splashFactory,
       splashColor: ink.withOpacity(isDark ? 0.10 : 0.08),
       highlightColor: ink.withOpacity(isDark ? 0.06 : 0.04),
-      textTheme: GoogleFonts.hankenGroteskTextTheme(base.textTheme).apply(
-        bodyColor: ink,
-        displayColor: ink,
-      ),
+      textTheme: GoogleFonts.hankenGroteskTextTheme(base.textTheme)
+          .apply(bodyColor: ink, displayColor: ink)
+          .copyWith(
+            // Judul seksi seragam (Ringkasan, Laporan, dst): 15/700.
+            titleSmall: GoogleFonts.hankenGrotesk(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: ink,
+            ),
+          ),
       cardTheme: CardTheme(
         clipBehavior: Clip.antiAlias,
         elevation: 2,
