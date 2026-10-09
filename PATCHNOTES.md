@@ -8,6 +8,15 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 9 Oktober 2026 (Kasir Gaya Baru: tombol pindah ke header)
+
+- **Tombol melayang di pojok kanan bawah dihapus** (membuat aplikasi terasa berat). Keempat tombol berwarna - Sync LAN, Tempel Pesanan, Antrian (dengan jumlah), dan Riwayat - kini tetap ada di bagian atas layar. Saat mengetik, header mengecil: hanya ikon aplikasi, empat tombol, dan tombol grid/daftar.
+- **Saklar terang/gelap hanya di halaman awal Kasir**; tombol grid/daftar hanya saat melihat daftar produk.
+- **Teks saran di kolom cari tidak terpotong lagi**, termasuk saat Ukuran Teks dibuat besar.
+- **Total di bar keranjang mengecil otomatis** sehingga nominal besar tetap satu baris dan terbaca.
+- **Menghapus semua teks di kolom cari kembali ke halaman awal dengan keyboard tetap terbuka**, begitu juga saat menekan tombol X.
+- **Kursor di kolom cari tidak "hilang" lagi** setelah keluar lalu mengetuk kolom cari kembali.
+
 ## 9 Oktober 2026 (Penyempurnaan Kasir Gaya Baru)
 
 - **Kolom cari lebih bersih**: tidak ada lagi lingkaran kedua di dalamnya, garis fokus lebih lembut, dan blok teks yang terpilih berujung membulat.
