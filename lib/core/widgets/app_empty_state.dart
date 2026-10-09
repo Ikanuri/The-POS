@@ -6,11 +6,14 @@ import '../theme/app_motion.dart';
 /// Pakai ini untuk semua "Belum ada…/Tidak ada…" di layar penuh/daftar.
 class AppEmptyState extends StatelessWidget {
   const AppEmptyState(this.message,
-      {super.key, this.icon = Icons.inbox_outlined, this.hint});
+      {super.key, this.icon = Icons.inbox_outlined, this.hint, this.action});
 
   final String message;
   final IconData icon;
   final String? hint;
+
+  /// Aksi utama opsional (mis. tombol Tambah).
+  final Widget? action;
 
   @override
   Widget build(BuildContext context) {
@@ -57,6 +60,10 @@ class AppEmptyState extends StatelessWidget {
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 12.5, color: cs.onSurfaceVariant),
                 ),
+              ],
+              if (action != null) ...[
+                const SizedBox(height: 16),
+                action!,
               ],
             ],
           ),

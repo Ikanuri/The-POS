@@ -1,3 +1,5 @@
+import '../../core/theme/app_style.dart';
+import '../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -15,7 +17,23 @@ class WelcomeScreen extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Icon(Icons.storefront_outlined, size: 72, color: scheme.primary),
+              Center(
+                child: Container(
+                  width: 92,
+                  height: 92,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Color(0xFFD97757), Color(0xFFC96442)],
+                    ),
+                    boxShadow: AppStyle.accentShadow,
+                  ),
+                  child: const Icon(Icons.storefront_outlined,
+                      size: 44, color: Colors.white),
+                ),
+              ),
               const SizedBox(height: 24),
               Text(
                 'Selamat datang di',
@@ -27,10 +45,8 @@ class WelcomeScreen extends StatelessWidget {
               Text(
                 'The POS',
                 textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: scheme.primary,
-                    ),
+                style: AppTheme.numStyle(context,
+                    size: 40, weight: FontWeight.w700, color: scheme.primary),
               ),
               const SizedBox(height: 12),
               Text(

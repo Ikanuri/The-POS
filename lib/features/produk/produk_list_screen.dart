@@ -1,3 +1,4 @@
+import '../../core/theme/app_style.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -149,7 +150,7 @@ class _ProdukListScreenState extends ConsumerState<ProdukListScreen>
           inlineBanner(),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-            child: TextField(
+            child: AppStyle.pillSearch(context, TextField(
               decoration: InputDecoration(
                 hintText: 'Cari nama atau kode produk…',
                 prefixIcon: const Icon(Icons.search, size: 20),
@@ -166,7 +167,7 @@ class _ProdukListScreenState extends ConsumerState<ProdukListScreen>
               ),
               onChanged: (v) =>
                   ref.read(_searchQueryProvider.notifier).state = v,
-            ),
+            )),
           ),
           groupsAsync.when(
             data: (groups) {

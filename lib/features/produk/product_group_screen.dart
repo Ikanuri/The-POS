@@ -1,3 +1,4 @@
+import '../../core/widgets/app_empty_state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -305,21 +306,15 @@ class _ProductGroupScreenState extends ConsumerState<ProductGroupScreen>
               error: (e, _) => Center(child: Text('Error: $e')),
               data: (groups) {
                 if (groups.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.label_off_outlined,
-                            size: 56, color: scheme.outlineVariant),
-                        const SizedBox(height: 12),
-                        const Text('Belum ada kategori'),
-                        const SizedBox(height: 16),
-                        FilledButton.icon(
-                          onPressed: _showAddDialog,
-                          icon: const Icon(Icons.add),
-                          label: const Text('Tambah Kategori'),
-                        ),
-                      ],
+                  return AppEmptyState(
+                    'Belum ada kategori',
+                    icon: Icons.label_off_outlined,
+                    action: FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                          minimumSize: const Size(0, 48)),
+                      onPressed: _showAddDialog,
+                      icon: const Icon(Icons.add),
+                      label: const Text('Tambah Kategori'),
                     ),
                   );
                 }

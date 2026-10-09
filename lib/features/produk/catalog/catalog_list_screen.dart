@@ -1,3 +1,4 @@
+import '../../../core/widgets/app_empty_state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -21,30 +22,12 @@ class CatalogListScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Katalog')),
       body: catalogs.isEmpty
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.collections_bookmark_outlined,
-                        size: 56, color: cs.outlineVariant),
-                    const SizedBox(height: 14),
-                    Text('Belum ada katalog',
-                        style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            color: cs.onSurfaceVariant)),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Buat katalog harga untuk diumumkan ke pelanggan via '
-                      'WhatsApp. Tekan "Buat Katalog" lalu pilih produk seperti '
-                      'di kasir.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 12.5, color: cs.onSurfaceVariant),
-                    ),
-                  ],
-                ),
-              ),
+          ? const AppEmptyState(
+              'Belum ada katalog',
+              icon: Icons.collections_bookmark_outlined,
+              hint: 'Buat katalog harga untuk diumumkan ke pelanggan via '
+                  'WhatsApp. Tekan "Buat Katalog" lalu pilih produk seperti '
+                  'di kasir.',
             )
           : ListView.separated(
               padding: const EdgeInsets.symmetric(vertical: 6),

@@ -1,3 +1,4 @@
+import '../../core/widgets/app_empty_state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -51,23 +52,10 @@ class ArsipScreen extends ConsumerWidget {
         error: (e, _) => Center(child: Text('Error: $e')),
         data: (archives) {
           if (archives.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.folder_off_outlined,
-                      size: 48,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant),
-                  const SizedBox(height: 12),
-                  const Text('Belum ada arsip tahunan.'),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'Gunakan menu Tutup Buku untuk mengarsipkan data tahun lalu.',
-                    style: TextStyle(fontSize: 12),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
+            return const AppEmptyState(
+              'Belum ada arsip tahunan.',
+              icon: Icons.folder_off_outlined,
+              hint: 'Gunakan menu Tutup Buku untuk mengarsipkan data tahun lalu.',
             );
           }
           return ListView.separated(

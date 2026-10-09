@@ -1,3 +1,4 @@
+import '../../core/theme/app_style.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -89,7 +90,7 @@ class _PelangganListScreenState extends ConsumerState<PelangganListScreen> {
           const SyncStatusBanner(),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-            child: TextField(
+            child: AppStyle.pillSearch(context, TextField(
               decoration: InputDecoration(
                 hintText: 'Cari nama pelanggan…',
                 prefixIcon: const Icon(Icons.search, size: 20),
@@ -107,7 +108,7 @@ class _PelangganListScreenState extends ConsumerState<PelangganListScreen> {
               ),
               onChanged: (v) =>
                   ref.read(_pelangganQueryProvider.notifier).state = v,
-            ),
+            )),
           ),
           Expanded(
             child: customersAsync.when(

@@ -1,3 +1,4 @@
+import '../../core/theme/app_style.dart';
 import '../../core/widgets/app_empty_state.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
@@ -187,7 +188,7 @@ class _CategoryAssignProductsScreenState
           inlineBanner(),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-            child: TextField(
+            child: AppStyle.pillSearch(context, TextField(
               controller: _searchCtrl,
               autofocus: false,
               decoration: InputDecoration(
@@ -201,7 +202,7 @@ class _CategoryAssignProductsScreenState
                 setState(() => _loading = true);
                 _load(v.trim());
               },
-            ),
+            )),
           ),
           Expanded(
             child: _loading

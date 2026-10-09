@@ -1,3 +1,4 @@
+import '../../core/theme/app_style.dart';
 import '../../core/widgets/app_empty_state.dart';
 import 'package:flutter/material.dart';
 
@@ -259,7 +260,7 @@ class _TutorialListScreenState extends State<TutorialListScreen> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-            child: TextField(
+            child: AppStyle.pillSearch(context, TextField(
               controller: _searchCtrl,
               decoration: InputDecoration(
                 hintText: 'Cari panduan (mis. "tempel pesanan", "izin")',
@@ -270,7 +271,7 @@ class _TutorialListScreenState extends State<TutorialListScreen> {
                 isDense: true,
               ),
               onChanged: (v) => setState(() => _query = v.trim()),
-            ),
+            )),
           ),
           Expanded(
             child: filtered.isEmpty

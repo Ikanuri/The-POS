@@ -40,4 +40,24 @@ class AppStyle {
       offset: Offset(0, 4),
     ),
   ];
+
+  /// Membungkus kolom cari agar berbentuk pil (gaya landing).
+  static Widget pillSearch(BuildContext context, Widget field) {
+    final theme = Theme.of(context);
+    OutlineInputBorder b(Color c, [double w = 1]) => OutlineInputBorder(
+          borderRadius: BorderRadius.circular(rPill),
+          borderSide: BorderSide(color: c, width: w),
+        );
+    final line = theme.colorScheme.outlineVariant;
+    return Theme(
+      data: theme.copyWith(
+        inputDecorationTheme: theme.inputDecorationTheme.copyWith(
+          border: b(line),
+          enabledBorder: b(line),
+          focusedBorder: b(theme.colorScheme.primary, 1.5),
+        ),
+      ),
+      child: field,
+    );
+  }
 }

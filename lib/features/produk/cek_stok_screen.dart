@@ -1,3 +1,4 @@
+import '../../core/widgets/app_empty_state.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -451,8 +452,8 @@ class _CekStokScreenState extends ConsumerState<CekStokScreen> {
             child: rowsAsync.when(
               data: (allRows) {
                 if (allRows.isEmpty) {
-                  return const Center(
-                      child: Text('Tidak ada produk berstok di kategori ini'));
+                  return const AppEmptyState(
+                      'Tidak ada produk berstok di kategori ini');
                 }
                 final rows = switch (statusFilter) {
                   _StockFilter.all => allRows,

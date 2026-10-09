@@ -1,3 +1,4 @@
+import '../../core/theme/app_style.dart';
 import '../../core/widgets/app_empty_state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -564,7 +565,7 @@ class _ProductUnitPickerScreenState
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-            child: TextField(
+            child: AppStyle.pillSearch(context, TextField(
               controller: _searchCtrl,
               decoration: InputDecoration(
                 hintText: 'Cari produk…',
@@ -577,7 +578,7 @@ class _ProductUnitPickerScreenState
                 setState(() => _loading = true);
                 _load(v.trim());
               },
-            ),
+            )),
           ),
           Expanded(
             child: _loading
