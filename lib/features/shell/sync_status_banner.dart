@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/providers/sync_state_provider.dart';
+import '../../core/theme/app_motion.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/app_notice_card.dart';
 
 /// Item 21 (Fase 1) — banner status sync, tampil di tab MANAPUN selama ADA
 /// yang layak dipantau (antrian menunggu, usulan menunggu, klien sedang
@@ -51,7 +53,7 @@ class SyncStatusBanner extends ConsumerWidget {
     // `InlineBanner` yang sudah ada supaya jarak dari header ke banner
     // konsisten dgn notifikasi inline lain di app.
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -107,10 +109,8 @@ class SyncStatusBanner extends ConsumerWidget {
   }
 }
 
-/// Kartu notifikasi tunggal — gaya sama dgn `InlineBanner` (kartu bulat,
-/// accent bar kiri, ikon, elevation) supaya konsisten dgn notifikasi inline
-/// lain di app (mis. banner stok menipis di Kasir), bukan bar status
-/// terpisah gayanya sendiri.
+/// Kartu notifikasi tunggal — kartu gaya baru bersama ([AppNoticeCard]):
+/// putih membulat, ikon bulat beraksen, masuk dgn geser-turun + pudar.
 class _SyncNotifCard extends StatelessWidget {
   const _SyncNotifCard({
     required this.tone,
@@ -128,65 +128,35 @@ class _SyncNotifCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (Color bg, Color fg) = switch (tone) {
-      SyncBannerTone.success => (
-          AppTheme.changeBg(isDark),
-          AppTheme.changeFg(isDark),
-        ),
-      SyncBannerTone.sync => (
-          AppTheme.riwayatBg(isDark),
-          AppTheme.riwayatFg(isDark),
-        ),
+    final t = switch (tone) {
+      SyncBannerTone.success => ToastTone.success,
+      SyncBannerTone.sync => ToastTone.sync,
     };
+    final ink = isDark ? const Color(0xFFECE7DD) : const Color(0xFF2A2824);
 
-    return Material(
-      elevation: 3,
-      shadowColor: fg.withOpacity(0.25),
-      borderRadius: BorderRadius.circular(12),
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: AppMotion.dur(context, AppMotion.medium),
+      curve: AppMotion.easeOutQuint,
+      builder: (context, v, child) => Opacity(
+        opacity: v.clamp(0.0, 1.0),
+        child: Transform.translate(offset: Offset(0, (1 - v) * -10), child: child),
+      ),
+      child: AppNoticeCard(
+        tone: t,
+        icon: icon,
+        spinning: spinning,
         onTap: () => context.push('/pengaturan/sync'),
-        child: Container(
-          decoration: BoxDecoration(
-            color: bg,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Container(
-                width: 3,
-                height: 20,
-                margin: const EdgeInsets.only(right: 10),
-                decoration: BoxDecoration(
-                  color: fg,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              if (spinning)
-                SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: fg),
-                )
-              else
-                Icon(icon, size: 18, color: fg),
-              const SizedBox(width: 9),
-              Expanded(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    color: fg,
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                    height: 1.3,
-                  ),
-                ),
-              ),
-              Icon(Icons.chevron_right, size: 16, color: fg.withOpacity(0.7)),
-            ],
+        trailing: Icon(Icons.chevron_right, size: 18, color: ink.withOpacity(0.45)),
+        child: Text(
+          label,
+          maxLines: 3,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: ink,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            height: 1.3,
           ),
         ),
       ),

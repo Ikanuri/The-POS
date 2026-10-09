@@ -2,7 +2,8 @@ import 'dart:async';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
-import '../theme/app_theme.dart';
+import '../theme/app_motion.dart';
+import 'app_notice_card.dart';
 
 enum InlineBannerType { success, error, warning, info }
 
@@ -39,8 +40,8 @@ mixin InlineBannerStateMixin<T extends StatefulWidget> on State<T> {
       );
 }
 
-/// Banner mengambang berbentuk kartu (margin horizontal, sudut bulat,
-/// shadow, accent bar vertikal). Saat [message] non-null: muncul dengan
+/// Banner inline berbentuk kartu gaya baru (putih membulat, bayangan hangat,
+/// ikon bulat beraksen di kiri). Saat [message] non-null: muncul dengan
 /// AnimatedSize (push content down sedikit). Auto-dismiss setelah
 /// [duration]. Tap ✕ untuk dismiss manual.
 class InlineBanner extends StatefulWidget {
@@ -111,8 +112,8 @@ class _InlineBannerState extends State<InlineBanner> {
   Widget _messageText(String msg, Color fg, Color accent) {
     final style = TextStyle(
       color: fg,
-      fontSize: 13,
-      fontWeight: FontWeight.w500,
+      fontSize: 13.5,
+      fontWeight: FontWeight.w600,
       height: 1.4,
     );
     final link = widget.linkText;
@@ -143,91 +144,46 @@ class _InlineBannerState extends State<InlineBanner> {
   @override
   Widget build(BuildContext context) {
     final msg = widget.message;
-    final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final (Color bg, Color fg, Color accent, IconData ico) =
-        switch (widget.type) {
-      // Sukses = HIJAU soft, Gagal = MERAH — pakai warna semantik yang sama
-      // dengan "kembalian"/"hutang" di kasir (AppTheme.change*/debt*), sudah
-      // theme-aware light & dark, agar konsisten di seluruh app.
-      InlineBannerType.success => (
-          AppTheme.changeBg(isDark),
-          AppTheme.changeFg(isDark),
-          AppTheme.changeFg(isDark),
-          Icons.check_circle_rounded,
-        ),
-      InlineBannerType.error => (
-          AppTheme.debtBg(isDark),
-          AppTheme.debtFg(isDark),
-          AppTheme.debtFg(isDark),
-          Icons.error_rounded,
-        ),
-      // Warning: sediakan varian dark eksplisit (dulu hardcode terang saja →
-      // kontras jelek di dark mode).
-      InlineBannerType.warning => isDark
-          ? (
-              const Color(0x40F97316),
-              const Color(0xFFFFD9A0),
-              const Color(0xFFF97316),
-              Icons.warning_rounded,
-            )
-          : (
-              const Color(0xFFFFEDD5),
-              const Color(0xFF7C4A00),
-              const Color(0xFFF97316),
-              Icons.warning_rounded,
-            ),
-      InlineBannerType.info => (
-          scheme.secondaryContainer,
-          scheme.onSecondaryContainer,
-          scheme.secondary,
-          Icons.info_rounded,
-        ),
+    final tone = switch (widget.type) {
+      InlineBannerType.success => ToastTone.success,
+      InlineBannerType.error => ToastTone.error,
+      InlineBannerType.warning => ToastTone.warning,
+      InlineBannerType.info => ToastTone.info,
     };
+    final style = ToastToneStyle.of(tone, isDark);
+    final ink = isDark ? const Color(0xFFECE7DD) : const Color(0xFF2A2824);
 
     return AnimatedSize(
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeInOut,
+      duration: AppMotion.dur(context, AppMotion.medium),
+      curve: AppMotion.easeOutQuint,
+      alignment: Alignment.topCenter,
       child: msg != null
           ? Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-              child: Material(
-                elevation: 3,
-                shadowColor: accent.withOpacity(0.25),
-                borderRadius: BorderRadius.circular(12),
-                color: Colors.transparent,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: bg,
-                    borderRadius: BorderRadius.circular(12),
+              padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
+              child: TweenAnimationBuilder<double>(
+                key: ValueKey(msg),
+                tween: Tween(begin: 0, end: 1),
+                duration: AppMotion.dur(context, AppMotion.medium),
+                curve: AppMotion.easeOutQuint,
+                builder: (context, t, child) => Opacity(
+                  opacity: t.clamp(0.0, 1.0),
+                  child: Transform.translate(
+                      offset: Offset(0, (1 - t) * -10), child: child),
+                ),
+                child: AppNoticeCard(
+                  tone: tone,
+                  trailing: InkResponse(
+                    onTap: widget.onDismiss,
+                    radius: 18,
+                    child: Padding(
+                      padding: const EdgeInsets.all(6),
+                      child: Icon(Icons.close_rounded,
+                          size: 16, color: ink.withOpacity(0.5)),
+                    ),
                   ),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 11),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Container(
-                        width: 3,
-                        height: 34,
-                        margin: const EdgeInsets.only(right: 10),
-                        decoration: BoxDecoration(
-                          color: accent,
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                      Icon(ico, size: 18, color: accent),
-                      const SizedBox(width: 9),
-                      Expanded(child: _messageText(msg, fg, accent)),
-                      const SizedBox(width: 4),
-                      GestureDetector(
-                        onTap: widget.onDismiss,
-                        child: Icon(Icons.close_rounded,
-                            size: 16,
-                            color: fg.withOpacity(0.55)),
-                      ),
-                    ],
-                  ),
+                  child: _messageText(msg, ink, style.fg),
                 ),
               ),
             )

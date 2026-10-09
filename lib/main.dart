@@ -19,6 +19,7 @@ import 'core/services/temp_share_cleanup.dart';
 import 'core/theme/app_theme.dart';
 import 'features/kasir/cart_debt_settlement_provider.dart';
 import 'features/kasir/cart_meta_provider.dart';
+import 'core/widgets/app_toast.dart';
 import 'features/kasir/cart_prabayar_provider.dart';
 import 'features/kasir/cart_preorder_settlement_provider.dart';
 import 'features/kasir/cart_provider.dart';
@@ -174,17 +175,19 @@ class ThePosApp extends ConsumerWidget {
             data: mq.copyWith(textScaler: TextScaler.linear(combined)),
             child: child!,
           );
+          // Toast gaya baru (kartu di atas layar) — dipasang sekali di sini.
+          final hosted = AppToastHost(child: body);
           // Diagnostik performa: meter frame mengambang (hanya bila dinyalakan
           // di Pengaturan > Diagnostik Performa).
           return diag.meter
               ? Stack(
                   textDirection: TextDirection.ltr,
                   children: [
-                    body,
+                    hosted,
                     const Positioned(top: 36, left: 4, child: FrameMeter()),
                   ],
                 )
-              : body;
+              : hosted;
         },
       ),
     );
