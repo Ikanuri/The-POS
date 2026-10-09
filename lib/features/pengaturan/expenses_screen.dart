@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/widgets/app_empty_state.dart';
 import '../../core/database/app_database.dart';
 import '../../core/providers/device_provider.dart';
 import '../../core/theme/app_theme.dart';
@@ -120,10 +121,9 @@ class ExpensesScreen extends ConsumerWidget {
               error: (e, _) => Center(child: Text('Error: $e')),
               data: (expenses) {
                 if (expenses.isEmpty) {
-                  return Center(
-                    child: Text(
-                        'Belum ada pengeluaran ${_periodLabel(kind)}.',
-                        style: TextStyle(color: scheme.onSurfaceVariant)),
+                  return AppEmptyState(
+                    'Belum ada pengeluaran ${_periodLabel(kind)}',
+                    icon: Icons.receipt_long_outlined,
                   );
                 }
                 final total = expenses.fold<int>(0, (s, e) => s + e.amount);

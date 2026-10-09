@@ -418,7 +418,6 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
                     .difference(item.arrivedAt)
                     .inMinutes;
                 return Card(
-                  color: scheme.tertiaryContainer,
                   margin: const EdgeInsets.only(bottom: 8),
                   child: Padding(
                     padding: const EdgeInsets.all(14),

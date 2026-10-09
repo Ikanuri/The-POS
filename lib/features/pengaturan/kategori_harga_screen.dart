@@ -40,18 +40,11 @@ class KategoriHargaScreen extends ConsumerWidget {
       ),
       body: catsAsync.when(
         data: (cats) => cats.isEmpty
-            ? Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Text(
-                    'Belum ada kategori harga. Buat kategori untuk '
-                    'mengelompokkan produk (mis. "Grosir", "Rokok") dan atur '
-                    'margin per produk.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant),
-                  ),
-                ),
+            ? const AppEmptyState(
+                'Belum ada kategori harga',
+                icon: Icons.sell_outlined,
+                hint: 'Buat kategori untuk mengelompokkan produk (mis. '
+                    '"Grosir", "Rokok") dan atur margin per produk.',
               )
             : ReorderableListView.builder(
                 buildDefaultDragHandles: false,
@@ -386,16 +379,10 @@ class _KategoriHargaDetailScreenState
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _members.isEmpty
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Text(
-                      'Belum ada produk di kategori ini. Ketuk + untuk '
-                      'menambahkan.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: scheme.onSurfaceVariant),
-                    ),
-                  ),
+              ? const AppEmptyState(
+                  'Belum ada produk di kategori ini',
+                  icon: Icons.inventory_2_outlined,
+                  hint: 'Ketuk + untuk menambahkan.',
                 )
               : ListView.separated(
                   padding: const EdgeInsets.all(12),

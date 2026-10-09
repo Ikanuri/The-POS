@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../core/widgets/app_empty_state.dart';
 import '../../core/services/crash_log_service.dart';
 
 /// Layar diagnostik: tampilkan isi file log crash lokal (lihat
@@ -63,15 +64,9 @@ class _CrashLogScreenState extends State<CrashLogScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _content == null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Text(
-                      'Belum ada error yang tercatat.',
-                      style: TextStyle(color: cs.onSurfaceVariant),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
+              ? const AppEmptyState(
+                  'Belum ada error yang tercatat',
+                  icon: Icons.check_circle_outline,
                 )
               : Column(
                   children: [

@@ -8,6 +8,11 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 9 Oktober 2026 (v3.11.1 — Layar kosong sub-pengaturan)
+
+- **Tampilan kosong yang ramah** di Crash Log, Pengeluaran, dan Kategori Harga (ikon + penjelasan), seragam dengan layar lain.
+- Kartu antrean persetujuan Sync kini benar-benar putih bersih.
+
 ## 9 Oktober 2026 (v3.11.0 — Sub-layar Pengaturan dirapikan)
 
 - **Judul semua layar kini bergaya serif** seragam dengan angka & header baru.
