@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'app_scanner.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
@@ -121,17 +122,27 @@ class _QrScannerScreenState extends State<_QrScannerScreen> {
       ),
       body: Stack(
         children: [
-          MobileScanner(
+          AppScanner(
             controller: _ctrl,
+            // Telegram menahan ~1 dtk setelah QR terkunci sebelum menutup.
+            lockDelay: const Duration(milliseconds: 1000),
+            // Hanya QR sync yang valid (JSON) yang diikuti/dikunci bingkai.
+            accept: (b) {
+              try {
+                return jsonDecode(b.rawValue ?? '') is Map<String, dynamic>;
+              } catch (_) {
+                return false;
+              }
+            },
             onDetect: _onDetect,
-          ),
-          Center(
-            child: Container(
-              width: 250,
-              height: 250,
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.white54, width: 2),
-                borderRadius: BorderRadius.circular(16),
+            legacyOverlay: Center(
+              child: Container(
+                width: 250,
+                height: 250,
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.white54, width: 2),
+                  borderRadius: BorderRadius.circular(16),
+                ),
               ),
             ),
           ),

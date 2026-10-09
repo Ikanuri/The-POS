@@ -4,6 +4,7 @@ import '../kasir/kasir_style.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import '../../core/providers/scan_frame_provider.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -502,6 +503,17 @@ class PengaturanScreen extends ConsumerWidget {
                             ),
                           ],
                         ),
+                      ),
+                      SwitchListTile(
+                        key: const Key('setting-scan-frame'),
+                        secondary: const Icon(Icons.center_focus_strong_outlined),
+                        title: const Text('Bingkai Scanner ala Telegram'),
+                        subtitle: const Text(
+                            'Eksperimental — bingkai mengikuti posisi barcode/QR '
+                            '(Kasir, form produk, Sync LAN). Mati = scanner lama'),
+                        value: ref.watch(scanFrameTelegramProvider),
+                        onChanged: (v) =>
+                            ref.read(scanFrameTelegramProvider.notifier).set(v),
                       ),
                       SwitchListTile(
                         key: const Key('setting-kasir-landing'),

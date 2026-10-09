@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import '../../../core/widgets/app_scanner.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -170,8 +171,30 @@ class _QuickSyncDialogState extends ConsumerState<QuickSyncDialog> {
       );
     } else {
       _cam ??= MobileScannerController();
-      view = MobileScanner(
+      view = AppScanner(
         controller: _cam!,
+        lockDelay: const Duration(milliseconds: 1000),
+        accept: (b) {
+          try {
+            final d = jsonDecode(b.rawValue ?? '');
+            return d is Map && d['ip'] != null;
+          } catch (_) {
+            return false;
+          }
+        },
+        // Bingkai persegi lama; dimatikan bila mode Telegram aktif.
+        legacyOverlay: IgnorePointer(
+          child: Center(
+            child: Container(
+              width: 130,
+              height: 130,
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.white70, width: 2),
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
+          ),
+        ),
         onDetect: (capture) {
           final raw = capture.barcodes.firstOrNull?.rawValue;
           if (raw != null && raw.isNotEmpty) _handleRaw(raw);
@@ -197,18 +220,6 @@ class _QuickSyncDialogState extends ConsumerState<QuickSyncDialog> {
         fit: StackFit.expand,
         children: [
           view,
-          IgnorePointer(
-            child: Center(
-              child: Container(
-                width: 130,
-                height: 130,
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.white70, width: 2),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-              ),
-            ),
-          ),
           const Positioned(
             left: 0,
             right: 0,

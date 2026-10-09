@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
+import '../../core/widgets/app_scanner.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../core/providers/device_provider.dart';
 import '../../core/services/pairing_service.dart';
@@ -113,7 +113,8 @@ class _PairingScreenState extends ConsumerState<PairingScreen> {
                     borderRadius: BorderRadius.circular(14),
                   ),
                   clipBehavior: Clip.antiAlias,
-                  child: MobileScanner(
+                  child: AppScanner(
+                    lockDelay: const Duration(milliseconds: 1000),
                     onDetect: (capture) {
                       final value = capture.barcodes.firstOrNull?.rawValue;
                       if (value != null) _handlePayload(value);

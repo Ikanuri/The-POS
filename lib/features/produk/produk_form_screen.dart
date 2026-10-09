@@ -1,9 +1,9 @@
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
+import '../../core/widgets/app_scanner.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/widgets/labeled_tool_button.dart';
@@ -53,7 +53,10 @@ Future<String?> _scanBarcodeDialog(BuildContext context) async {
               child: ClipRRect(
                 borderRadius:
                     const BorderRadius.vertical(bottom: Radius.circular(12)),
-                child: MobileScanner(
+                child: AppScanner(
+                  // Satu-tembak: di mode Telegram bingkai menempel di barcode
+                  // sebentar sebelum dialog menutup.
+                  lockDelay: const Duration(milliseconds: 450),
                   onDetect: (capture) {
                     final barcode = capture.barcodes.firstOrNull?.rawValue;
                     if (barcode != null && barcode.isNotEmpty) {

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import '../../core/widgets/app_scanner.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -1990,8 +1991,11 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
         backgroundColor: Colors.black,
         body: Stack(
           children: [
-            MobileScanner(
+            AppScanner(
               controller: _scannerCtrl!,
+              // Mode Telegram: bingkai mengikuti barcode; dilepas 500 ms
+              // setelah satu barang diproses (scan beruntun).
+              releaseAfter: const Duration(milliseconds: 500),
               onDetect: (capture) {
                 final barcode = capture.barcodes.firstOrNull?.rawValue;
                 if (barcode == null) return;
@@ -2014,11 +2018,9 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
                   _handleBarcode(barcode);
                 }
               },
-            ),
-            // Overlay panduan visual (dekoratif — TIDAK membatasi area deteksi;
-            // engine tetap membaca barcode dari seluruh frame).
-            Positioned.fill(
-              child: IgnorePointer(
+              // Overlay panduan visual (dekoratif — TIDAK membatasi area
+              // deteksi); disembunyikan bila bingkai ala Telegram aktif.
+              legacyOverlay: IgnorePointer(
                 child: _ScanGuideOverlay(controller: _scanPulseController),
               ),
             ),
