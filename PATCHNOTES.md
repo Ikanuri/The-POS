@@ -8,6 +8,12 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 9 Oktober 2026 (v3.5.0 — Menu bawah & Ringkasan baru)
+
+- **Menu bawah melayang ala Telegram**: berbentuk pil yang tidak menempel tepi layar, penanda tab meluncur halus, lencana angka di tab Kasir.
+- **Ikon menu bawah baru** (bukan ikon bawaan): Ringkasan, Kasir (struk), Produk (kotak), Pelanggan, Laporan (diagram lingkar), Pengaturan (penggeser).
+- **Halaman Ringkasan didesain ulang**: sapaan + nama toko, kartu besar omzet hari ini dengan selisih dari kemarin, kartu Minggu/Bulan/Rata-rata, grafik per jam berbatang bulat (jam tersibuk ditandai), status stok dengan label warna, dan produk terlaris dengan batang perbandingan.
+
 ## 9 Oktober 2026 (v3.4.0 — Tampilan baru di semua halaman)
 
 - **Layar kosong lebih ramah**: "Belum ada…/Tidak ada…" kini tampil dengan ikon bulat lembut dan animasi masuk di Laporan, Produk, Usulan, Laci Meja, dan Pengaturan.
