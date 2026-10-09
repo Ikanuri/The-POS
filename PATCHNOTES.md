@@ -8,6 +8,12 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 9 Oktober 2026 (v3.12.0 — Tepi memudar & layar bayar)
+
+- **Bagian bawah layar kini memudar halus** di atas bilah tab (tidak lagi terpotong kasar), seperti cart bar.
+- **Daftar Produk**: item memudar bertahap di bawah kolom cari saat digulir, bukan terpotong tegas.
+- **Layar Bayar**: pilihan metode pembayaran jadi pil terracotta; kartu info Pra-Bayar, Lunasi Hutang, Pre-order, dan Bayar Nanti kini putih bersih.
+
 ## 9 Oktober 2026 (v3.11.1 — Layar kosong sub-pengaturan)
 
 - **Tampilan kosong yang ramah** di Crash Log, Pengeluaran, dan Kategori Harga (ikon + penjelasan), seragam dengan layar lain.

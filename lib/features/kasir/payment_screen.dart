@@ -1586,7 +1586,6 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                 if (_prabayarEntries.isNotEmpty) ...[
                   const SizedBox(height: 8),
                   Card(
-                    color: scheme.primaryContainer.withOpacity(0.35),
                     child: Padding(
                       padding: const EdgeInsets.all(12),
                       child: Column(
@@ -1691,7 +1690,6 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                 if (_debtSettlementEntries.isNotEmpty) ...[
                   const SizedBox(height: 8),
                   Card(
-                    color: scheme.tertiaryContainer.withOpacity(0.35),
                     child: Padding(
                       padding: const EdgeInsets.all(12),
                       child: Column(
@@ -1766,7 +1764,6 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                 if (_preorderSettlementEntries.isNotEmpty) ...[
                   const SizedBox(height: 8),
                   Card(
-                    color: scheme.tertiaryContainer.withOpacity(0.35),
                     child: Padding(
                       padding: const EdgeInsets.all(12),
                       child: Column(
@@ -2150,7 +2147,18 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                             _tendered = 0;
                           });
                         },
-                        selectedColor: scheme.primaryContainer,
+                        // Gaya Landing: pil, aktif = terracotta penuh + teks putih.
+                        selectedColor: AppTheme.accent,
+                        backgroundColor: scheme.surface,
+                        showCheckmark: false,
+                        shape: const StadiumBorder(),
+                        side: BorderSide(
+                            color: selected
+                                ? AppTheme.accent
+                                : scheme.outlineVariant),
+                        labelStyle: TextStyle(
+                            color: selected ? Colors.white : null,
+                            fontWeight: selected ? FontWeight.w600 : null),
                       );
                     }),
                     // Bayar Nanti (tempo) TIDAK lagi dipilih lewat chip di sini —
@@ -2187,13 +2195,11 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
                 if (_selectedMethodType == 'tempo') ...[
                   Card(
-                    color: scheme.tertiaryContainer,
                     child: Padding(
                       padding: const EdgeInsets.all(12),
                       child: Row(
                         children: [
-                          Icon(Icons.schedule,
-                              color: scheme.onTertiaryContainer),
+                          Icon(Icons.schedule, color: scheme.tertiary),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
@@ -2201,7 +2207,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                               'dibayar belakangan. Dicatat sebagai hutang penuh '
                               '(${formatRupiah(_total)}). Tagih lewat Riwayat Transaksi.',
                               style: TextStyle(
-                                  color: scheme.onTertiaryContainer,
+                                  color: scheme.onSurfaceVariant,
                                   fontSize: 12),
                             ),
                           ),

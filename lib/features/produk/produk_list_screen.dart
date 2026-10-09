@@ -1,3 +1,4 @@
+import '../../core/widgets/scroll_edge_fade.dart';
 import '../../core/widgets/app_filter_chip.dart';
 import '../../core/services/kasir_sticker_service.dart';
 import '../../core/widgets/app_empty_state.dart';
@@ -274,49 +275,55 @@ class _ProdukListScreenState extends ConsumerState<ProdukListScreen>
             error: (_, __) => const SizedBox.shrink(),
           ),
           Expanded(
-            child: productsAsync.when(
-              data: (allProds) {
-                final prods = lowStockFilter
-                    ? allProds.where((p) => lowStockIds.contains(p.id)).toList()
-                    : allProds;
-                if (prods.isEmpty) {
-                  return AppEmptyState(
-                    query.isEmpty
-                        ? 'Belum ada produk'
-                        : 'Produk tidak ditemukan',
-                    icon: Icons.inventory_2_outlined,
-                    sticker: ref
-                        .watch(kasirStickerProvider(query.isEmpty
-                            ? KasirStickerSlot.empty
-                            : KasirStickerSlot.notFound))
-                        .valueOrNull,
-                    action: (canEdit && query.isEmpty)
-                        ? FilledButton.icon(
-                            style: FilledButton.styleFrom(
-                                minimumSize: const Size(0, 48)),
-                            onPressed: () => _openForm('/produk/baru'),
-                            icon: const Icon(Icons.add),
-                            label: const Text('Tambah Produk'),
-                          )
-                        : null,
+            // Item memudar halus di bawah kolom cari/chip (bukan terpotong).
+            child: ScrollEdgeFade(
+              top: 16,
+              child: productsAsync.when(
+                data: (allProds) {
+                  final prods = lowStockFilter
+                      ? allProds
+                          .where((p) => lowStockIds.contains(p.id))
+                          .toList()
+                      : allProds;
+                  if (prods.isEmpty) {
+                    return AppEmptyState(
+                      query.isEmpty
+                          ? 'Belum ada produk'
+                          : 'Produk tidak ditemukan',
+                      icon: Icons.inventory_2_outlined,
+                      sticker: ref
+                          .watch(kasirStickerProvider(query.isEmpty
+                              ? KasirStickerSlot.empty
+                              : KasirStickerSlot.notFound))
+                          .valueOrNull,
+                      action: (canEdit && query.isEmpty)
+                          ? FilledButton.icon(
+                              style: FilledButton.styleFrom(
+                                  minimumSize: const Size(0, 48)),
+                              onPressed: () => _openForm('/produk/baru'),
+                              icon: const Icon(Icons.add),
+                              label: const Text('Tambah Produk'),
+                            )
+                          : null,
+                    );
+                  }
+                  return ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
+                    itemCount: prods.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    itemBuilder: (context, i) => _ProductTile(
+                      product: prods[i],
+                      canEdit: canEdit,
+                      onOpen: _openForm,
+                      basePrice: basePrices[prods[i].id],
+                      lowStock: lowStockIds.contains(prods[i].id),
+                      isDark: isDark,
+                    ),
                   );
-                }
-                return ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(14, 6, 14, 24),
-                  itemCount: prods.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
-                  itemBuilder: (context, i) => _ProductTile(
-                    product: prods[i],
-                    canEdit: canEdit,
-                    onOpen: _openForm,
-                    basePrice: basePrices[prods[i].id],
-                    lowStock: lowStockIds.contains(prods[i].id),
-                    isDark: isDark,
-                  ),
-                );
-              },
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(child: Text('Error: $e')),
+                },
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (e, _) => Center(child: Text('Error: $e')),
+              ),
             ),
           ),
         ],
@@ -438,7 +445,9 @@ class _ProductTile extends ConsumerWidget {
           if (basePrice != null)
             Text(formatRupiah(basePrice!),
                 style: AppTheme.numStyle(context,
-                    size: 14.5, weight: FontWeight.w600, color: scheme.primary)),
+                    size: 14.5,
+                    weight: FontWeight.w600,
+                    color: scheme.primary)),
           if (canEdit)
             IconButton(
               icon: const Icon(Icons.edit_outlined, size: 19),
@@ -460,21 +469,21 @@ class _ProductTile extends ConsumerWidget {
     return Card(
       margin: EdgeInsets.zero,
       child: Dismissible(
-      key: ValueKey(product.id),
-      direction: DismissDirection.endToStart,
-      confirmDismiss: (_) async {
-        await _confirmDeactivate(context, ref);
-        return false; // stream akan memperbarui daftar sendiri
-      },
-      background: Container(
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 20),
-        color: scheme.errorContainer,
-        child:
-            Icon(Icons.visibility_off_outlined, color: scheme.onErrorContainer),
+        key: ValueKey(product.id),
+        direction: DismissDirection.endToStart,
+        confirmDismiss: (_) async {
+          await _confirmDeactivate(context, ref);
+          return false; // stream akan memperbarui daftar sendiri
+        },
+        background: Container(
+          alignment: Alignment.centerRight,
+          padding: const EdgeInsets.only(right: 20),
+          color: scheme.errorContainer,
+          child: Icon(Icons.visibility_off_outlined,
+              color: scheme.onErrorContainer),
+        ),
+        child: tile,
       ),
-      child: tile,
-    ),
     );
   }
 }

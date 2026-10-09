@@ -48,7 +48,6 @@ class _CrashLogScreenState extends State<CrashLogScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Log Error Terakhir'),

@@ -1,3 +1,4 @@
+import '../../core/widgets/scroll_edge_fade.dart';
 import '../../core/theme/app_overlays.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -122,7 +123,10 @@ class _MainShellState extends ConsumerState<MainShell> {
       // `PelangganListScreen`/`LaporanScreen`/`PengaturanScreen`), bukan di
       // sini lagi. `SyncScreen` sendiri (sub-halaman Pengaturan) TIDAK
       // dipasangi (sudah tampil penuh di badan layarnya sendiri).
-      body: widget.child,
+      // Tepi bawah memudar ke latar (bukan terpotong tegas di atas nav);
+      // tab Kasir punya cart bar melayang sendiri -> tanpa pemudaran.
+      body: ScrollEdgeFade(
+          bottom: location == '/kasir' ? 0 : 26, child: widget.child),
       bottomNavigationBar: Stack(
         key: _bottomBarKey,
         children: [
