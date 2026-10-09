@@ -133,12 +133,24 @@ class PerfDiagState {
     );
   }
 
-  /// Ringkasan teks (untuk dicatat/dikirim saat melaporkan hasil uji).
+  /// Hanya yang BERBEDA dari normal (kosong = semua normal).
   String summary() => toMap()
       .entries
       .where((e) => e.value != PerfDiagState.normal.toMap()[e.key])
       .map((e) => '${e.key}=${e.value ? "ON" : "OFF"}')
       .join(', ');
+
+  /// SEMUA saklar (ON/OFF) - yang bukan normal diberi tanda `*`. Dipakai
+  /// tombol "Salin pengaturan" supaya laporan uji lengkap & tak ambigu
+  /// (saklar uji seperti meter/overlay/hideCart normalnya OFF).
+  String summaryAll() {
+    final normal = PerfDiagState.normal.toMap();
+    return toMap()
+        .entries
+        .map((e) =>
+            '${e.key}=${e.value ? "ON" : "OFF"}${e.value != normal[e.key] ? "*" : ""}')
+        .join(', ');
+  }
 }
 
 /// Penyimpanan global saklar diagnostik. Widget membaca `PerfDiag.s` pada

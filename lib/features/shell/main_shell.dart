@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/diagnostics/perf_diag.dart';
 import '../../core/providers/device_provider.dart';
+import '../kasir/kasir_style.dart';
 import '../../core/providers/laci_meja_provider.dart';
 import '../../core/providers/license_provider.dart';
 import '../../core/services/backup_reminder.dart';
@@ -103,7 +105,18 @@ class _MainShellState extends ConsumerState<MainShell> {
     final kasirIndex = tabs.indexWhere((t) => t.path == '/kasir');
     final laciMejaCount = ref.watch(laciMejaOpenCountProvider).valueOrNull ?? 0;
 
+    // Diagnostik performa: Scaffold shell ikut mengecilkan body saat keyboard
+    // muncul (itu yang membuat layar Kasir di dalamnya di-layout ulang tiap
+    // frame). Saklar uji `keyboardResize=false` mematikannya KHUSUS tab Kasir
+    // gaya Baru.
+    final shellResize = shellResizesForKeyboard(
+      onKasirTab: location.startsWith('/kasir'),
+      modernStyle: ref.watch(kasirStyleProvider) == KasirStyle.modern,
+      diag: PerfDiag.s,
+    );
+
     return Scaffold(
+      resizeToAvoidBottomInset: shellResize,
       // Item 21 (Fase 1) — status sync dulu tampil sbg banner tunggal di
       // sini, di ATAS setiap layar tab (termasuk di atas toolbar/AppBar
       // masing-masing). Follow-up user: posisinya harus "inline" spt
@@ -398,3 +411,13 @@ class _QuickMenuIcon extends StatelessWidget {
     );
   }
 }
+
+/// Apakah `Scaffold` shell boleh mengecilkan body saat keyboard muncul. Normal
+/// selalu true; false HANYA bila saklar uji `keyboardResize` dimatikan di tab
+/// Kasir gaya Baru (lihat Pengaturan > Diagnostik Performa).
+bool shellResizesForKeyboard({
+  required bool onKasirTab,
+  required bool modernStyle,
+  required PerfDiagState diag,
+}) =>
+    !(onKasirTab && modernStyle && !diag.keyboardResize);

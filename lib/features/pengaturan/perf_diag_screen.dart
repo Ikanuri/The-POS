@@ -151,13 +151,12 @@ class PerfDiagScreen extends StatelessWidget {
                         style: FilledButton.styleFrom(
                             minimumSize: const Size(0, 44)),
                         onPressed: () {
-                          final t = s.summary();
-                          Clipboard.setData(ClipboardData(
-                              text: t.isEmpty ? 'semua normal' : t));
+                          final t = s.summaryAll();
+                          Clipboard.setData(ClipboardData(text: t));
                           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                              content: Text(t.isEmpty
-                                  ? 'Semua normal — disalin'
-                                  : 'Disalin: $t')));
+                              content: Text(s.summary().isEmpty
+                                  ? 'Semua normal — daftar lengkap disalin'
+                                  : 'Disalin (tanda * = beda dari normal): $t')));
                         },
                         child: const Text('Salin pengaturan'),
                       ),

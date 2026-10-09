@@ -980,4 +980,70 @@ void main() {
       await db.close();
     });
   });
+
+  group('pencarian global', () {
+    testWidgets(
+        'kategori terpilih + mengetik = hasil dari SEMUA produk; '
+        'kolom cari dikosongkan = kembali ke kategori', (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      await db.into(db.productGroups).insert(ProductGroupsCompanion.insert(
+          id: const Value(910), name: const Value('Minuman')));
+      await db.into(db.productGroups).insert(ProductGroupsCompanion.insert(
+          id: const Value(911), name: const Value('Snack')));
+      Future<void> addIn(String name, int group) async {
+        final id = await _addProduct(db, name);
+        await (db.update(db.products)..where((t) => t.id.equals(id)))
+            .write(ProductsCompanion(productGroupId: Value(group)));
+      }
+
+      await addIn('Teh Botol', 910);
+      await addIn('Keripik Singkong', 911);
+      await _pumpKasir(tester, db,
+          prefs: {...modern, 'kasir_grid_view': false});
+
+      await tester.tap(find.byKey(const Key('landing-cat-910')));
+      await tester.pumpAndSettle();
+      expect(find.text('Teh Botol'), findsOneWidget);
+      expect(find.text('Keripik Singkong'), findsNothing,
+          reason: 'kategori Minuman: tanpa Snack');
+
+      await tester.enterText(find.byKey(const Key('modern-search')), 'keripik');
+      await tester.pumpAndSettle();
+      expect(find.text('Keripik Singkong'), findsOneWidget,
+          reason: 'pencarian global: produk di kategori lain tetap ketemu');
+      expect(find.text('Teh Botol'), findsNothing);
+
+      await tester.enterText(find.byKey(const Key('modern-search')), '');
+      await tester.pumpAndSettle();
+      expect(find.text('Teh Botol'), findsOneWidget);
+      expect(find.text('Keripik Singkong'), findsNothing,
+          reason: 'kosongkan teks -> filter kategori berlaku lagi');
+      await _drain(tester);
+      await db.close();
+    });
+  });
+
+  group('keyboard di landing', () {
+    testWidgets(
+        'kolom cari TIDAK bergeser saat keyboard naik (posisi dari '
+        'ukuran layar, bukan area yang menyusut) - tanpa layout ulang '
+        'sapaan', (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      await _addProduct(db, 'Gula Pasir');
+      await _pumpKasir(tester, db, prefs: modern, size: const Size(430, 900));
+      double y() =>
+          tester.getTopLeft(find.byKey(const Key('modern-search-pill'))).dy;
+      final before = y();
+      tester.view.viewInsets = const FakeViewPadding(bottom: 420);
+      addTearDown(tester.view.resetViewInsets);
+      for (var i = 0; i < 12; i++) {
+        await tester.pump(const Duration(milliseconds: 40));
+      }
+      expect(y(), closeTo(before, 1),
+          reason: 'pil tetap di tempat saat keyboard terbuka');
+      expect(find.byKey(const Key('kasir-landing')), findsOneWidget);
+      await _drain(tester);
+      await db.close();
+    });
+  });
 }

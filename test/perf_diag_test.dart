@@ -7,6 +7,8 @@ import 'package:lottie/lottie.dart';
 import 'package:the_pos/core/diagnostics/perf_diag.dart';
 import 'package:the_pos/core/widgets/press_scale.dart';
 import 'package:the_pos/features/pengaturan/perf_diag_screen.dart';
+import 'package:the_pos/features/shell/main_shell.dart'
+    show shellResizesForKeyboard;
 
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:the_pos/core/database/app_database.dart';
@@ -191,6 +193,30 @@ void main() {
     expect(PerfDiag.s.summary(), isEmpty);
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));
+  });
+
+  test('summaryAll: SEMUA saklar tampil, yang beda dari normal bertanda *', () {
+    final all =
+        const PerfDiagState(keyboardResize: false, meter: true).summaryAll();
+    expect(all, contains('stickers=ON,'));
+    expect(all, contains('keyboardResize=OFF*'));
+    expect(all, contains('meter=ON*'));
+    expect(all, contains('perfOverlay=OFF,'),
+        reason: 'saklar uji yang normalnya OFF tetap tercantum');
+    expect(all.split(',').length, 13);
+    expect(PerfDiagState.normal.summaryAll().contains('*'), isFalse);
+  });
+
+  test(
+      'Scaffold shell: hanya TIDAK mengecil bila Kasir gaya Baru + saklar '
+      'keyboardResize dimatikan', () {
+    const off = PerfDiagState(keyboardResize: false);
+    bool f(bool kasir, bool modern, PerfDiagState d) => shellResizesForKeyboard(
+        onKasirTab: kasir, modernStyle: modern, diag: d);
+    expect(f(true, true, PerfDiagState.normal), isTrue);
+    expect(f(true, true, off), isFalse);
+    expect(f(true, false, off), isTrue, reason: 'Klasik tidak terpengaruh');
+    expect(f(false, true, off), isTrue, reason: 'tab lain tidak terpengaruh');
   });
 
   group('efek saklar pada layar Kasir gaya Baru', () {

@@ -62,8 +62,10 @@ extension _KasirModernX on _KasirScreenState {
     final selectedGroup = ref.watch(_kasirSelectedGroupProvider);
     final showAll = ref.watch(_kasirShowAllProvider(_cartId));
     final isLanding = query.isEmpty && selectedGroup == null && !showAll;
-    final productsAsync =
-        ref.watch(_kasirProductsProvider((query, selectedGroup)));
+    // Pencarian selalu GLOBAL: begitu ada teks, filter kategori diabaikan
+    // (kategori kembali berlaku saat kolom cari dikosongkan).
+    final productsAsync = ref.watch(
+        _kasirProductsProvider((query, query.isEmpty ? selectedGroup : null)));
     final hasSticker =
         ref.watch(kasirStickerProvider(KasirStickerSlot.landing)).valueOrNull !=
             null;
@@ -79,8 +81,10 @@ extension _KasirModernX on _KasirScreenState {
     // Diagnostik: keyboard memicu layout ulang tiap frame (cart bar ikut
     // naik). Saklar menguji: body tidak dikecilkan / cart bar disembunyikan.
     final diag = PerfDiag.s;
-    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
-    final hideCart = diag.hideCartWhileTyping && keyboardOpen;
+    // viewInsets HANYA dibaca bila saklar uji aktif: membacanya membuat seluruh
+    // layar dibangun ulang tiap frame selama keyboard bergeser.
+    final hideCart =
+        diag.hideCartWhileTyping && MediaQuery.viewInsetsOf(context).bottom > 0;
     return Scaffold(
       resizeToAvoidBottomInset: diag.keyboardResize,
       body: Stack(
@@ -147,10 +151,20 @@ extension _KasirModernX on _KasirScreenState {
                   // Tinggi area di bawah header menentukan posisi kolom cari
                   // di landing: dipusatkan secara vertikal (seperti katalog
                   // HTML), bukan menempel di atas.
-                  child: LayoutBuilder(builder: (context, c) {
+                  child: Builder(builder: (context) {
+                    // Posisi tengah dihitung dari ukuran LAYAR (bukan tinggi area
+                    // yang menyusut oleh keyboard) supaya kolom cari TIDAK bergeser
+                    // & tidak memicu layout ulang sapaan/stiker tiap frame saat
+                    // keyboard naik.
+                    final vp = MediaQuery.viewPaddingOf(context);
+                    final areaH = MediaQuery.sizeOf(context).height -
+                        vp.top -
+                        vp.bottom -
+                        56 -
+                        80;
                     final heroEst = (hasSticker ? 136.0 : 0.0) + 88.0;
                     final topPad =
-                        (c.maxHeight * 0.46 - heroEst - 26).clamp(8.0, 260.0);
+                        (areaH * 0.46 - heroEst - 26).clamp(8.0, 260.0);
                     return Column(
                       children: [
                         _ModernSearchStage(
@@ -1359,7 +1373,7 @@ class _ModernCartBar extends ConsumerWidget {
 
     return Padding(
       padding: EdgeInsets.fromLTRB(
-          12, 0, 12, 10 + MediaQuery.of(context).padding.bottom),
+          12, 0, 12, 10 + MediaQuery.paddingOf(context).bottom),
       child: Container(
         key: const Key('modern-cart-bar'),
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
@@ -1689,7 +1703,7 @@ class _ModernHeldSheet extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
     final heldAsync = ref.watch(_heldOrdersListProvider);
-    final maxH = MediaQuery.of(context).size.height * 0.78;
+    final maxH = MediaQuery.sizeOf(context).height * 0.78;
 
     return SafeArea(
       child: ConstrainedBox(
