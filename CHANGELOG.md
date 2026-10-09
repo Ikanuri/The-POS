@@ -7,6 +7,10 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 > Dihasilkan dari `git log`. Saat menambah commit baru, tambahkan entri di
 > bawah tanggal yang sesuai (paling atas).
 
+## 2026-10-09 (penyesuaian desain Kasir gaya Baru)
+
+- feat(kasir): `7c29317` — penyesuaian: kolom cari, hint mulus, header, tombol pojok berwarna, chip satu baris, landing terpusat, teks stiker kustom (v3.1.0+199)
+
 ## 2026-10-08 (redesain Kasir gaya Baru ala katalog HTML)
 
 - feat(kasir): `4d12afc` — langkah E: produk kartu lembut, chip pil

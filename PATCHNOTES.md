@@ -8,6 +8,18 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 9 Oktober 2026 (Penyempurnaan Kasir Gaya Baru)
+
+- **Kolom cari lebih bersih**: tidak ada lagi lingkaran kedua di dalamnya, garis fokus lebih lembut, dan blok teks yang terpilih berujung membulat.
+- **Saran di kolom cari berganti lebih mulus** (naik dan memudar, tanpa bergeser ke samping).
+- **Header ringkas**: ikon dan nama aplikasi di kiri; tombol tampilan grid/daftar dan **saklar terang/gelap berbentuk saklar listrik** di pojok kanan atas.
+- **Tombol pojok kanan bawah berwarna** sesuai fungsinya, dengan keterangan kecil di bawah tiap tombol.
+- **Chip kategori satu baris**, digeser ke samping bila banyak.
+- **Di halaman awal, kolom cari berada di tengah layar** seperti di katalog online.
+- **Teks di bawah stiker bisa diubah owner** (Pengaturan > Stiker & Teks Landing Kasir) dan otomatis ikut tampil di perangkat kasir/asisten setelah sinkron. Stiker unggahan owner juga ikut tersinkron.
+
+---
+
 ## 8 Oktober 2026 (Kasir Gaya Baru, uji di build beta)
 
 - **Pilihan "Gaya Kasir" di Pengaturan: Klasik atau Baru.** Tampilan lama tetap ada dan tidak berubah; pindah kapan saja.
