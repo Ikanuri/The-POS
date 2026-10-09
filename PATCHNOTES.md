@@ -8,6 +8,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 9 Oktober 2026 (v3.13.0 — Form Produk dirapikan)
+
+- **Form Produk**: isian nama, kode, stok minimum, dan kategori kini dikelompokkan dalam satu kartu "Info Produk"; label "Dasar" pada satuan jadi pil terracotta lembut.
+
 ## 9 Oktober 2026 (v3.12.0 — Tepi memudar & layar bayar)
 
 - **Bagian bawah layar kini memudar halus** di atas bilah tab (tidak lagi terpotong kasar), seperti cart bar.

@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
+import '../../core/widgets/app_form_section.dart';
 import '../../core/widgets/app_scanner.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -694,6 +695,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                                 ],
                               ),
                             ),
+                          AppFormSection(title: 'Info Produk', children: [
                           TextFormField(
                             controller: _nameCtrl,
                             readOnly: _readOnly,
@@ -709,7 +711,6 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                                     ? 'Nama wajib diisi'
                                     : null),
                           ),
-                          const SizedBox(height: 12),
                           TextFormField(
                             controller: _kodeCtrl,
                             readOnly: _readOnly,
@@ -719,7 +720,6 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                               hintText: 'Contoh: IMI-001 (opsional)',
                             ),
                           ),
-                          const SizedBox(height: 12),
                           // Item 11: ambang stok menipis (satuan dasar).
                           TextFormField(
                             controller: _minStockCtrl,
@@ -734,7 +734,6 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                                   'di bawah angka ini',
                             ),
                           ),
-                          const SizedBox(height: 12),
                           DropdownButtonFormField<int?>(
                             // Guard: bila kategori terpilih sudah dihapus di layar
                             // lain, jatuhkan ke null agar dropdown tidak crash
@@ -788,6 +787,7 @@ class _ProdukFormScreenState extends ConsumerState<ProdukFormScreen> {
                                     _markDirty();
                                   },
                           ),
+                          ]),
                           const SizedBox(height: 20),
                           Row(
                             children: [
@@ -2248,9 +2248,14 @@ class _UnitCardState extends ConsumerState<_UnitCard> {
                 if (widget.entry.isBaseUnit) ...[
                   const SizedBox(width: 8),
                   Chip(
-                    label: const Text('Dasar', style: TextStyle(fontSize: 10)),
+                    label: Text('Dasar',
+                        style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: scheme.primary)),
                     visualDensity: VisualDensity.compact,
-                    backgroundColor: scheme.primaryContainer,
+                    backgroundColor: scheme.primary.withOpacity(0.12),
+                    shape: const StadiumBorder(),
                     side: BorderSide.none,
                     padding: EdgeInsets.zero,
                   ),
@@ -2274,7 +2279,7 @@ class _UnitCardState extends ConsumerState<_UnitCard> {
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
                   color: scheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(
                   children: [

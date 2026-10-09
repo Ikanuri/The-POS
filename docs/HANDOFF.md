@@ -6,6 +6,8 @@ mencerminkan keadaan sekarang. Histori panjang ada di
 [CHANGELOG.md](../CHANGELOG.md); rencana yang masih menggantung ada di
 [PLAN.md](../PLAN.md).
 
+_Update (9 Okt, v3.13.0+218, BETA) — produk_form_screen: 4 isian atas dibungkus `AppFormSection('Info Produk')` (separator SizedBox dihapus, gap bawaan 12); chip 'Dasar' pil aksen; kotak stok radius 12. Header 'Satuan & Harga'/'Varian' + _UnitCard belum dirombak (sengaja minimal: file 2986 baris, 15 test form hijau). Berikutnya: Sync/Backup/Printer, Penerimaan Barang/Opname, form Pelanggan, Setup.
+
 _Update (9 Okt, v3.12.0+217, BETA) — `core/widgets/scroll_edge_fade.dart` (`ScrollEdgeFade(top,bottom)`, overlay gradien ke scaffoldBackgroundColor, IgnorePointer): dipasang di main_shell (bottom 26, kecuali '/kasir') dan daftar Produk (top 16, padding atas list 12). payment_screen: ChoiceChip metode = pil accent (tetap ChoiceChip agar test lama jalan); tint kartu Pra-Bayar/Hutang/Pre-order/Tempo dihapus. Suite penuh v3.11.1 hijau (2164); test terkait v3.12 hijau, suite penuh belum diulang. Berikutnya (urut dampak): form Produk, struk, sub-layar Pengaturan sisa (Sync/Backup/Printer), Penerimaan Barang/Opname, form Pelanggan, Setup.
 
 _Update (9 Okt, v3.11.1+216, BETA) — sub-layar Pengaturan tahap 2: crash_log/expenses/kategori_harga(2) -> `AppEmptyState`; tint antrean sync_screen benar2 dihapus (tahap 1 salah sasaran). Sisanya (backup, printer, alih_owner, order_share, dll) dibiarkan: kartu merah = peringatan semantik. Suite penuh belum dikonfirmasi hijau; test terkait (kategori_harga, sync_screen, expenses) hijau.
