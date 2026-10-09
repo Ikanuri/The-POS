@@ -8,6 +8,13 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 9 Oktober 2026 (v3.6.0 — Laporan baru)
+
+- **Halaman Laporan didesain ulang**: header dengan rentang tanggal, tombol bulat untuk pilih tanggal & ekspor, pemilih tab berupa chip pil (geser kiri/kanan tetap bisa).
+- **Ringkasan Laporan**: kartu besar Laba Bersih, lalu kartu Omzet, HPP, Laba Kotor, Pengeluaran, Selisih Kas dengan ikon berwarna; metode pembayaran dalam kartu.
+- **Produk, Pelanggan, Transaksi, Hutang, Pengeluaran** kini berupa kartu membulat dengan nominal berfont serif; Pengeluaran punya kartu utama merah.
+- **Chip kategori Kontrol Stok di Ringkasan** kini sama persis gayanya dengan chip kategori di Kasir.
+
 ## 9 Oktober 2026 (v3.5.0 — Menu bawah & Ringkasan baru)
 
 - **Menu bawah melayang ala Telegram**: berbentuk pil yang tidak menempel tepi layar, penanda tab meluncur halus, lencana angka di tab Kasir.

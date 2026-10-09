@@ -9,6 +9,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-10-09 (penyesuaian desain Kasir gaya Baru)
 
+- feat(ui): `ee3a31c` — redesain Laporan + AppFilterChip (v3.6.0+210)
 - feat(ui): `5c1d97b` — AppNavBar melayang + AppIcon + redesain Ringkasan (v3.5.0+209)
 - fix(kasir): `174d772` — cart bar tanpa pita latar (extendBody) (v3.4.4+208)
 - feat(ui): `4216dd8` — tahap 2c: judul seksi seragam, kolom cari pil tambahan (v3.4.3+207)
