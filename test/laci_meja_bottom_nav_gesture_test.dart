@@ -178,7 +178,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final menuTop = tester.getTopLeft(find.byTooltip('Buka Kasir')).dy;
-    final barTop = tester.getTopLeft(find.byType(NavigationBar)).dy;
+    final barTop = tester.getTopLeft(find.byKey(const Key('app-nav-bar'))).dy;
     expect(menuTop, lessThan(barTop),
         reason: 'menu wajib muncul DI ATAS bottom bar, bukan menimpa/di '
             'samping bar itu sendiri');

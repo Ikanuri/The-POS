@@ -11,25 +11,23 @@ import '../../core/providers/license_provider.dart';
 import '../../core/services/backup_reminder.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_motion.dart';
+import '../../core/widgets/app_icons.dart';
+import '../../core/widgets/app_nav_bar.dart';
 
 class _TabItem {
-  const _TabItem(this.path, this.label, this.icon, this.selectedIcon);
+  const _TabItem(this.path, this.label, this.kind);
   final String path;
   final String label;
-  final IconData icon;
-  final IconData selectedIcon;
+  final AppIconKind kind;
 }
 
 const _allTabs = [
-  // Susulan (permintaan user) — ikon Ringkasan dulu `grid_view` (kotak-kotak,
-  // tidak menggambarkan "ringkasan" apa pun); diganti ikon kertas+pensil
-  // (`note_alt`) yang lazim dipakai untuk ringkasan/catatan.
-  _TabItem('/ringkasan', 'Ringkasan', Icons.note_alt_outlined, Icons.note_alt),
-  _TabItem('/kasir', 'Kasir', Icons.point_of_sale_outlined, Icons.point_of_sale),
-  _TabItem('/produk', 'Produk', Icons.inventory_2_outlined, Icons.inventory_2),
-  _TabItem('/pelanggan', 'Pelanggan', Icons.people_outline, Icons.people),
-  _TabItem('/laporan', 'Laporan', Icons.bar_chart_outlined, Icons.bar_chart),
-  _TabItem('/pengaturan', 'Pengaturan', Icons.settings_outlined, Icons.settings),
+  _TabItem('/ringkasan', 'Ringkasan', AppIconKind.ringkasan),
+  _TabItem('/kasir', 'Kasir', AppIconKind.kasir),
+  _TabItem('/produk', 'Produk', AppIconKind.produk),
+  _TabItem('/pelanggan', 'Pelanggan', AppIconKind.pelanggan),
+  _TabItem('/laporan', 'Laporan', AppIconKind.laporan),
+  _TabItem('/pengaturan', 'Pengaturan', AppIconKind.pengaturan),
 ];
 
 class MainShell extends ConsumerStatefulWidget {
@@ -100,7 +98,6 @@ class _MainShellState extends ConsumerState<MainShell> {
     var selected = tabs.indexWhere((t) => location.startsWith(t.path));
     if (selected < 0) selected = 0;
 
-    final cs = Theme.of(context).colorScheme;
     final kasirIndex = tabs.indexWhere((t) => t.path == '/kasir');
     final laciMejaCount = ref.watch(laciMejaOpenCountProvider).valueOrNull ?? 0;
 
@@ -126,58 +123,37 @@ class _MainShellState extends ConsumerState<MainShell> {
       // sini lagi. `SyncScreen` sendiri (sub-halaman Pengaturan) TIDAK
       // dipasangi (sudah tampil penuh di badan layarnya sendiri).
       body: widget.child,
-      bottomNavigationBar: DecoratedBox(
+      bottomNavigationBar: Stack(
         key: _bottomBarKey,
-        decoration: BoxDecoration(
-          border: Border(
-            top: BorderSide(color: cs.outlineVariant, width: 0.5),
+        children: [
+          AppNavBar(
+            selected: selected,
+            onSelect: (i) => context.go(tabs[i].path),
+            items: [
+              for (final t in tabs)
+                AppNavItem(t.kind, t.label,
+                    badge: t.path == '/kasir' ? laciMejaCount : 0),
+            ],
           ),
-        ),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final itemWidth = constraints.maxWidth / tabs.length;
-            return Stack(
-              children: [
-                NavigationBar(
-                  // Indikator tab berpindah cepat & halus (bawaan M3 500 ms
-                  // terasa lamban).
-                  animationDuration: AppMotion.medium,
-                  selectedIndex: selected,
-                  onDestinationSelected: (i) => context.go(tabs[i].path),
-                  destinations: [
-                    for (final t in tabs)
-                      NavigationDestination(
-                        icon: t.path == '/kasir' && laciMejaCount > 0
-                            ? Badge(
-                                label: Text('$laciMejaCount'),
-                                child: Icon(t.icon))
-                            : Icon(t.icon),
-                        selectedIcon: t.path == '/kasir' && laciMejaCount > 0
-                            ? Badge(
-                                label: Text('$laciMejaCount'),
-                                child: Icon(t.selectedIcon))
-                            : Icon(t.selectedIcon),
-                        label: t.label,
-                      ),
-                  ],
-                ),
-                // Item 52 ("Laci Meja") — tekan-tahan tab Kasir (ala
-                // Telegram) membuka menu cepat Kasir/Laci Meja.
-                // `HitTestBehavior.translucent`: pointer event tetap
-                // diteruskan ke NavigationBar di baliknya, jadi tap SINGKAT
-                // tetap berfungsi normal (menang di gesture arena krn tidak
-                // ada timer long-press yg keburu terpicu) — tahan adalah
-                // perilaku TAMBAHAN, bukan pengganti. `RawGestureDetector`
-                // dgn `LongPressGestureRecognizer` durasi custom (permintaan
-                // user: delay tahan dipercepat) — `GestureDetector` biasa
-                // TIDAK bisa mengatur durasi long-press (selalu `kLongPress
-                // Timeout` 500ms bawaan Flutter).
-                if (kasirIndex >= 0)
+          // Item 52 ("Laci Meja") — tekan-tahan tab Kasir (ala Telegram)
+          // membuka menu cepat Kasir/Laci Meja. `translucent`: tap singkat
+          // tetap sampai ke tab di baliknya; tahan = perilaku TAMBAHAN.
+          // `LongPressGestureRecognizer` durasi custom (250 ms) — GestureDetector
+          // biasa selalu 500 ms.
+          if (kasirIndex >= 0)
+            Positioned.fill(
+              child: LayoutBuilder(builder: (context, constraints) {
+                // Area tab Kasir = lebar pil (maks 440, margin 12) / jumlah tab.
+                final barW = (constraints.maxWidth - 24).clamp(0.0, 440.0);
+                final itemWidth = barW / tabs.length;
+                final left = (constraints.maxWidth - barW) / 2 +
+                    itemWidth * kasirIndex;
+                return Stack(children: [
                   Positioned(
-                    left: itemWidth * kasirIndex,
+                    left: left,
                     width: itemWidth,
-                    top: 0,
-                    bottom: 0,
+                    top: 4,
+                    height: AppNavBar.height,
                     child: RawGestureDetector(
                       behavior: HitTestBehavior.translucent,
                       gestures: {
@@ -194,10 +170,10 @@ class _MainShellState extends ConsumerState<MainShell> {
                       },
                     ),
                   ),
-              ],
-            );
-          },
-        ),
+                ]);
+              }),
+            ),
+        ],
       ),
     );
   }

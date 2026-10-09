@@ -51,6 +51,14 @@ Dokumen lain: `DESAIN-REFERENSI-HTML.md` (asal gaya), `DESAIN-REFERENSI-TELEGRAM
 - **Status kosong**: stiker (`AppSticker`) + satu kalimat + satu aksi.
 - **Switch/Segmented**: aksen terracotta, bentuk pil.
 
+- **Bilah tab bawah**: `AppNavBar` (core/widgets/app_nav_bar.dart) — pil MELAYANG ala Telegram
+  (tinggi 60, margin 12/8, maks 440dp, bayangan melayang), indikator terpilih meluncur 260 ms
+  easeOutQuint, ikon + label 10.5, lencana. Ikon = `AppIcon` (core/widgets/app_icons.dart):
+  garis bulat 1.8 pada kisi 24, terpilih = duotone aksen. JANGAN pakai `Icons.*` untuk tab utama.
+- **Layar ringkasan/dasbor**: sapaan kecil + nama toko serif di header; satu kartu hero
+  bergradien terracotta untuk angka utama; kartu putih lain berisi ikon bulat warna fungsi;
+  masuk berurutan (`_Reveal`, fade+naik 10dp, jeda 60ms); chip status berbentuk pil.
+
 ## 4. Aturan implementasi
 - Ambil warna dari `Theme.of(context).colorScheme` / `AppTheme.*`; JANGAN hardcode warna baru
   kecuali token di atas.

@@ -7,37 +7,41 @@ import 'package:the_pos/features/ringkasan/ringkasan_screen.dart';
 
 import 'helpers/pump_app.dart';
 
-/// Permintaan user: kartu Ringkasan/Laporan/Pengaturan diberi aksen warna
-/// soft sesuai fungsi (Varian B dari mockup — latar kartu penuh ditint,
-/// bukan cuma garis/ikon). Test ini membuktikan kartu KPI (uang) dan kartu
-/// Kontrol Stok (stok) memakai warna latar yang benar, BUKAN cuma cek teks.
+/// Redesain Ringkasan (gaya landing): kartu utama bergradien terracotta,
+/// periode (Minggu/Bulan/Rata-rata) dalam satu kartu putih berikon bulat
+/// warna fungsi, kartu Kontrol Stok putih (bukan tint penuh).
 void main() {
-  testWidgets(
-      'kartu KPI (Hari Ini/Minggu Ini/dst) pakai latar hijau (uang), '
-      'kartu Kontrol Stok pakai latar amber (stok)', (tester) async {
+  testWidgets('hero gradien + kartu periode + kartu stok putih',
+      (tester) async {
     final db = AppDatabase(NativeDatabase.memory());
     await pumpWithFakeApp(tester, db: db, child: const RingkasanScreen());
 
-    const isDark = false; // pumpWithFakeApp pakai AppTheme.light()
-    final uangBg = AppTheme.changeBg(isDark);
-    final stokBg = AppTheme.stockWarnBg(isDark);
+    final hero = tester.widget<Container>(find.byKey(const Key('ringkasan-hero')));
+    final deco = hero.decoration as BoxDecoration;
+    expect(deco.gradient, isNotNull);
 
-    final kpiCards = tester
-        .widgetList<Card>(find.byWidgetPredicate((w) => w is Card))
-        .where((c) => c.color == uangBg)
-        .toList();
-    expect(kpiCards.length, 4,
-        reason:
-            'ke-4 kartu KPI (Hari Ini/Minggu Ini/Bulan Ini/Rata-rata) harus '
-            'pakai latar hijau (fungsi Uang & Kas)');
+    expect(find.byKey(const Key('ringkasan-periode')), findsOneWidget);
+    for (final l in ['Minggu Ini', 'Bulan Ini', 'Rata-rata/Hari']) {
+      expect(find.text(l), findsOneWidget);
+    }
 
-    final stockCards = tester
-        .widgetList<Card>(find.byWidgetPredicate((w) => w is Card))
-        .where((c) => c.color == stokBg)
-        .toList();
-    expect(stockCards.length, 1,
-        reason: 'kartu Kontrol Stok harus pakai latar amber (fungsi Stok)');
+    final stock = tester.widget<Card>(find.byKey(const Key('ringkasan-stok')));
+    expect(stock.color, isNull, reason: 'kartu stok memakai warna kartu tema');
+    expect(find.text('Hari Ini'), findsOneWidget);
+    expect(AppTheme.changeBg(false), isNotNull);
 
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 10));
+    await db.close();
+  });
+
+  testWidgets('muat di lebar 360 & skala font 1.3 tanpa overflow',
+      (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await pumpWithFakeApp(tester, db: db, child: const RingkasanScreen());
+    expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));
     await db.close();

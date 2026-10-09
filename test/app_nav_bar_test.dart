@@ -6,11 +6,10 @@ import 'package:go_router/go_router.dart';
 import 'package:the_pos/core/database/app_database.dart';
 import 'package:the_pos/core/providers/device_provider.dart';
 import 'package:the_pos/core/theme/app_theme.dart';
+import 'package:the_pos/core/widgets/app_icons.dart';
 import 'package:the_pos/features/shell/main_shell.dart';
 
-/// Susulan (permintaan user): ikon tab Ringkasan dulu `grid_view` (kotak-
-/// kotak, tidak menggambarkan "ringkasan" apa pun) — diganti ikon kertas +
-/// pensil.
+/// Bilah tab bawah melayang ala Telegram + ikon buatan sendiri (`AppIcon`).
 void main() {
   late AppDatabase db;
   setUp(() => db = AppDatabase(NativeDatabase.memory()));
@@ -53,20 +52,39 @@ void main() {
     );
   }
 
-  testWidgets('tab Ringkasan pakai ikon kertas+pensil, bukan grid kotak-kotak',
+  testWidgets('bilah tab melayang: ikon buatan sendiri, bukan Material Icons',
       (tester) async {
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(buildApp());
     await tester.pumpAndSettle();
 
-    expect(find.byIcon(Icons.note_alt_outlined), findsOneWidget);
-    expect(find.byIcon(Icons.grid_view_outlined), findsNothing,
-        reason: 'ikon grid lama tidak boleh dipakai lagi di bottom nav');
+    expect(find.byType(NavigationBar), findsNothing);
+    expect(find.byType(AppIcon), findsNWidgets(6));
+    expect(find.byIcon(Icons.note_alt_outlined), findsNothing);
+    expect(find.byIcon(Icons.point_of_sale_outlined), findsNothing);
 
-    // Ikon terpilih (versi terisi) muncul begitu tab Ringkasan aktif.
-    await tester.tap(find.text('Ringkasan'));
+    // Melayang: tidak menempel tepi layar (margin 12) & membulat penuh.
+    final pill = find.byKey(const Key('app-nav-bar'));
+    final r = tester.getRect(pill);
+    expect(r.left, greaterThanOrEqualTo(12));
+    expect(r.right, lessThanOrEqualTo(360 - 12));
+    expect(800 - r.bottom, greaterThanOrEqualTo(8));
+    final deco = tester.widget<Container>(pill).decoration as BoxDecoration;
+    expect((deco.borderRadius as BorderRadius).topLeft.x, r.height / 2);
+
+    // Indikator meluncur ke tab yang diketuk.
+    double ind() =>
+        tester.getTopLeft(find.byKey(const Key('app-nav-indicator'))).dx;
+    final before = ind();
+    await tester.tap(find.text('Produk'));
     await tester.pumpAndSettle();
-    expect(find.byIcon(Icons.note_alt), findsOneWidget);
-    expect(find.byIcon(Icons.grid_view), findsNothing);
+    expect(ind(), greaterThan(before));
+    expect(find.text('Layar /produk'), findsOneWidget);
+    // Hanya tab terpilih berisi (duotone).
+    final icons = tester.widgetList<AppIcon>(find.byType(AppIcon)).toList();
+    expect(icons.where((i) => i.filled).length, 1);
+    expect(icons.firstWhere((i) => i.filled).kind, AppIconKind.produk);
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 10));
