@@ -9,6 +9,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-10-09 (penyesuaian desain Kasir gaya Baru)
 
+- feat(diag): `0247df1` — build diagnostik performa (layar Diagnostik Performa, meter frame) + perbaikan Ticker saat dispose (v3.2.1+201)
 - feat(kasir): `19680d4` — tombol pojok (FAB) dihapus, empat tombol bulat pindah permanen ke header (landing berketerangan + saklar tema; kompak saat mengetik + grid/list); hint tidak terpotong (akar: jendela terjepit tinggi TextField); nominal cart bar FittedBox; kosongkan teks & tombol X tetap fokus; struktur Stack kolom cari stabil (akar bug kursor hilang) (v3.2.0+200)
 - feat(kasir): `7c29317` — penyesuaian: kolom cari, hint mulus, header, tombol pojok berwarna, chip satu baris, landing terpusat, teks stiker kustom (v3.1.0+199)
 
