@@ -428,6 +428,18 @@ class PengaturanScreen extends ConsumerWidget {
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () => context.push('/pengaturan/printer'),
                       ),
+                      // Khusus build beta/debug (bukan produksi): saklar
+                      // diagnostik performa layar Kasir.
+                      if (appFlavor != 'production')
+                        ListTile(
+                          key: const Key('setting-perf-diag'),
+                          leading: const Icon(Icons.speed_outlined),
+                          title: const Text('Diagnostik Performa'),
+                          subtitle: const Text(
+                              'Matikan fitur satu per satu untuk mencari biang lag'),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () => context.push('/pengaturan/diagnostik'),
+                        ),
                       // Gaya Kasir Baru memindahkan sakelar terang/gelap ke
                       // layar Kasir (tombol pojok) - di sini disembunyikan.
                       if (ref.watch(kasirStyleProvider) != KasirStyle.modern)

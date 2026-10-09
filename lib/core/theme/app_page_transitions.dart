@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'app_motion.dart';
+import '../diagnostics/perf_diag.dart';
 
 /// Transisi halaman ala Telegram, dipasang lewat `PageTransitionsTheme`:
 ///
@@ -37,6 +38,20 @@ class AppPageTransitionsBuilder extends PageTransitionsBuilder {
     // aman tanpa pengecualian; pindah tab (`go`) mengganti seluruh tumpukan
     // sehingga halaman baru juga "rute pertama" tapi tetap beranimasi masuk.
     if (AppMotion.reduced(context)) return child;
+    // Diagnostik performa: tanpa fade (FadeTransition memaksa saveLayer
+    // seluruh halaman tiap frame). Tab akar = tanpa animasi; sub-rute = geser
+    // saja.
+    if (!PerfDiag.s.pageFade) {
+      if (isRootRoute(route)) return child;
+      return AnimatedBuilder(
+        animation: animation,
+        child: child,
+        builder: (context, child) => Transform.translate(
+          offset: Offset(slideDistance * (1 - animation.value), 0),
+          child: child,
+        ),
+      );
+    }
 
     final eased = CurvedAnimation(
       parent: animation,

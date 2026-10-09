@@ -8,6 +8,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:sqlcipher_flutter_libs/sqlcipher_flutter_libs.dart';
 
+import 'core/diagnostics/frame_meter.dart';
+import 'core/diagnostics/perf_diag.dart';
 import 'core/providers/device_provider.dart';
 import 'core/providers/license_provider.dart';
 import 'core/providers/theme_provider.dart';
@@ -30,6 +32,8 @@ void main() {
   // murni tambahan best-effort di lapisan paling luar.
   runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
+    // Saklar diagnostik performa (build beta) - dibaca sebelum runApp.
+    await PerfDiag.load();
 
     // Item 9 (batch 15 Juli) — font offline-first: SEMUA font (Hanken
     // Grotesk, Newsreader, Roboto Mono) sudah di-bundle lokal
@@ -135,38 +139,54 @@ class ThePosApp extends ConsumerWidget {
     final router = ref.watch(routerProvider);
     final themeMode = ref.watch(themeModeProvider);
 
-    return MaterialApp.router(
-      title: 'The POS',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.light(),
-      darkTheme: AppTheme.dark(),
-      themeMode: themeMode,
-      routerConfig: router,
-      // Terapkan warna system navigation bar sesuai tema yang sedang aktif.
-      // Builder dipanggil setelah MaterialApp me-resolve tema, sehingga
-      // Theme.of(context).brightness sudah benar untuk ThemeMode.system.
-      builder: (context, child) {
-        final isDark = Theme.of(context).brightness == Brightness.dark;
-        SystemChrome.setSystemUIOverlayStyle(
-          SystemUiOverlayStyle(
-            systemNavigationBarColor: AppTheme.canvasColor(isDark),
-            systemNavigationBarIconBrightness:
-                isDark ? Brightness.light : Brightness.dark,
-            systemNavigationBarDividerColor: Colors.transparent,
-          ),
-        );
+    // Saklar diagnostik performa: seluruh app dibangun ulang bila berubah.
+    return ValueListenableBuilder<PerfDiagState>(
+      valueListenable: PerfDiag.notifier,
+      builder: (context, diag, _) => MaterialApp.router(
+        title: 'The POS',
+        debugShowCheckedModeBanner: false,
+        showPerformanceOverlay: diag.perfOverlay,
+        theme: AppTheme.light(),
+        darkTheme: AppTheme.dark(),
+        themeMode: themeMode,
+        routerConfig: router,
+        // Terapkan warna system navigation bar sesuai tema yang sedang aktif.
+        // Builder dipanggil setelah MaterialApp me-resolve tema, sehingga
+        // Theme.of(context).brightness sudah benar untuk ThemeMode.system.
+        builder: (context, child) {
+          final isDark = Theme.of(context).brightness == Brightness.dark;
+          SystemChrome.setSystemUIOverlayStyle(
+            SystemUiOverlayStyle(
+              systemNavigationBarColor: AppTheme.canvasColor(isDark),
+              systemNavigationBarIconBrightness:
+                  isDark ? Brightness.light : Brightness.dark,
+              systemNavigationBarDividerColor: Colors.transparent,
+            ),
+          );
 
-        final userScale = ref.watch(fontScaleProvider).factor;
-        final mq = MediaQuery.of(context);
-        final shortestSide = mq.size.shortestSide;
-        final deviceFactor = (shortestSide / 390).clamp(0.92, 1.08);
-        final combined = userScale * deviceFactor;
+          final userScale = ref.watch(fontScaleProvider).factor;
+          final mq = MediaQuery.of(context);
+          final shortestSide = mq.size.shortestSide;
+          final deviceFactor = (shortestSide / 390).clamp(0.92, 1.08);
+          final combined = userScale * deviceFactor;
 
-        return MediaQuery(
-          data: mq.copyWith(textScaler: TextScaler.linear(combined)),
-          child: child!,
-        );
-      },
+          final body = MediaQuery(
+            data: mq.copyWith(textScaler: TextScaler.linear(combined)),
+            child: child!,
+          );
+          // Diagnostik performa: meter frame mengambang (hanya bila dinyalakan
+          // di Pengaturan > Diagnostik Performa).
+          return diag.meter
+              ? Stack(
+                  textDirection: TextDirection.ltr,
+                  children: [
+                    body,
+                    const Positioned(top: 36, left: 4, child: FrameMeter()),
+                  ],
+                )
+              : body;
+        },
+      ),
     );
   }
 }

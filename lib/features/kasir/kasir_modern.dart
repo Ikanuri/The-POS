@@ -11,7 +11,7 @@ part of 'kasir_screen.dart';
 /// saran bergilir di kolom cari. Tanpa pelanggan = kosong (hint statis).
 final _customerSuggestionsProvider = FutureProvider.autoDispose
     .family<List<String>, String?>((ref, customerId) async {
-  if (customerId == null) return const [];
+  if (customerId == null || !PerfDiag.s.recentQuery) return const [];
   final db = ref.watch(databaseProvider);
   final now = DateTime.now();
   final stats = await db.getCustomerTopProducts(
@@ -22,6 +22,10 @@ final _customerSuggestionsProvider = FutureProvider.autoDispose
       if (s.name.trim().isNotEmpty) s.name.trim(),
   ];
 });
+
+/// Diagnostik performa: bayangan/elevasi dimatikan lewat saklar.
+List<BoxShadow> _sh(List<BoxShadow> s) => PerfDiag.s.shadows ? s : const [];
+double _el(double e) => PerfDiag.s.shadows ? e : 0;
 
 extension _KasirModernX on _KasirScreenState {
   /// Antrian pesanan ditahan (tombol pojok): lembar bawah bergaya struk.
@@ -39,7 +43,15 @@ extension _KasirModernX on _KasirScreenState {
     );
   }
 
-  Widget _buildModern(BuildContext context) {
+  /// Dibungkus pendengar saklar diagnostik: layar dibangun ulang begitu saklar
+  /// di Pengaturan > Diagnostik Performa berubah.
+  Widget _buildModern(BuildContext context) =>
+      ValueListenableBuilder<PerfDiagState>(
+        valueListenable: PerfDiag.notifier,
+        builder: (context, _, __) => _buildModernBody(context),
+      );
+
+  Widget _buildModernBody(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final cart = ref.watch(cartProvider(_cartId));
     final cartNotifier = ref.read(cartProvider(_cartId).notifier);
@@ -64,7 +76,13 @@ extension _KasirModernX on _KasirScreenState {
       _searchFocus.unfocus();
     }
 
+    // Diagnostik: keyboard memicu layout ulang tiap frame (cart bar ikut
+    // naik). Saklar menguji: body tidak dikecilkan / cart bar disembunyikan.
+    final diag = PerfDiag.s;
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
+    final hideCart = diag.hideCartWhileTyping && keyboardOpen;
     return Scaffold(
+      resizeToAvoidBottomInset: diag.keyboardResize,
       body: Stack(
         children: [
           Positioned.fill(child: _ModernBlobs(strong: isLanding)),
@@ -219,7 +237,7 @@ extension _KasirModernX on _KasirScreenState {
         ],
       ),
       backgroundColor: cs.surface,
-      bottomNavigationBar: cart.isEmpty
+      bottomNavigationBar: (cart.isEmpty || hideCart)
           ? null
           : _buildModernCartBottom(context, cart, cartNotifier, cartMeta),
     );
@@ -272,12 +290,12 @@ class _ModernHeader extends StatelessWidget {
                   colors: [Color(0xFFD97757), Color(0xFFC96442)],
                 ),
                 borderRadius: BorderRadius.circular(12),
-                boxShadow: const [
+                boxShadow: _sh(const [
                   BoxShadow(
                       color: Color(0x59C96442),
                       blurRadius: 12,
                       offset: Offset(0, 4)),
-                ],
+                ]),
               ),
               child: const Icon(Icons.shopping_basket_rounded,
                   color: Colors.white, size: 18),
@@ -335,7 +353,7 @@ class _ModernHeader extends StatelessWidget {
                             depth: 0.06,
                             child: Material(
                               color: cs.surface,
-                              elevation: 1.5,
+                              elevation: _el(1.5),
                               shadowColor: Colors.black26,
                               shape: CircleBorder(
                                   side: BorderSide(
@@ -376,6 +394,7 @@ class _ModernBlobs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (!PerfDiag.s.blobs) return const SizedBox.shrink();
     final dark = Theme.of(context).brightness == Brightness.dark;
     final b1 = dark ? const Color(0x6B96482E) : const Color(0x8CF2B8A0);
     final b2 = dark ? const Color(0x4D82642C) : const Color(0x80F6D9A8);
@@ -500,7 +519,10 @@ class _ModernSearchStageState extends ConsumerState<_ModernSearchStage> {
         ref.watch(kasirStickerProvider(KasirStickerSlot.landing)).valueOrNull;
     final texts = ref.watch(kasirLandingTextProvider).valueOrNull ??
         KasirLandingText.defaults;
-    final dur = AppMotion.dur(context, AppMotion.page);
+    // Diagnostik: tanpa animasi sapaan/pil (berpindah instan).
+    final dur = PerfDiag.s.heroAnim
+        ? AppMotion.dur(context, AppMotion.page)
+        : Duration.zero;
     final customerId = ref.watch(cartMetaProvider(widget.cartId)).customerId;
     final suggestions =
         ref.watch(_customerSuggestionsProvider(customerId)).valueOrNull ??
@@ -572,14 +594,14 @@ class _ModernSearchStageState extends ConsumerState<_ModernSearchStage> {
                     : cs.outlineVariant,
                 width: 1.5,
               ),
-              boxShadow: [
+              boxShadow: _sh([
                 BoxShadow(
                   color:
                       dark ? const Color(0x66000000) : const Color(0x1F5A3C1E),
                   blurRadius: 24,
                   offset: const Offset(0, 6),
                 ),
-              ],
+              ]),
             ),
             child: Row(
               children: [
@@ -875,7 +897,7 @@ class _HeaderBtn extends StatelessWidget {
         label: Text('${action.badge}'),
         child: Material(
           color: action.bg,
-          elevation: 2,
+          elevation: _el(2),
           shadowColor: Colors.black38,
           shape: CircleBorder(
               side: BorderSide(color: action.fg.withOpacity(0.25))),
@@ -954,12 +976,12 @@ class _LightRocker extends StatelessWidget {
             color: dark ? const Color(0xFF332E2A) : const Color(0xFFF4F0E6),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(color: cs.outlineVariant, width: 0.8),
-            boxShadow: const [
+            boxShadow: _sh(const [
               BoxShadow(
                   color: Color(0x33000000),
                   blurRadius: 6,
                   offset: Offset(0, 2)),
-            ],
+            ]),
           ),
           alignment: Alignment.center,
           child: TweenAnimationBuilder<double>(
@@ -993,12 +1015,12 @@ class _LightRocker extends StatelessWidget {
                             ? const Color(0xFF5A5048)
                             : const Color(0xFFD8CFB8),
                         width: 0.8),
-                    boxShadow: const [
+                    boxShadow: _sh(const [
                       BoxShadow(
                           color: Color(0x40000000),
                           blurRadius: 3,
                           offset: Offset(0, 1.5)),
-                    ],
+                    ]),
                   ),
                   child: Column(
                     children: [
@@ -1085,7 +1107,7 @@ class _RotatingHintState extends State<_RotatingHint>
 
   void _start() {
     _timer?.cancel();
-    if (widget.names.length < 2) return;
+    if (widget.names.length < 2 || !PerfDiag.s.hintRotate) return;
     _timer = Timer.periodic(const Duration(milliseconds: 3400), (_) {
       if (!mounted) return;
       final next = (_i + 1) % widget.names.length;
@@ -1345,13 +1367,13 @@ class _ModernCartBar extends ConsumerWidget {
           color: cs.surface,
           borderRadius: BorderRadius.circular(22),
           border: Border.all(color: cs.outlineVariant, width: 0.6),
-          boxShadow: [
+          boxShadow: _sh([
             BoxShadow(
               color: dark ? const Color(0x80000000) : const Color(0x2E5A3C1E),
               blurRadius: 24,
               offset: const Offset(0, 8),
             ),
-          ],
+          ]),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1904,18 +1926,29 @@ class _ModernTileCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final dark = Theme.of(context).brightness == Brightness.dark;
+    // Diagnostik: kartu polos (tanpa bayangan & potong sudut) - hanya garis.
+    if (!PerfDiag.s.tileDecor) {
+      return DecoratedBox(
+        decoration: BoxDecoration(
+          color: cs.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: cs.outlineVariant, width: 0.6),
+        ),
+        child: Material(type: MaterialType.transparency, child: child),
+      );
+    }
     return Container(
       decoration: BoxDecoration(
         color: cs.surface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: cs.outlineVariant, width: 0.6),
-        boxShadow: [
+        boxShadow: _sh([
           BoxShadow(
             color: dark ? const Color(0x40000000) : const Color(0x155A3C1E),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
-        ],
+        ]),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),

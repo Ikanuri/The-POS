@@ -28,6 +28,7 @@ import '../../features/pengaturan/pengaturan_screen.dart';
 import '../../features/pengaturan/employee_screen.dart';
 import '../../features/pengaturan/expenses_screen.dart';
 import '../../features/pengaturan/tutup_kasir_screen.dart';
+import '../../features/pengaturan/perf_diag_screen.dart';
 import '../../features/pengaturan/printer_screen.dart';
 import '../../features/pengaturan/store_info_screen.dart';
 import '../../features/pengaturan/sync_screen.dart';
@@ -289,6 +290,9 @@ final routerProvider = Provider<GoRouter>((ref) {
                   builder: (_, __) => const AlihOwnerScreen()),
               GoRoute(
                   path: 'printer', builder: (_, __) => const PrinterScreen()),
+              GoRoute(
+                  path: 'diagnostik',
+                  builder: (_, __) => const PerfDiagScreen()),
               GoRoute(
                   path: 'lisensi',
                   builder: (_, __) => const DeviceLicenseScreen()),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_motion.dart';
+import '../diagnostics/perf_diag.dart';
 
 /// Umpan balik sentuh "memantul" ala Telegram: saat ditekan [child] mengecil
 /// ke `1 - depth` dalam 80 ms; saat dilepas kembali dalam 350 ms dengan
@@ -32,17 +33,28 @@ class PressScale extends StatefulWidget {
 
 class _PressScaleState extends State<PressScale>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(
-    vsync: this,
-    duration: PressScale.pressDuration, // maju = ditekan (cepat)
-    reverseDuration: PressScale.releaseDuration, // mundur = dilepas (memantul)
-  );
+  // Dibuat di initState (bukan `late final` lazy): bila PressScale dimatikan
+  // lewat saklar diagnostik, controller tak pernah disentuh sampai dispose()
+  // -> pembuatan Ticker saat unmount melempar "deactivated widget's ancestor".
+  late final AnimationController _c;
   // 0 = normal, 1 = tertekan penuh. Naik cepat (80 ms), turun lambat+memantul.
-  late final CurvedAnimation _curve = CurvedAnimation(
-    parent: _c,
-    curve: Curves.easeOut,
-    reverseCurve: AppMotion.easeOutBack.flipped,
-  );
+  late final CurvedAnimation _curve;
+
+  @override
+  void initState() {
+    super.initState();
+    _c = AnimationController(
+      vsync: this,
+      duration: PressScale.pressDuration, // maju = ditekan (cepat)
+      reverseDuration: PressScale.releaseDuration, // mundur = dilepas (memantul)
+    );
+    _curve = CurvedAnimation(
+      parent: _c,
+      curve: Curves.easeOut,
+      reverseCurve: AppMotion.easeOutBack.flipped,
+    );
+  }
+
   int _pointers = 0;
 
   bool get _active => widget.enabled && !AppMotion.reduced(context);
@@ -69,6 +81,8 @@ class _PressScaleState extends State<PressScale>
 
   @override
   Widget build(BuildContext context) {
+    // Diagnostik performa: animasi pantul dimatikan (tanpa lapisan tambahan).
+    if (!PerfDiag.s.pressScale) return widget.child;
     return Listener(
       behavior: HitTestBehavior.translucent,
       onPointerDown: (_) => _down(),

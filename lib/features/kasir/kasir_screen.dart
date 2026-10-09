@@ -37,6 +37,7 @@ import 'cart_preorder_settlement_provider.dart';
 import 'cart_price_category_provider.dart';
 import 'cart_provider.dart';
 import 'kasir_style.dart';
+import '../../core/diagnostics/perf_diag.dart';
 import 'widgets/quick_sync_dialog.dart';
 import '../../core/providers/theme_provider.dart';
 import 'handoff_gate_provider.dart';
@@ -660,6 +661,8 @@ final _landingTopProvider =
 final _landingRecentProvider =
     FutureProvider.autoDispose.family<List<Product>, String?>(
         (ref, customerId) async {
+  // Diagnostik performa: saklar mematikan query ini.
+  if (!PerfDiag.s.recentQuery) return const <Product>[];
   final db = ref.watch(databaseProvider);
   final all = await ref.watch(_kasirProductsProvider(('', null)).future);
   final byId = {for (final p in all) p.id: p};
