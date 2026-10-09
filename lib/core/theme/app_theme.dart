@@ -1,4 +1,5 @@
 import 'app_overlays.dart';
+import 'app_style.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -216,13 +217,13 @@ class AppTheme {
         displayColor: ink,
       ),
       cardTheme: CardTheme(
-        elevation: 1.5,
-        shadowColor: sh1,
+        elevation: 2,
+        shadowColor: isDark ? const Color(0x66000000) : const Color(0x3D5A3C1E),
         color: card,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-          side: BorderSide(color: line, width: 0.5),
+          borderRadius: BorderRadius.circular(AppStyle.rCard),
+          side: BorderSide(color: line, width: 0.75),
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
@@ -230,9 +231,7 @@ class AppTheme {
           animationDuration: AppMotion.fast,
           backgroundColor: accent,
           foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(11),
-          ),
+          shape: const StadiumBorder(),
           minimumSize: const Size(double.infinity, 48),
           textStyle: GoogleFonts.hankenGrotesk(
             fontWeight: FontWeight.w600,
@@ -243,9 +242,7 @@ class AppTheme {
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           animationDuration: AppMotion.fast,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(11),
-          ),
+          shape: const StadiumBorder(),
           minimumSize: const Size(double.infinity, 48),
           side: BorderSide(color: line),
         ),
@@ -254,15 +251,15 @@ class AppTheme {
         filled: true,
         fillColor: field,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(11),
+          borderRadius: BorderRadius.circular(AppStyle.rField),
           borderSide: BorderSide(color: line),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(11),
+          borderRadius: BorderRadius.circular(AppStyle.rField),
           borderSide: BorderSide(color: line),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(11),
+          borderRadius: BorderRadius.circular(AppStyle.rField),
           borderSide: const BorderSide(color: accent, width: 1.5),
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -271,9 +268,8 @@ class AppTheme {
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: panel,
         indicatorColor: accent.withOpacity(0.12),
-        indicatorShape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
+        surfaceTintColor: Colors.transparent,
+        indicatorShape: const StadiumBorder(),
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         height: 64,
         iconTheme: WidgetStateProperty.resolveWith((states) {
@@ -298,9 +294,11 @@ class AppTheme {
         }),
       ),
       appBarTheme: AppBarTheme(
-        backgroundColor: panel,
+        // Menyatu dengan kanvas (gaya landing), tanpa tint saat digulir.
+        backgroundColor: canvas,
+        surfaceTintColor: Colors.transparent,
         elevation: 0,
-        scrolledUnderElevation: 0.5,
+        scrolledUnderElevation: 0,
         shadowColor: sh1,
         centerTitle: false,
         titleTextStyle: GoogleFonts.hankenGrotesk(
@@ -327,10 +325,62 @@ class AppTheme {
                   : (isDark ? _dInk2 : _lInk2)),
         ),
       ),
+      dialogTheme: DialogTheme(
+        backgroundColor: card,
+        surfaceTintColor: Colors.transparent,
+        elevation: 8,
+        shadowColor: const Color(0x66000000),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppStyle.rPanel),
+          side: BorderSide(color: line, width: 0.75),
+        ),
+        titleTextStyle: GoogleFonts.hankenGrotesk(
+          fontSize: 17,
+          fontWeight: FontWeight.w700,
+          color: ink,
+        ),
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: panel,
+        surfaceTintColor: Colors.transparent,
+        modalBackgroundColor: panel,
+        showDragHandle: false,
+        shape: const RoundedRectangleBorder(
+          borderRadius:
+              BorderRadius.vertical(top: Radius.circular(AppStyle.rSheet)),
+        ),
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: card,
+        surfaceTintColor: Colors.transparent,
+        elevation: 6,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: line, width: 0.75),
+        ),
+      ),
+      listTileTheme: ListTileThemeData(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppStyle.rField),
+        ),
+      ),
+      switchTheme: SwitchThemeData(
+        trackColor: WidgetStateProperty.resolveWith((st) =>
+            st.contains(WidgetState.selected) ? accent : null),
+        thumbColor: WidgetStateProperty.resolveWith((st) =>
+            st.contains(WidgetState.selected) ? Colors.white : null),
+      ),
+      segmentedButtonTheme: SegmentedButtonThemeData(
+        style: ButtonStyle(
+          shape: const WidgetStatePropertyAll(StadiumBorder()),
+          side: WidgetStatePropertyAll(BorderSide(color: line)),
+        ),
+      ),
+      progressIndicatorTheme: const ProgressIndicatorThemeData(color: accent),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: isDark ? _dCard : _lInk,
         contentTextStyle: GoogleFonts.hankenGrotesk(color: isDark ? _dInk : _lCanvas),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppStyle.rCard)),
         behavior: SnackBarBehavior.floating,
       ),
       // Preserve warm shadow for all elevated surfaces

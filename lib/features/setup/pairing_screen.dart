@@ -105,12 +105,12 @@ class _PairingScreenState extends ConsumerState<PairingScreen> {
           children: [
             Expanded(
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(14),
                 child: Container(
                   margin: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     border: Border.all(color: scheme.outlineVariant),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(14),
                   ),
                   clipBehavior: Clip.antiAlias,
                   child: MobileScanner(

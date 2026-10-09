@@ -96,7 +96,7 @@ class _PairDeviceScreenState extends ConsumerState<PairDeviceScreen>
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(14),
                   boxShadow: [
                     BoxShadow(
                       color: scheme.shadow.withOpacity(0.1),
@@ -135,7 +135,7 @@ class _PairDeviceScreenState extends ConsumerState<PairDeviceScreen>
                 height: 240,
                 decoration: BoxDecoration(
                   color: scheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(14),
                 ),
                 child: Icon(Icons.qr_code_2_outlined,
                     size: 80, color: scheme.outlineVariant),

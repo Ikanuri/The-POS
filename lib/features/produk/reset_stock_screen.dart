@@ -82,7 +82,7 @@ class _ResetStockScreenState extends ConsumerState<ResetStockScreen> {
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: scheme.errorContainer.withOpacity(0.4),
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(14),
                 border: Border.all(color: scheme.error.withOpacity(0.4)),
               ),
               child: Row(

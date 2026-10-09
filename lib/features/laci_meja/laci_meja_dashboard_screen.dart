@@ -1881,7 +1881,7 @@ class _CategoryIconBtn extends StatelessWidget {
       height: 36,
       decoration: BoxDecoration(
         color: selected ? bg(isDark) : Colors.transparent,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(
             color: selected ? iconColor : cs.outlineVariant,
             width: selected ? 1.4 : 0.75),

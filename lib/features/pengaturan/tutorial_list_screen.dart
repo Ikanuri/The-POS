@@ -264,7 +264,7 @@ class _TutorialListScreenState extends State<TutorialListScreen> {
                 hintText: 'Cari panduan (mis. "tempel pesanan", "izin")',
                 prefixIcon: const Icon(Icons.search),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(14),
                 ),
                 isDense: true,
               ),
@@ -324,7 +324,7 @@ class _ChapterCard extends StatelessWidget {
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: scheme.primary.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(14),
                 border: Border.all(color: scheme.primary.withOpacity(0.25)),
               ),
               child: Row(

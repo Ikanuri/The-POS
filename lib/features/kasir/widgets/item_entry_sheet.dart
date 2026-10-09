@@ -1088,7 +1088,7 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                         decoration: BoxDecoration(
                           color: AppTheme.laciBg(
                               Theme.of(context).brightness == Brightness.dark),
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: BorderRadius.circular(14),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1410,7 +1410,7 @@ class _VariantRow extends StatelessWidget {
         color: active
             ? scheme.secondaryContainer.withOpacity(0.5)
             : scheme.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: active ? scheme.secondary : scheme.outlineVariant,
           width: active ? 1.2 : 0.75,
@@ -1632,7 +1632,7 @@ class _PriceChip extends StatelessWidget {
                 : isCategory
                     ? scheme.tertiary.withOpacity(0.06)
                     : scheme.surfaceContainerLowest,
-            borderRadius: BorderRadius.circular(11),
+            borderRadius: BorderRadius.circular(14),
             border: Border.all(
               color: selected
                   ? accent

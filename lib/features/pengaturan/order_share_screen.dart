@@ -336,7 +336,7 @@ class _OrderShareScreenState extends ConsumerState<OrderShareScreen> {
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: scheme.surfaceContainerHighest.withOpacity(0.6),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(14),
             ),
             child: Text(
               'Nama saran diambil persis dari nama produk di katalog. Tanpa '

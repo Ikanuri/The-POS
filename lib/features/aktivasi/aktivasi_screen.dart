@@ -149,7 +149,7 @@ class _AktivasiScreenState extends ConsumerState<AktivasiScreen> {
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(14),
                       ),
                       child: QrImageView(
                         // Kunci ikut brightness — lihat dok `QrisQrBox`:

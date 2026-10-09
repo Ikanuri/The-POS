@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/theme/app_overlays.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/diagnostics/perf_diag.dart';
@@ -139,7 +140,7 @@ class PerfDiagScreen extends StatelessWidget {
                         onPressed: () {
                           final t = s.summaryAll();
                           Clipboard.setData(ClipboardData(text: t));
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                          ScaffoldMessenger.of(context).showAppSnackBar(SnackBar(
                               content: Text(s.summary().isEmpty
                                   ? 'Semua normal — daftar lengkap disalin'
                                   : 'Disalin (tanda * = beda dari normal): $t')));

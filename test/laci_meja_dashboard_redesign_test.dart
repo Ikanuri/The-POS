@@ -77,7 +77,7 @@ void main() {
             w is Container &&
             w.decoration is BoxDecoration &&
             (w.decoration as BoxDecoration).borderRadius ==
-                BorderRadius.circular(10)));
+                BorderRadius.circular(14)));
     return tester.widget<Container>(boxFinder).decoration as BoxDecoration;
   }
 

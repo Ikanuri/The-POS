@@ -636,7 +636,7 @@ class _StatusPill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration:
-          BoxDecoration(color: bg, borderRadius: BorderRadius.circular(10)),
+          BoxDecoration(color: bg, borderRadius: BorderRadius.circular(14)),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -732,11 +732,11 @@ class _Keypad extends StatelessWidget {
           child: Material(
             color: keyBg(k, isAction),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(14),
               side: BorderSide(color: scheme.outlineVariant, width: 0.5),
             ),
             child: InkWell(
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(14),
               onTap: () => onPress(k),
               child: SizedBox(
                 height: 52,

@@ -286,7 +286,7 @@ class _PasteOrderSheetState extends ConsumerState<PasteOrderSheet> {
                       decoration: InputDecoration(
                         hintText: 'PESANAN — Toko Anda\n…\n#PSN:...',
                         border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10)),
+                            borderRadius: BorderRadius.circular(14)),
                         isDense: true,
                       ),
                     ),
@@ -328,7 +328,7 @@ class _PasteOrderSheetState extends ConsumerState<PasteOrderSheet> {
                             margin: const EdgeInsets.only(bottom: 10),
                             decoration: BoxDecoration(
                               color: scheme.surfaceContainerHighest,
-                              borderRadius: BorderRadius.circular(10),
+                              borderRadius: BorderRadius.circular(14),
                             ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -439,7 +439,7 @@ class _WarnBanner extends StatelessWidget {
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: color.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,

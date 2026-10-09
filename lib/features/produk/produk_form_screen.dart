@@ -27,7 +27,7 @@ Future<String?> _scanBarcodeDialog(BuildContext context) async {
     context: context,
     barrierDismissible: true,
     builder: (ctx) => Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       child: SizedBox(
         width: 300,
         height: 340,

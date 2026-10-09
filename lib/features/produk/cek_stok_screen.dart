@@ -778,7 +778,7 @@ class _StockRow extends StatelessWidget {
       shape: checked
           ? RoundedRectangleBorder(
               side: BorderSide(color: selBorder, width: 1),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(14),
             )
           : null,
       child: CheckboxListTile(

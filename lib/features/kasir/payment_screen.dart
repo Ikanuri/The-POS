@@ -2070,7 +2070,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                             const SizedBox(height: 8),
                             Card(
                               child: InkWell(
-                                borderRadius: BorderRadius.circular(12),
+                                borderRadius: BorderRadius.circular(14),
                                 onTap: _pickEmployee,
                                 child: Padding(
                                   padding: const EdgeInsets.symmetric(
@@ -3040,7 +3040,7 @@ class _CashKeypadSheetState extends State<_CashKeypadSheet> {
                       const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   decoration: BoxDecoration(
                     color: pillBg,
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(14),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -3190,11 +3190,11 @@ class _Keypad extends StatelessWidget {
           child: Material(
             color: keyBg(k, isAction),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(14),
               side: BorderSide(color: scheme.outlineVariant, width: 0.5),
             ),
             child: InkWell(
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(14),
               onTap: () => onPress(k),
               child: SizedBox(
                 height: 52,

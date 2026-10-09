@@ -176,7 +176,7 @@ void main() {
               w is Container &&
               w.decoration is BoxDecoration &&
               (w.decoration as BoxDecoration).borderRadius ==
-                  BorderRadius.circular(10)));
+                  BorderRadius.circular(14)));
       expectCentered(tester, box.first, find.byIcon(Icons.hourglass_empty));
 
       await drain(tester);

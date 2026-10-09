@@ -3014,7 +3014,7 @@ class _HandoffQrSheet extends StatelessWidget {
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(14),
               ),
               child: QrImageView(data: qrCodeText, size: 220),
             ),
