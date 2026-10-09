@@ -9,6 +9,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-10-09 (penyesuaian desain Kasir gaya Baru)
 
+- feat(ui): `09e8d46` — tahap 2: AppEmptyState di banyak layar, kartu clip, divider inset (v3.4.1+205)
 - feat(ui): `8a8dd70` — Gaya Landing ke seluruh app via tema + AppStyle + docs/STYLE-UIUX.md (v3.4.0+204)
 - docs: `244168e` — catat toast/sync/keyboard
 - feat(kasir): `eff80c4` — pop-up Sync LAN: pilihan Host/Klien, QR host, kamera klien (v3.3.0+203)

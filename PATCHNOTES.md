@@ -10,6 +10,7 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ## 9 Oktober 2026 (v3.4.0 — Tampilan baru di semua halaman)
 
+- **Layar kosong lebih ramah**: "Belum ada…/Tidak ada…" kini tampil dengan ikon bulat lembut dan animasi masuk di Laporan, Produk, Usulan, Laci Meja, dan Pengaturan.
 - **Seluruh halaman kini senada dengan halaman awal Kasir**: kartu lebih membulat dengan bayangan hangat, tombol berbentuk pil, dialog & lembar bawah lebih lembut, bilah atas menyatu dengan latar, menu bawah berindikator pil.
 
 ## 9 Oktober 2026 (v3.3.0 — Notifikasi baru & Sync LAN)
