@@ -692,17 +692,29 @@ class _GroupChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    // Gaya chip Kasir (aktif terracotta penuh); tetap ChoiceChip agar bisa
+    // dipakai di dalam Expanded (label dipusatkan, elips).
     return Padding(
       padding: const EdgeInsets.only(right: 6),
       child: ChoiceChip(
         label: Text(label,
-            style: const TextStyle(fontSize: 12),
+            style: TextStyle(
+                fontSize: 12.5,
+                color: selected ? Colors.white : null,
+                fontWeight: selected ? FontWeight.w600 : null),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center),
         selected: selected,
         onSelected: (_) => onTap(),
         visualDensity: VisualDensity.compact,
+        selectedColor: AppTheme.accent,
+        backgroundColor: cs.surface,
+        shape: const StadiumBorder(),
+        side:
+            BorderSide(color: selected ? AppTheme.accent : cs.outlineVariant),
+        showCheckmark: false,
       ),
     );
   }

@@ -1,3 +1,5 @@
+import '../../core/widgets/app_filter_chip.dart';
+import '../../core/widgets/app_empty_state.dart';
 import '../../core/theme/app_style.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -88,59 +90,45 @@ class _ProdukListScreenState extends ConsumerState<ProdukListScreen>
         ref.watch(_canEditProdukProvider).valueOrNull ?? baseCanEdit;
     final scheme = Theme.of(context).colorScheme;
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final shown = productsAsync.valueOrNull;
+    final shownCount = shown == null
+        ? null
+        : (lowStockFilter
+            ? shown.where((p) => lowStockIds.contains(p.id)).length
+            : shown.length);
+
     return Scaffold(
       appBar: AppBar(
-        // Item 92 — tombol header berlabel (pola toolbar Kasir).
-        toolbarHeight: kLabeledToolbarHeight,
-        titleSpacing: 12,
-        title: const Text('Produk'),
+        toolbarHeight: 68,
+        titleSpacing: 18,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(shownCount == null ? ' ' : '$shownCount produk',
+                style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w500,
+                    color: scheme.onSurfaceVariant)),
+            Text('Produk',
+                style: AppTheme.numStyle(context,
+                    size: 24, weight: FontWeight.w700)),
+          ],
+        ),
         actions: [
-          // Item 30(b) — entry point SELALU terlihat (bukan chip kondisional
-          // spt "Stok Menipis" yang hilang total kalau lowStockCount==0 ATAU
-          // toko belum punya kategori bernama — lihat PLAN.md Item 30).
-          // Item 92 — berlabel (pola toolbar Kasir); "Tambah Produk" tetap
-          // ikon "+" (keputusan user: fungsinya sudah dikenal).
-          LabeledToolbarActions(children: [
-            LabeledToolButton(
-              icon: Icons.inventory_2_outlined,
-              label: 'Cek Stok',
-              tooltip: 'Cek Stok',
-              onTap: () => context.push('/produk/cek-stok'),
-            ),
-            LabeledToolButton(
-              icon: Icons.sync_alt_outlined,
-              label: 'Sinkron Harga',
-              tooltip: 'Sinkron Harga',
-              onTap: () => context.push('/produk/sinkron-harga'),
-            ),
-            LabeledToolButton(
-              icon: Icons.label_outline,
-              label: 'Kelola Kategori',
-              tooltip: 'Kelola Kategori',
-              onTap: () => context.push('/produk/kategori'),
-            ),
-            // Revisi 3 (permintaan user): pindah dari Pengaturan ke sini —
-            // lebih dekat konteksnya ke daftar produk. Route TETAP
-            // `/pengaturan/kategori-harga` (URL internal, tidak dilihat
-            // pengguna), cuma entry point-nya yang pindah.
-            LabeledToolButton(
-              icon: Icons.sell_outlined,
-              label: 'Kategori Harga',
-              tooltip: 'Kategori Harga',
-              onTap: () => context.push('/pengaturan/kategori-harga'),
-            ),
-            LabeledToolButton(
-              icon: Icons.collections_bookmark_outlined,
-              label: 'Katalog',
-              tooltip: 'Katalog',
-              onTap: () => context.push('/produk/katalog'),
-            ),
-          ]),
           if (canEdit)
-            IconButton(
-              icon: const Icon(Icons.add),
-              tooltip: 'Tambah Produk',
-              onPressed: () => _openForm('/produk/baru'),
+            Padding(
+              padding: const EdgeInsets.only(right: 14),
+              child: Material(
+                color: scheme.primary,
+                shape: const CircleBorder(),
+                child: IconButton(
+                  icon: const Icon(Icons.add_rounded, color: Colors.white),
+                  tooltip: 'Tambah Produk',
+                  onPressed: () => _openForm('/produk/baru'),
+                ),
+              ),
             ),
         ],
       ),
@@ -148,52 +136,117 @@ class _ProdukListScreenState extends ConsumerState<ProdukListScreen>
         children: [
           const SyncStatusBanner(),
           inlineBanner(),
+          // Item 92 — tombol pintas berlabel (pola toolbar Kasir), kini satu
+          // kartu dgn ikon bulat berwarna fungsi (gaya landing).
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-            child: AppStyle.pillSearch(context, TextField(
-              decoration: InputDecoration(
-                hintText: 'Cari nama atau kode produk…',
-                prefixIcon: const Icon(Icons.search, size: 20),
-                suffixIcon: query.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear, size: 18),
-                        onPressed: () =>
-                            ref.read(_searchQueryProvider.notifier).state = '',
-                      )
-                    : null,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                isDense: true,
+            padding: const EdgeInsets.fromLTRB(14, 4, 14, 0),
+            child: Card(
+              margin: EdgeInsets.zero,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    LabeledToolButton(
+                      round: true,
+                      labelWidth: 62,
+                      icon: Icons.inventory_2_outlined,
+                      label: 'Cek Stok',
+                      tooltip: 'Cek Stok',
+                      fg: AppTheme.scanFg,
+                      bg: AppTheme.scanBg,
+                      onTap: () => context.push('/produk/cek-stok'),
+                    ),
+                    LabeledToolButton(
+                      round: true,
+                      labelWidth: 62,
+                      icon: Icons.sync_alt_outlined,
+                      label: 'Sinkron Harga',
+                      tooltip: 'Sinkron Harga',
+                      fg: AppTheme.riwayatFg,
+                      bg: AppTheme.riwayatBg,
+                      onTap: () => context.push('/produk/sinkron-harga'),
+                    ),
+                    LabeledToolButton(
+                      round: true,
+                      labelWidth: 62,
+                      icon: Icons.label_outline,
+                      label: 'Kelola Kategori',
+                      tooltip: 'Kelola Kategori',
+                      fg: AppTheme.antrianFg,
+                      bg: AppTheme.antrianBg,
+                      onTap: () => context.push('/produk/kategori'),
+                    ),
+                    // Revisi 3 (permintaan user): pindah dari Pengaturan ke
+                    // sini. Route TETAP `/pengaturan/kategori-harga`.
+                    LabeledToolButton(
+                      round: true,
+                      labelWidth: 62,
+                      icon: Icons.sell_outlined,
+                      label: 'Kategori Harga',
+                      tooltip: 'Kategori Harga',
+                      fg: AppTheme.changeFg,
+                      bg: AppTheme.changeBg,
+                      onTap: () => context.push('/pengaturan/kategori-harga'),
+                    ),
+                    LabeledToolButton(
+                      round: true,
+                      labelWidth: 62,
+                      icon: Icons.collections_bookmark_outlined,
+                      label: 'Katalog',
+                      tooltip: 'Katalog',
+                      fg: AppTheme.laciFg,
+                      bg: AppTheme.laciBg,
+                      onTap: () => context.push('/produk/katalog'),
+                    ),
+                  ],
+                ),
               ),
-              onChanged: (v) =>
-                  ref.read(_searchQueryProvider.notifier).state = v,
-            )),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
+            child: AppStyle.pillSearch(
+              context,
+              TextField(
+                decoration: InputDecoration(
+                  hintText: 'Cari nama atau kode produk…',
+                  prefixIcon: const Icon(Icons.search, size: 20),
+                  suffixIcon: query.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, size: 18),
+                          onPressed: () => ref
+                              .read(_searchQueryProvider.notifier)
+                              .state = '',
+                        )
+                      : null,
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  isDense: true,
+                ),
+                onChanged: (v) =>
+                    ref.read(_searchQueryProvider.notifier).state = v,
+              ),
+            ),
           ),
           groupsAsync.when(
             data: (groups) {
               final named = groups.where((g) => g.name != null).toList();
               if (named.isEmpty) return const SizedBox.shrink();
               return SizedBox(
-                height: 40,
+                height: 46,
                 child: ListView(
                   scrollDirection: Axis.horizontal,
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                   children: [
                     if (lowStockCount > 0)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 6),
-                        child: FilterChip(
-                          avatar: Icon(Icons.warning_amber_rounded,
-                              size: 16, color: scheme.error),
-                          label: Text('Stok Menipis ($lowStockCount)',
-                              style: const TextStyle(fontSize: 12)),
-                          selected: lowStockFilter,
-                          selectedColor: scheme.errorContainer,
-                          onSelected: (v) => ref
-                              .read(_lowStockFilterProvider.notifier)
-                              .state = v,
-                        ),
+                      _GroupChip(
+                        label: 'Stok Menipis ($lowStockCount)',
+                        selected: lowStockFilter,
+                        onTap: () => ref
+                            .read(_lowStockFilterProvider.notifier)
+                            .state = !lowStockFilter,
                       ),
                     _GroupChip(
                       label: 'Semua',
@@ -225,44 +278,33 @@ class _ProdukListScreenState extends ConsumerState<ProdukListScreen>
                     ? allProds.where((p) => lowStockIds.contains(p.id)).toList()
                     : allProds;
                 if (prods.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.inventory_2_outlined,
-                            size: 64, color: scheme.outlineVariant),
-                        const SizedBox(height: 12),
-                        Text(
-                          query.isEmpty
-                              ? 'Belum ada produk'
-                              : 'Produk tidak ditemukan',
-                          style:
-                              Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                    color: scheme.onSurfaceVariant,
-                                  ),
-                        ),
-                        if (canEdit && query.isEmpty) ...[
-                          const SizedBox(height: 16),
-                          FilledButton.icon(
+                  return AppEmptyState(
+                    query.isEmpty
+                        ? 'Belum ada produk'
+                        : 'Produk tidak ditemukan',
+                    icon: Icons.inventory_2_outlined,
+                    action: (canEdit && query.isEmpty)
+                        ? FilledButton.icon(
+                            style: FilledButton.styleFrom(
+                                minimumSize: const Size(0, 48)),
                             onPressed: () => _openForm('/produk/baru'),
                             icon: const Icon(Icons.add),
                             label: const Text('Tambah Produk'),
-                          ),
-                        ],
-                      ],
-                    ),
+                          )
+                        : null,
                   );
                 }
                 return ListView.separated(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  padding: const EdgeInsets.fromLTRB(14, 6, 14, 24),
                   itemCount: prods.length,
-                  separatorBuilder: (_, __) =>
-                      const Divider(height: 1, indent: 60),
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
                   itemBuilder: (context, i) => _ProductTile(
                     product: prods[i],
                     canEdit: canEdit,
                     onOpen: _openForm,
                     basePrice: basePrices[prods[i].id],
+                    lowStock: lowStockIds.contains(prods[i].id),
+                    isDark: isDark,
                   ),
                 );
               },
@@ -287,22 +329,10 @@ class _GroupChip extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.only(right: 6),
-      child: FilterChip(
-        label: Text(label, style: const TextStyle(fontSize: 12)),
-        selected: selected,
-        onSelected: (_) => onTap(),
-        visualDensity: VisualDensity.compact,
-        selectedColor: scheme.primaryContainer,
-        checkmarkColor: scheme.onPrimaryContainer,
-        side: BorderSide.none,
-        padding: EdgeInsets.zero,
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(right: 6),
+        child: AppFilterChip(label: label, selected: selected, onTap: onTap),
+      );
 }
 
 class _ProductTile extends ConsumerWidget {
@@ -311,6 +341,8 @@ class _ProductTile extends ConsumerWidget {
     required this.canEdit,
     required this.onOpen,
     this.basePrice,
+    this.lowStock = false,
+    this.isDark = false,
   });
   final Product product;
   final bool canEdit;
@@ -319,6 +351,10 @@ class _ProductTile extends ConsumerWidget {
   /// Harga dasar (satuan dasar, tier minQty=1) — null bila produk belum
   /// punya satuan/harga sama sekali.
   final int? basePrice;
+
+  /// Stok di bawah minimum -> lencana "Menipis".
+  final bool lowStock;
+  final bool isDark;
 
   Future<void> _confirmDeactivate(BuildContext context, WidgetRef ref) async {
     final ok = await showAppDialog<bool>(
@@ -346,51 +382,77 @@ class _ProductTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final tile = ListTile(
+      contentPadding: const EdgeInsets.fromLTRB(14, 4, 6, 4),
       leading: CircleAvatar(
-        backgroundColor: scheme.primaryContainer,
+        radius: 21,
+        backgroundColor: scheme.primary.withOpacity(0.13),
         child: Text(
           product.name.isNotEmpty ? product.name[0].toUpperCase() : '?',
           style: TextStyle(
-              color: scheme.onPrimaryContainer, fontWeight: FontWeight.w700),
+              color: scheme.primary, fontWeight: FontWeight.w700, fontSize: 16),
         ),
       ),
-      title: Text(product.name),
-      subtitle: (product.kodeProduk != null || basePrice != null)
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (product.kodeProduk != null)
-                  Text(product.kodeProduk!,
-                      style: TextStyle(
-                          color: scheme.onSurfaceVariant, fontSize: 12)),
-                if (basePrice != null)
-                  Text(formatRupiah(basePrice!),
-                      style: AppTheme.numStyle(context,
-                          size: 12.5,
-                          weight: FontWeight.w600,
-                          color: scheme.onSurfaceVariant)),
-              ],
+      title: Text(product.name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600)),
+      subtitle: (product.kodeProduk != null || lowStock)
+          ? Padding(
+              padding: const EdgeInsets.only(top: 3),
+              child: Wrap(
+                spacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  if (product.kodeProduk != null)
+                    Text(product.kodeProduk!,
+                        style: TextStyle(
+                            color: scheme.onSurfaceVariant, fontSize: 12)),
+                  if (lowStock)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 1.5),
+                      decoration: BoxDecoration(
+                        color: AppTheme.stockWarnBg(isDark),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text('Menipis',
+                          style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.stockWarnFg(isDark))),
+                    ),
+                ],
+              ),
             )
           : null,
-      trailing: canEdit
-          ? IconButton(
-              icon: const Icon(Icons.edit_outlined, size: 20),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (basePrice != null)
+            Text(formatRupiah(basePrice!),
+                style: AppTheme.numStyle(context,
+                    size: 15, weight: FontWeight.w700, color: scheme.primary)),
+          if (canEdit)
+            IconButton(
+              icon: const Icon(Icons.edit_outlined, size: 19),
               onPressed: () => onOpen('/produk/${product.id}'),
-            )
-          : null,
+            ),
+        ],
+      ),
       // Tetap bisa di-tap walau !canEdit: form membuka mode read-only
       // ("Detail Produk") untuk kasir tanpa izin input_stok.
       onTap: () => onOpen('/produk/${product.id}'),
     );
 
-    if (!canEdit) return tile;
+    if (!canEdit) return Card(margin: EdgeInsets.zero, child: tile);
 
     // Geser ke kiri untuk nonaktifkan — pola sama seperti hapus pelanggan.
     // Bukan hard-delete (tidak ada fungsi itu di DB): "Nonaktifkan" = sama
     // persis logika tombol Nonaktifkan di produk_form_screen.dart, cuma
     // dipanggil lebih cepat lewat swipe.
-    return Dismissible(
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Dismissible(
       key: ValueKey(product.id),
       direction: DismissDirection.endToStart,
       confirmDismiss: (_) async {
@@ -405,6 +467,7 @@ class _ProductTile extends ConsumerWidget {
             Icon(Icons.visibility_off_outlined, color: scheme.onErrorContainer),
       ),
       child: tile,
+    ),
     );
   }
 }

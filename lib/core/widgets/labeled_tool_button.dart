@@ -16,6 +16,7 @@ class LabeledToolButton extends StatelessWidget {
     this.fg,
     this.bg,
     this.labelWidth = 44,
+    this.round = false,
   });
 
   final IconData icon;
@@ -41,6 +42,9 @@ class LabeledToolButton extends StatelessWidget {
   /// lain boleh sedikit lebih lebar supaya tetap muat 2 baris.
   final double labelWidth;
 
+  /// Gaya landing: lingkaran 46dp + label 11sp (default: kotak 36 + label 8.5).
+  final bool round;
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -49,15 +53,19 @@ class LabeledToolButton extends StatelessWidget {
     final iconColor = (fg?.call(isDark) ?? cs.onSurfaceVariant)
         .withOpacity(enabled ? 1 : 0.38);
     final bgColor = bg?.call(isDark) ?? cs.surface;
-    final child = Icon(icon, size: 18, color: iconColor);
+    final child = Icon(icon, size: round ? 21 : 18, color: iconColor);
     final box = Container(
-      width: 36,
-      height: 36,
+      width: round ? 46 : 36,
+      height: round ? 46 : 36,
       decoration: BoxDecoration(
         color: bgColor,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: cs.outlineVariant, width: 0.75),
+        shape: round ? BoxShape.circle : BoxShape.rectangle,
+        borderRadius: round ? null : BorderRadius.circular(10),
+        border: round
+            ? null
+            : Border.all(color: cs.outlineVariant, width: 0.75),
       ),
+      alignment: Alignment.center,
       child: badgeCount > 0
           ? Badge(label: Text('$badgeCount'), child: child)
           : child,
@@ -71,7 +79,7 @@ class LabeledToolButton extends StatelessWidget {
           box,
           if (label != null)
             Padding(
-              padding: const EdgeInsets.only(top: 2),
+              padding: EdgeInsets.only(top: round ? 5 : 2),
               child: SizedBox(
                 width: labelWidth,
                 child: Text(
@@ -80,7 +88,7 @@ class LabeledToolButton extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 8.5,
+                    fontSize: round ? 11 : 8.5,
                     height: 1.05,
                     fontWeight: FontWeight.w500,
                     color: cs.onSurfaceVariant,
