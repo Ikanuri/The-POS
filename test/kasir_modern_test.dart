@@ -1040,7 +1040,7 @@ void main() {
       double y() =>
           tester.getTopLeft(find.byKey(const Key('modern-search-pill'))).dy;
       final before = y();
-      tester.view.viewInsets = const FakeViewPadding(bottom: 420);
+      tester.view.viewInsets = const FakeViewPadding(bottom: 1200);
       addTearDown(tester.view.resetViewInsets);
       for (var i = 0; i < 12; i++) {
         await tester.pump(const Duration(milliseconds: 40));
@@ -1084,7 +1084,7 @@ void main() {
       }
 
       final padBefore = listBottomPad();
-      tester.view.viewInsets = const FakeViewPadding(bottom: 420);
+      tester.view.viewInsets = const FakeViewPadding(bottom: 1200);
       addTearDown(tester.view.resetViewInsets);
       await tester.pumpAndSettle();
       expect(barY(), closeTo(yBefore, 1),
@@ -1092,6 +1092,33 @@ void main() {
       expect(listBottomPad(), greaterThan(padBefore + 100),
           reason: 'daftar diberi ruang bawah agar baris terakhir bisa '
               'digulir ke atas keyboard');
+      await _drain(tester);
+      await db.close();
+    });
+
+    testWidgets(
+        'daftar menggulir di belakang cart bar (extendBody) & diberi ruang '
+        'setinggi cart bar', (tester) async {
+      final db = AppDatabase(NativeDatabase.memory());
+      await _addProduct(db, 'Gula Pasir');
+      await _pumpKasir(tester, db,
+          prefs: {...modern, 'kasir_grid_view': false},
+          size: const Size(430, 900));
+      await tester.enterText(find.byKey(const Key('modern-search')), 'gula');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.add_rounded).first);
+      await tester.pumpAndSettle();
+      final scaffold = tester.widget<Scaffold>(find.descendant(
+          of: find.byType(KasirScreen), matching: find.byType(Scaffold)));
+      expect(scaffold.extendBody, isTrue);
+      final lv = tester.widget<ListView>(find
+          .descendant(
+              of: find.byType(KasirScreen), matching: find.byType(ListView))
+          .first);
+      final barH = tester
+          .getSize(find.byKey(const Key('modern-cart-bar')))
+          .height;
+      expect((lv.padding as EdgeInsets).bottom, greaterThanOrEqualTo(barH));
       await _drain(tester);
       await db.close();
     });

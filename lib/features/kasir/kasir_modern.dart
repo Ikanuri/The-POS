@@ -28,6 +28,14 @@ List<BoxShadow> _sh(List<BoxShadow> s) => PerfDiag.s.shadows ? s : const [];
 double _el(double e) => PerfDiag.s.shadows ? e : 0;
 
 extension _KasirModernX on _KasirScreenState {
+  /// Ruang bawah yang harus dikosongkan daftar: keyboard ATAU cart bar
+  /// (`extendBody` menaruh tinggi cart bar di `padding.bottom`).
+  double _bottomClear(BuildContext c) {
+    final k = MediaQuery.viewInsetsOf(c).bottom;
+    final b = MediaQuery.paddingOf(c).bottom;
+    return k > b ? k : b;
+  }
+
   /// Antrian pesanan ditahan (tombol pojok): lembar bawah bergaya struk.
   void _openHeldSheet() {
     showAppSheet(
@@ -213,11 +221,10 @@ extension _KasirModernX on _KasirScreenState {
                                 children: [
                                   Expanded(
                                     child: isLanding
-                                        ? _ModernLanding(
+                                        ? Builder(
+                                            builder: (ctx) => _ModernLanding(
                                             cartId: _cartId,
-                                            extraBottom:
-                                                MediaQuery.viewInsetsOf(context)
-                                                    .bottom,
+                                            extraBottom: _bottomClear(ctx),
                                             onShowAll: () => ref
                                                 .read(_kasirShowAllProvider(
                                                         _cartId)
@@ -235,7 +242,7 @@ extension _KasirModernX on _KasirScreenState {
                                               onAfterQtyChange:
                                                   _highlightSearchIfActive,
                                             ),
-                                          )
+                                          ))
                                         : Builder(
                                             builder: (ctx) =>
                                                 _buildProductResults(
@@ -245,9 +252,7 @@ extension _KasirModernX on _KasirScreenState {
                                                     isGrid,
                                                     modern: true,
                                                     extraBottom:
-                                                        MediaQuery.viewInsetsOf(
-                                                                ctx)
-                                                            .bottom),
+                                                        _bottomClear(ctx)),
                                           ),
                                   ),
                                 ],
@@ -267,6 +272,9 @@ extension _KasirModernX on _KasirScreenState {
       // Latar sedikit lebih gelap dari kartu (seperti kanvas katalog HTML) agar
       // cart bar & kartu produk terlihat terpisah dari latar.
       backgroundColor: Color.lerp(cs.surface, AppTheme.canvasColor(dark), 0.4),
+      // Daftar menggulir DI BELAKANG cart bar (tanpa pita latar bertepi tegas);
+      // ruang bawah daftar = tinggi cart bar (atau keyboard bila lebih tinggi).
+      extendBody: true,
       bottomNavigationBar: cart.isEmpty
           ? null
           : _buildModernCartBottom(context, cart, cartNotifier, cartMeta),
