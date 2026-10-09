@@ -8,6 +8,12 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 9 Oktober 2026 (v3.7.0 — Halaman Produk baru)
+
+- **Halaman Produk didesain ulang**: header menampilkan jumlah produk, tombol "+" bulat terracotta, lima pintasan (Cek Stok, Sinkron Harga, Kelola Kategori, Kategori Harga, Katalog) kini berupa ikon bulat berwarna dalam satu kartu.
+- **Daftar produk berupa kartu** dengan harga berfont serif dan lencana "Menipis" bila stok di bawah batas; geser ke kiri untuk menonaktifkan tetap bisa.
+- Chip kategori & filter stok di Produk dan Cek Stok kini sama gayanya dengan Kasir.
+
 ## 9 Oktober 2026 (v3.6.0 — Laporan baru)
 
 - **Halaman Laporan didesain ulang**: header dengan rentang tanggal, tombol bulat untuk pilih tanggal & ekspor, pemilih tab berupa chip pil (geser kiri/kanan tetap bisa).
