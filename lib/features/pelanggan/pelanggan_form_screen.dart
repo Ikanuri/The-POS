@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
+import '../../core/theme/app_style.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -255,31 +256,7 @@ class _PelangganFormScreenState
                 padding: const EdgeInsets.all(16),
                 children: [
                   if (_isEdit && _existing != null) ...[
-                    Card(
-                      color: scheme.primaryContainer,
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Row(
-                          children: [
-                            Icon(Icons.star, color: scheme.onPrimaryContainer),
-                            const SizedBox(width: 8),
-                            Text(
-                              '${_existing!.loyaltyPoints} poin loyalitas',
-                              style: TextStyle(
-                                  color: scheme.onPrimaryContainer,
-                                  fontWeight: FontWeight.w600),
-                            ),
-                            const Spacer(),
-                            if (_existing!.outstandingDebt > 0)
-                              Text(
-                                'Utang: ${formatRupiah(_existing!.outstandingDebt)}',
-                                style: TextStyle(
-                                    color: scheme.error, fontSize: 12),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
+                    _ProfileHeader(customer: _existing!),
                     const SizedBox(height: 12),
                     // Kode katalog (toko tutup) — khusus owner, bukan
                     // pegawai/asisten.
@@ -288,62 +265,77 @@ class _PelangganFormScreenState
                       const SizedBox(height: 12),
                     ],
                   ],
-                  TextFormField(
-                    controller: _nameCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Nama Pelanggan *',
-                    ),
-                    textCapitalization: TextCapitalization.words,
-                    validator: (v) => v == null || v.trim().isEmpty
-                        ? 'Nama wajib diisi'
-                        : null,
+                  _FormSection(
+                    title: 'Data Pelanggan',
+                    children: [
+                      TextFormField(
+                        controller: _nameCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Nama Pelanggan *',
+                        ),
+                        textCapitalization: TextCapitalization.words,
+                        validator: (v) => v == null || v.trim().isEmpty
+                            ? 'Nama wajib diisi'
+                            : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _phoneCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Nomor Telepon',
+                          hintText: '08xx…',
+                        ),
+                        keyboardType: TextInputType.phone,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _addressCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Alamat',
+                        ),
+                        maxLines: 2,
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _phoneCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Nomor Telepon',
-                      hintText: '08xx…',
-                    ),
-                    keyboardType: TextInputType.phone,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _addressCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Alamat',
-                    ),
-                    maxLines: 2,
-                  ),
-                  const SizedBox(height: 12),
-                  if (_groups.isNotEmpty)
-                    DropdownButtonFormField<String?>(
-                      value: _selectedGroupId,
-                      decoration:
-                          const InputDecoration(labelText: 'Grup Harga'),
-                      items: [
-                        const DropdownMenuItem(
-                            value: null,
-                            child: Text('Tanpa Grup (Harga Normal)')),
-                        ..._groups.map((g) => DropdownMenuItem(
-                              value: g.id,
-                              child: Text(g.name),
-                            )),
+                  _FormSection(
+                    title: 'Harga & Loyalitas',
+                    children: [
+                      if (_groups.isNotEmpty) ...[
+                        DropdownButtonFormField<String?>(
+                          value: _selectedGroupId,
+                          decoration:
+                              const InputDecoration(labelText: 'Grup Harga'),
+                          items: [
+                            const DropdownMenuItem(
+                                value: null,
+                                child: Text('Tanpa Grup (Harga Normal)')),
+                            ..._groups.map((g) => DropdownMenuItem(
+                                  value: g.id,
+                                  child: Text(g.name),
+                                )),
+                          ],
+                          onChanged: (v) =>
+                              setState(() => _selectedGroupId = v),
+                        ),
+                        const SizedBox(height: 12),
                       ],
-                      onChanged: (v) =>
-                          setState(() => _selectedGroupId = v),
-                    ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _pointsCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Poin Loyalitas',
-                      suffixText: 'poin',
-                      helperText: 'Bisa diisi/diubah manual berapa pun',
-                    ),
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      TextFormField(
+                        controller: _pointsCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Poin Loyalitas',
+                          suffixText: 'poin',
+                          helperText: 'Bisa diisi/diubah manual berapa pun',
+                        ),
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly
+                        ],
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 80),
                 ],
@@ -355,6 +347,104 @@ class _PelangganFormScreenState
         child: FilledButton(
           onPressed: _isLoading ? null : _save,
           child: Text(_isEdit ? 'Perbarui Data' : 'Simpan Pelanggan'),
+        ),
+      ),
+    );
+  }
+}
+
+/// Kepala profil: avatar besar + nama + lencana poin & utang (gaya landing).
+class _ProfileHeader extends StatelessWidget {
+  const _ProfileHeader({required this.customer});
+  final Customer customer;
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Container(
+              width: 56,
+              height: 56,
+              alignment: Alignment.center,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFFD97757), Color(0xFFC96442)],
+                ),
+              ),
+              child: Text(
+                customer.name.isNotEmpty ? customer.name[0].toUpperCase() : '?',
+                style: AppTheme.numStyle(context,
+                    size: 24, weight: FontWeight.w600, color: Colors.white),
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(customer.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      _chip('${customer.loyaltyPoints} poin loyalitas',
+                          AppTheme.stockWarnFg(dark), AppTheme.stockWarnBg(dark)),
+                      if (customer.outstandingDebt > 0)
+                        _chip('Utang: ${formatRupiah(customer.outstandingDebt)}',
+                            AppTheme.debtFg(dark), AppTheme.debtBg(dark)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _chip(String t, Color fg, Color bg) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+        decoration: BoxDecoration(
+            color: bg, borderRadius: BorderRadius.circular(AppStyle.rPill)),
+        child: Text(t,
+            style: TextStyle(
+                fontSize: 11.5, fontWeight: FontWeight.w700, color: fg)),
+      );
+}
+
+/// Kelompok isian dalam satu kartu putih dengan judul seksi.
+class _FormSection extends StatelessWidget {
+  const _FormSection({required this.title, required this.children});
+  final String title;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 12),
+            ...children,
+          ],
         ),
       ),
     );

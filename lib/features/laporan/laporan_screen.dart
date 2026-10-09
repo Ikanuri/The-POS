@@ -70,7 +70,7 @@ class _LaporanScreenState extends ConsumerState<LaporanScreen>
                     color: cs.onSurfaceVariant)),
             Text('Laporan',
                 style: AppTheme.numStyle(context,
-                    size: 24, weight: FontWeight.w700)),
+                    size: 21, weight: FontWeight.w600)),
           ],
         ),
         actions: [

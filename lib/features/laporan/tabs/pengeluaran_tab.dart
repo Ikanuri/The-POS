@@ -1,5 +1,5 @@
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import '../../../core/widgets/chart_kit.dart';
 import '../report_widgets.dart';
 import '../../../core/widgets/app_empty_state.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,7 +7,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/providers/data_refresh_provider.dart';
 import '../../../core/providers/device_provider.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/utils/chart_utils.dart';
 
 /// Item 49d — tab dedicated "Laporan Pengeluaran": rincian per jenis +
 /// grafik tren harian. Beda dari kartu "Pengeluaran" di tab Ringkasan
@@ -117,7 +116,7 @@ class PengeluaranTab extends ConsumerWidget {
                         const SizedBox(width: 8),
                         Text(formatRupiah(e.value),
                             style: AppTheme.numStyle(context,
-                                size: 14, weight: FontWeight.w700)),
+                                size: 14, weight: FontWeight.w600)),
                       ],
                     ),
                   );
@@ -152,30 +151,14 @@ class _ExpenseDonut extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 180,
-      child: PieChart(
-        PieChartData(
-          centerSpaceRadius: 40,
-          sectionsSpace: 2,
-          sections: entries.asMap().entries.map((indexed) {
-            final i = indexed.key;
-            final e = indexed.value;
-            final pct = total > 0 ? (e.value / total * 100) : 0.0;
-            return PieChartSectionData(
-              value: e.value.toDouble(),
-              color: _typeColor(i),
-              title: '${pct.round()}%',
-              radius: 50,
-              titleStyle: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
-              ),
-            );
-          }).toList(),
-        ),
-      ),
+    return AppDonut(
+      size: 160,
+      showLegend: false,
+      slices: [
+        for (var i = 0; i < entries.length; i++)
+          DonutSlice(_typeLabel(entries[i].key), entries[i].value, _typeColor(i),
+              Colors.white),
+      ],
     );
   }
 }
@@ -188,60 +171,17 @@ class _ExpenseDailyChart extends StatelessWidget {
   Widget build(BuildContext context) {
     final sorted = daily.entries.toList()
       ..sort((a, b) => a.key.compareTo(b.key));
-    final max = sorted.map((e) => e.value).reduce((a, b) => a > b ? a : b);
     final scheme = Theme.of(context).colorScheme;
-    final total = sorted.length;
-
-    return Column(
-      children: [
-        SizedBox(
-          height: 80,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: sorted.map((e) {
-              final h = clampedBarHeight(e.value, max);
-              return Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 2),
-                  child: Tooltip(
-                    message:
-                        '${e.key.day}/${e.key.month}\n${formatRupiah(e.value)}',
-                    child: Container(
-                      height: h,
-                      decoration: BoxDecoration(
-                        color: scheme.error,
-                        borderRadius: BorderRadius.circular(3),
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
+    return AppBarChart(
+      series: [BarSeries('Pengeluaran', scheme.error)],
+      valueLabel: (v) => formatRupiah(v),
+      groups: [
+        for (final e in sorted)
+          BarGroup(
+            xLabel: '${e.key.day}/${e.key.month}',
+            title: '${e.key.day}/${e.key.month}/${e.key.year}',
+            values: [e.value.toDouble()],
           ),
-        ),
-        const SizedBox(height: 3),
-        Row(
-          children: sorted.asMap().entries.map((entry) {
-            final i = entry.key;
-            final date = entry.value.key;
-            final bool show = total <= 7
-                ? true
-                : total <= 14
-                    ? i % 2 == 0
-                    : total <= 31
-                        ? i % 3 == 0 || i == total - 1
-                        : i % 7 == 0 || i == total - 1;
-            return Expanded(
-              child: Text(
-                show ? '${date.day}/${date.month}' : '',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 8, color: scheme.onSurfaceVariant),
-                overflow: TextOverflow.visible,
-                softWrap: false,
-              ),
-            );
-          }).toList(),
-        ),
       ],
     );
   }

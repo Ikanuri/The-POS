@@ -54,7 +54,7 @@ class ReportHero extends StatelessWidget {
             alignment: Alignment.centerLeft,
             child: Text(value,
                 style: AppTheme.numStyle(context,
-                    size: 36, weight: FontWeight.w700, color: Colors.white)),
+                    size: 30, weight: FontWeight.w600, color: Colors.white)),
           ),
           if (sub != null) ...[
             const SizedBox(height: 6),
@@ -113,7 +113,7 @@ class ReportKpiCard extends StatelessWidget {
               alignment: Alignment.centerLeft,
               child: Text(value,
                   style: AppTheme.numStyle(context,
-                      size: 18, weight: FontWeight.w700, color: valueColor)),
+                      size: 15.5, weight: FontWeight.w600, color: valueColor)),
             ),
           ],
         ),

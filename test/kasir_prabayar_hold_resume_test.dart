@@ -77,6 +77,8 @@ void main() {
 
     final container = ProviderContainer(overrides: [
       databaseProvider.overrideWithValue(db),
+        // Stiker "Belum ada produk" berulang selamanya -> pumpAndSettle menggantung.
+        kasirStickerProvider.overrideWith((ref, slot) async => null),
       deviceProvider
           .overrideWith((ref) => DeviceNotifier()..state = fakeDevice),
     ]);
@@ -114,6 +116,8 @@ void main() {
 
     final container = ProviderContainer(overrides: [
       databaseProvider.overrideWithValue(db),
+        // Stiker "Belum ada produk" berulang selamanya -> pumpAndSettle menggantung.
+        kasirStickerProvider.overrideWith((ref, slot) async => null),
       deviceProvider
           .overrideWith((ref) => DeviceNotifier()..state = fakeDevice),
     ]);
@@ -182,6 +186,8 @@ void main() {
 
     final container = ProviderContainer(overrides: [
       databaseProvider.overrideWithValue(db),
+        // Stiker "Belum ada produk" berulang selamanya -> pumpAndSettle menggantung.
+        kasirStickerProvider.overrideWith((ref, slot) async => null),
       deviceProvider
           .overrideWith((ref) => DeviceNotifier()..state = fakeDevice),
     ]);
@@ -293,6 +299,8 @@ void main() {
 
     final container = ProviderContainer(overrides: [
       databaseProvider.overrideWithValue(db),
+        // Stiker "Belum ada produk" berulang selamanya -> pumpAndSettle menggantung.
+        kasirStickerProvider.overrideWith((ref, slot) async => null),
       deviceProvider
           .overrideWith((ref) => DeviceNotifier()..state = fakeDevice),
     ]);

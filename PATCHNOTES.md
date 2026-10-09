@@ -8,6 +8,14 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 9 Oktober 2026 (v3.8.0 — Revolver pecahan, grafik baru, Pelanggan baru)
+
+- **Revolver vertikal (pecahan) di stepper**: geser tombol "+" ke ATAS untuk 0,25 / 0,5 / 0,75; geser ke BAWAH untuk 0,10 lalu naik 0,01 per langkah. Bisa digabung dengan geser ke kiri (angka bulat) dalam satu geseran — mis. atas ke 0,25 lalu kiri ke 5 menghasilkan 5,25. Dari "+" yang belum ada di keranjang, geser vertikal tetap menggulir daftar (tidak menambah produk tanpa sengaja).
+- **Stiker animasi untuk "Belum ada produk"** di Kasir dan Produk (bisa diganti owner di Pengaturan > stiker Kasir, ikut tersinkron).
+- **Angka di Ringkasan & Laporan** dikecilkan dan dibuat tidak terlalu tebal.
+- **Grafik gaya Telegram**: garis bantu angka bulat dengan label singkat (rb/jt/M) di atas garis, skala bergerak halus, sentuh/geser memilih titik dengan kartu rincian melayang, batang terpilih menonjol, donat bisa disentuh (irisan membesar + persen di tengah), getar halus tiap pindah titik.
+- **Halaman Pelanggan didesain ulang**: header jumlah pelanggan, kartu dengan avatar berwarna, lencana poin & utang, indeks huruf berbentuk pil; form pelanggan dengan kepala profil dan isian dalam kartu.
+
 ## 9 Oktober 2026 (v3.7.0 — Halaman Produk baru)
 
 - **Halaman Produk didesain ulang**: header menampilkan jumlah produk, tombol "+" bulat terracotta, lima pintasan (Cek Stok, Sinkron Harga, Kelola Kategori, Kategori Harga, Katalog) kini berupa ikon bulat berwarna dalam satu kartu.

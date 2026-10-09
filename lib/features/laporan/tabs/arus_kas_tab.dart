@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
+import '../../../core/widgets/chart_kit.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../core/providers/data_refresh_provider.dart';
 import '../../../core/providers/device_provider.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/utils/chart_utils.dart';
 
 /// Tab Arus Kas — uang yang BENAR-BENAR berpindah dalam rentang.
 ///
@@ -186,8 +186,8 @@ class _Tile extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: AppTheme.numStyle(context,
-                  size: big ? 20 : 15,
-                  weight: FontWeight.w700,
+                  size: big ? 17 : 14,
+                  weight: FontWeight.w600,
                   color: color),
             ),
           ],
@@ -278,78 +278,26 @@ class _CashFlowChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final max = daily
-        .expand((e) => [e.cashIn, e.cashOut])
-        .fold<int>(0, (a, b) => a > b ? a : b);
-    final total = daily.length;
-
-    return Column(
-      children: [
-        SizedBox(
-          height: 80,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: daily.map((e) {
-              return Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 2),
-                  child: Tooltip(
-                    message: '${e.date.day}/${e.date.month}\n'
-                        'Masuk: ${formatRupiah(e.cashIn)}\n'
-                        'Keluar: ${formatRupiah(e.cashOut)}',
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Expanded(
-                          child: Container(
-                            height: clampedBarHeight(e.cashIn, max),
-                            decoration: BoxDecoration(
-                              color: scheme.tertiary,
-                              borderRadius: BorderRadius.circular(2),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 1),
-                        Expanded(
-                          child: Container(
-                            height: clampedBarHeight(e.cashOut, max),
-                            decoration: BoxDecoration(
-                              color: scheme.error,
-                              borderRadius: BorderRadius.circular(2),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-        ),
-        const SizedBox(height: 3),
-        Row(
-          children: daily.asMap().entries.map((entry) {
-            final i = entry.key;
-            final date = entry.value.date;
-            final show = total <= 7
-                ? true
-                : total <= 14
-                    ? i % 2 == 0
-                    : total <= 31
-                        ? i % 3 == 0 || i == total - 1
-                        : i % 7 == 0 || i == total - 1;
-            return Expanded(
-              child: Text(
-                show ? '${date.day}/${date.month}' : '',
-                textAlign: TextAlign.center,
-                style:
-                    TextStyle(fontSize: 8, color: scheme.onSurfaceVariant),
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
+        child: AppBarChart(
+          series: [
+            BarSeries('Masuk', scheme.tertiary),
+            BarSeries('Keluar', scheme.error),
+          ],
+          valueLabel: (v) => formatRupiah(v),
+          groups: [
+            for (final e in daily)
+              BarGroup(
+                xLabel: '${e.date.day}/${e.date.month}',
+                title: '${e.date.day}/${e.date.month}/${e.date.year}',
+                values: [e.cashIn.toDouble(), e.cashOut.toDouble()],
               ),
-            );
-          }).toList(),
+          ],
         ),
-      ],
+      ),
     );
   }
 }

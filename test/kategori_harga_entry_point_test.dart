@@ -1,5 +1,6 @@
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:the_pos/features/kasir/kasir_screen.dart' show kasirStickerProvider;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -65,6 +66,8 @@ void main() {
       ProviderScope(
         overrides: [
           databaseProvider.overrideWithValue(db),
+        // Stiker "Belum ada produk" berulang selamanya -> pumpAndSettle menggantung.
+        kasirStickerProvider.overrideWith((ref, slot) async => null),
           deviceProvider.overrideWith((ref) => DeviceNotifier()
             ..state = const DeviceIdentity(
               storeUuid: 'test-store-uuid',

@@ -10,6 +10,7 @@ import '../../core/theme/app_motion.dart';
 import '../../core/theme/app_style.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_filter_chip.dart';
+import '../../core/widgets/chart_kit.dart';
 import '../../core/utils/chart_utils.dart';
 import '../shell/sync_status_banner.dart';
 
@@ -149,7 +150,7 @@ class RingkasanScreen extends ConsumerWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: AppTheme.numStyle(context,
-                  size: 24, weight: FontWeight.w700),
+                  size: 21, weight: FontWeight.w600),
             ),
           ],
         ),
@@ -389,7 +390,7 @@ class _HeroCard extends StatelessWidget {
             child: Text(
               formatRupiah(revenue),
               style: AppTheme.numStyle(context,
-                  size: 38, weight: FontWeight.w700, color: Colors.white),
+                  size: 30, weight: FontWeight.w600, color: Colors.white),
             ),
           ),
           const SizedBox(height: 6),
@@ -459,7 +460,7 @@ class _PeriodCard extends StatelessWidget {
                           child: Text(
                             formatRupiah(items[i].value),
                             style: AppTheme.numStyle(context,
-                                size: 16, weight: FontWeight.w700),
+                                size: 14.5, weight: FontWeight.w600),
                           ),
                         ),
                       ],
@@ -526,46 +527,70 @@ class _HourlyChart extends ConsumerWidget {
                   ),
           ),
         ),
-        SizedBox(
-          height: 92,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: hourly.asMap().entries.map((e) {
-              final h = e.key;
-              final v = e.value;
-              final height = clampedBarHeight(v, max, emptyHeight: 0);
-              final isPinned = pinned == h;
-              return Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 1.2),
-                  child: GestureDetector(
-                    key: ValueKey('hour_bar_$h'),
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => ref.read(_pinnedHourProvider.notifier).state =
-                        isPinned ? null : h,
-                    child: Align(
-                      alignment: Alignment.bottomCenter,
-                      child: AnimatedContainer(
-                        duration: AppMotion.dur(context, AppMotion.base),
-                        curve: AppMotion.easeOutQuint,
-                        height: height + 3,
-                        decoration: BoxDecoration(
-                          color: isPinned
-                              ? scheme.primary
-                              : v > 0
+        // Geser di atas batang = rincian ikut pindah (scrub) dgn haptik tiap
+        // pindah jam; batang terpilih menonjol, yang lain meredup (Telegram).
+        LayoutBuilder(builder: (context, c) {
+          void scrub(double dx) {
+            final h = (dx / c.maxWidth * hourly.length)
+                .floor()
+                .clamp(0, hourly.length - 1);
+            if (ref.read(_pinnedHourProvider) != h) {
+              chartTick();
+              ref.read(_pinnedHourProvider.notifier).state = h;
+            }
+          }
+
+          return GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onHorizontalDragUpdate: (d) => scrub(d.localPosition.dx),
+            child: SizedBox(
+              height: 92,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: hourly.asMap().entries.map((e) {
+                  final h = e.key;
+                  final v = e.value;
+                  final height = clampedBarHeight(v, max, emptyHeight: 0);
+                  final isPinned = pinned == h;
+                  final base = v > 0
+                      ? scheme.primary.withOpacity(h == peak ? 0.9 : 0.5)
+                      : scheme.surfaceContainerHighest;
+                  return Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 1.2),
+                      child: GestureDetector(
+                        key: ValueKey('hour_bar_$h'),
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () {
+                          if (!isPinned) chartTick();
+                          ref.read(_pinnedHourProvider.notifier).state =
+                              isPinned ? null : h;
+                        },
+                        child: Align(
+                          alignment: Alignment.bottomCenter,
+                          child: AnimatedContainer(
+                            duration: AppMotion.dur(context, AppMotion.base),
+                            curve: AppMotion.easeOutQuint,
+                            height: height + 3,
+                            decoration: BoxDecoration(
+                              color: isPinned
                                   ? scheme.primary
-                                      .withOpacity(h == peak ? 0.9 : 0.5)
-                                  : scheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(AppStyle.rPill),
+                                  : pinned != null
+                                      ? base.withOpacity(base.opacity * 0.4)
+                                      : base,
+                              borderRadius:
+                                  BorderRadius.circular(AppStyle.rPill),
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-        ),
+                  );
+                }).toList(),
+              ),
+            ),
+          );
+        }),
         const SizedBox(height: 6),
         Row(
           children: hourly.asMap().entries.map((e) {
@@ -815,7 +840,7 @@ class _TopProductsCard extends StatelessWidget {
                     const SizedBox(width: 12),
                     Text(formatRupiah(products[i].revenue),
                         style: AppTheme.numStyle(context,
-                            size: 14.5, weight: FontWeight.w700)),
+                            size: 14.5, weight: FontWeight.w600)),
                   ],
                 ),
               ),

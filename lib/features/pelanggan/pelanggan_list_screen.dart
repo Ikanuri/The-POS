@@ -1,4 +1,5 @@
 import '../../core/theme/app_style.dart';
+import '../../core/widgets/app_empty_state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -33,7 +34,8 @@ class PelangganListScreen extends ConsumerStatefulWidget {
 }
 
 class _PelangganListScreenState extends ConsumerState<PelangganListScreen> {
-  static const _itemExtent = 68.0;
+  // Kartu 72 + jarak 8 — TETAP (itemExtent) supaya lompat huruf akurat.
+  static const _itemExtent = 80.0;
   final _scrollCtrl = ScrollController();
   String? _activeLetter; // huruf yang sedang dipilih di index slider
 
@@ -73,15 +75,38 @@ class _PelangganListScreenState extends ConsumerState<PelangganListScreen> {
     final canAdd = ref.watch(_canAddCustomerProvider).valueOrNull ?? canEdit;
     final scheme = Theme.of(context).colorScheme;
 
+    final count = customersAsync.valueOrNull?.length;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Pelanggan'),
+        toolbarHeight: 68,
+        titleSpacing: 18,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(count == null ? ' ' : '$count pelanggan',
+                style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w500,
+                    color: scheme.onSurfaceVariant)),
+            Text('Pelanggan',
+                style: AppTheme.numStyle(context,
+                    size: 21, weight: FontWeight.w600)),
+          ],
+        ),
         actions: [
           if (canAdd)
-            IconButton(
-              icon: const Icon(Icons.add),
-              tooltip: 'Tambah Pelanggan',
-              onPressed: () => context.push('/pelanggan/baru'),
+            Padding(
+              padding: const EdgeInsets.only(right: 14),
+              child: Material(
+                color: scheme.primary,
+                shape: const CircleBorder(),
+                child: IconButton(
+                  icon: const Icon(Icons.add_rounded, color: Colors.white),
+                  tooltip: 'Tambah Pelanggan',
+                  onPressed: () => context.push('/pelanggan/baru'),
+                ),
+              ),
             ),
         ],
       ),
@@ -89,7 +114,7 @@ class _PelangganListScreenState extends ConsumerState<PelangganListScreen> {
         children: [
           const SyncStatusBanner(),
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+            padding: const EdgeInsets.fromLTRB(14, 4, 14, 10),
             child: AppStyle.pillSearch(context, TextField(
               decoration: InputDecoration(
                 hintText: 'Cari nama pelanggan…',
@@ -114,32 +139,20 @@ class _PelangganListScreenState extends ConsumerState<PelangganListScreen> {
             child: customersAsync.when(
               data: (customers) {
                 if (customers.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.people_outline,
-                            size: 64, color: scheme.outlineVariant),
-                        const SizedBox(height: 12),
-                        Text(
-                          query.isEmpty
-                              ? 'Belum ada pelanggan'
-                              : 'Pelanggan tidak ditemukan',
-                          style:
-                              Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                    color: scheme.onSurfaceVariant,
-                                  ),
-                        ),
-                        if (canAdd && query.isEmpty) ...[
-                          const SizedBox(height: 16),
-                          FilledButton.icon(
+                  return AppEmptyState(
+                    query.isEmpty
+                        ? 'Belum ada pelanggan'
+                        : 'Pelanggan tidak ditemukan',
+                    icon: Icons.people_outline,
+                    action: (canAdd && query.isEmpty)
+                        ? FilledButton.icon(
+                            style: FilledButton.styleFrom(
+                                minimumSize: const Size(0, 48)),
                             onPressed: () => context.push('/pelanggan/baru'),
                             icon: const Icon(Icons.add),
                             label: const Text('Tambah Pelanggan'),
-                          ),
-                        ],
-                      ],
-                    ),
+                          )
+                        : null,
                   );
                 }
 
@@ -152,7 +165,7 @@ class _PelangganListScreenState extends ConsumerState<PelangganListScreen> {
                     ListView.builder(
                       controller: _scrollCtrl,
                       itemExtent: _itemExtent,
-                      padding: EdgeInsets.only(right: showIndex ? 20 : 0),
+                      padding: EdgeInsets.fromLTRB(14, 2, showIndex ? 30 : 14, 24),
                       itemCount: customers.length,
                       itemBuilder: (_, i) => _CustomerTile(
                         customer: customers[i],
@@ -178,8 +191,9 @@ class _PelangganListScreenState extends ConsumerState<PelangganListScreen> {
                           width: 72,
                           height: 72,
                           decoration: BoxDecoration(
-                            color: scheme.primary.withOpacity(0.9),
-                            borderRadius: BorderRadius.circular(16),
+                            color: scheme.primary.withOpacity(0.92),
+                            shape: BoxShape.circle,
+                            boxShadow: AppStyle.accentShadow,
                           ),
                           alignment: Alignment.center,
                           child: Text(
@@ -261,6 +275,11 @@ class _AlphabetIndex extends StatelessWidget {
           onTapUp: (_) => onEnd(),
           child: Container(
             width: 20,
+            margin: const EdgeInsets.fromLTRB(0, 4, 4, 28),
+            decoration: BoxDecoration(
+              color: scheme.primary.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(AppStyle.rPill),
+            ),
             alignment: Alignment.center,
             child: Column(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -281,6 +300,36 @@ class _AlphabetIndex extends StatelessWidget {
       },
     );
   }
+}
+
+/// Warna avatar deterministik dari huruf pertama (palet warna fungsi app).
+({Color fg, Color bg}) _avatarPalette(String name, bool dark) {
+  final i = name.isEmpty ? 0 : name.toUpperCase().codeUnitAt(0) % 6;
+  return switch (i) {
+    0 => (fg: AppTheme.scanFg(dark), bg: AppTheme.scanBg(dark)),
+    1 => (fg: AppTheme.riwayatFg(dark), bg: AppTheme.riwayatBg(dark)),
+    2 => (fg: AppTheme.antrianFg(dark), bg: AppTheme.antrianBg(dark)),
+    3 => (fg: AppTheme.changeFg(dark), bg: AppTheme.changeBg(dark)),
+    4 => (fg: AppTheme.laciFg(dark), bg: AppTheme.laciBg(dark)),
+    _ => (fg: AppTheme.preorderFg(dark), bg: AppTheme.preorderBg(dark)),
+  };
+}
+
+class _MiniPill extends StatelessWidget {
+  const _MiniPill(this.text, this.fg, this.bg);
+  final String text;
+  final Color fg;
+  final Color bg;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1.5),
+        decoration: BoxDecoration(
+            color: bg, borderRadius: BorderRadius.circular(AppStyle.rPill)),
+        child: Text(text,
+            style: TextStyle(
+                fontSize: 10.5, fontWeight: FontWeight.w700, color: fg)),
+      );
 }
 
 class _CustomerTile extends ConsumerWidget {
@@ -328,47 +377,68 @@ class _CustomerTile extends ConsumerWidget {
         ? 'Utang: ${formatRupiah(customer.outstandingDebt)}'
         : null;
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final pal = _avatarPalette(customer.name, isDark);
     final tile = ListTile(
+      contentPadding: const EdgeInsets.fromLTRB(14, 0, 6, 0),
       leading: CircleAvatar(
-        backgroundColor: scheme.primaryContainer,
+        radius: 21,
+        backgroundColor: pal.bg,
         child: Text(
           customer.name.isNotEmpty ? customer.name[0].toUpperCase() : '?',
           style: TextStyle(
-              color: scheme.onPrimaryContainer, fontWeight: FontWeight.w700),
+              color: pal.fg, fontWeight: FontWeight.w700, fontSize: 16),
         ),
       ),
-      title: Text(customer.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-      subtitle: Row(
-        children: [
-          if (customer.phone != null)
-            Text(customer.phone!,
-                style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
-          if (customer.loyaltyPoints > 0) ...[
-            const SizedBox(width: 8),
-            Icon(Icons.star, size: 10, color: scheme.tertiary),
-            Text(' ${customer.loyaltyPoints} poin',
-                style: TextStyle(fontSize: 11, color: scheme.tertiary)),
-          ],
-          if (debtLabel != null) ...[
-            const SizedBox(width: 8),
-            Text(debtLabel,
-                style: TextStyle(fontSize: 11, color: scheme.error)),
-          ],
-        ],
+      title: Text(customer.name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600)),
+      subtitle: Padding(
+        padding: const EdgeInsets.only(top: 3),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          physics: const NeverScrollableScrollPhysics(),
+          child: Row(
+            children: [
+              if (customer.phone != null)
+                Text(customer.phone!,
+                    style: TextStyle(
+                        fontSize: 11.5, color: scheme.onSurfaceVariant)),
+              if (customer.loyaltyPoints > 0) ...[
+                const SizedBox(width: 8),
+                _MiniPill(
+                    '${customer.loyaltyPoints} poin',
+                    AppTheme.stockWarnFg(isDark),
+                    AppTheme.stockWarnBg(isDark)),
+              ],
+              if (debtLabel != null) ...[
+                const SizedBox(width: 8),
+                _MiniPill(debtLabel, AppTheme.debtFg(isDark),
+                    AppTheme.debtBg(isDark)),
+              ],
+            ],
+          ),
+        ),
       ),
       trailing: canEdit
           ? IconButton(
-              icon: const Icon(Icons.edit_outlined, size: 20),
+              icon: const Icon(Icons.edit_outlined, size: 19),
               onPressed: () => context.push('/pelanggan/${customer.id}'),
             )
           : null,
       onTap: () => context.push('/pelanggan/${customer.id}'),
     );
 
-    if (!canEdit) return tile;
+    Widget card(Widget child) => Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Card(margin: EdgeInsets.zero, child: child),
+        );
+
+    if (!canEdit) return card(tile);
 
     // Geser ke kiri untuk hapus.
-    return Dismissible(
+    return card(Dismissible(
       key: ValueKey(customer.id),
       direction: DismissDirection.endToStart,
       confirmDismiss: (_) async {
@@ -382,6 +452,6 @@ class _CustomerTile extends ConsumerWidget {
         child: Icon(Icons.delete_outline, color: scheme.onErrorContainer),
       ),
       child: tile,
-    );
+    ));
   }
 }

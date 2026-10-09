@@ -1,5 +1,7 @@
 import '../../core/widgets/app_filter_chip.dart';
+import '../../core/services/kasir_sticker_service.dart';
 import '../../core/widgets/app_empty_state.dart';
+import '../kasir/kasir_screen.dart' show kasirStickerProvider;
 import '../../core/theme/app_style.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -113,7 +115,7 @@ class _ProdukListScreenState extends ConsumerState<ProdukListScreen>
                     color: scheme.onSurfaceVariant)),
             Text('Produk',
                 style: AppTheme.numStyle(context,
-                    size: 24, weight: FontWeight.w700)),
+                    size: 21, weight: FontWeight.w600)),
           ],
         ),
         actions: [
@@ -283,6 +285,11 @@ class _ProdukListScreenState extends ConsumerState<ProdukListScreen>
                         ? 'Belum ada produk'
                         : 'Produk tidak ditemukan',
                     icon: Icons.inventory_2_outlined,
+                    sticker: ref
+                        .watch(kasirStickerProvider(query.isEmpty
+                            ? KasirStickerSlot.empty
+                            : KasirStickerSlot.notFound))
+                        .valueOrNull,
                     action: (canEdit && query.isEmpty)
                         ? FilledButton.icon(
                             style: FilledButton.styleFrom(
@@ -431,7 +438,7 @@ class _ProductTile extends ConsumerWidget {
           if (basePrice != null)
             Text(formatRupiah(basePrice!),
                 style: AppTheme.numStyle(context,
-                    size: 15, weight: FontWeight.w700, color: scheme.primary)),
+                    size: 14.5, weight: FontWeight.w600, color: scheme.primary)),
           if (canEdit)
             IconButton(
               icon: const Icon(Icons.edit_outlined, size: 19),

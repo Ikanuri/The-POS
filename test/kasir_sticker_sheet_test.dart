@@ -15,7 +15,7 @@ import 'package:the_pos/features/pengaturan/kasir_sticker_sheet.dart';
 /// tombol Bawaan (reset) hanya muncul untuk unggahan. Pemilih berkas asli
 /// tidak diuji (platform); validasi/simpan diuji di kasir_landing_test.
 void main() {
-  testWidgets('dua slot tampil; reset muncul hanya untuk unggahan sendiri',
+  testWidgets('tiga slot tampil; reset muncul hanya untuk unggahan sendiri',
       (tester) async {
     final db = AppDatabase(NativeDatabase.memory());
     await tester.binding.setSurfaceSize(const Size(360, 800));
@@ -35,7 +35,8 @@ void main() {
 
     expect(find.text('Landing Kasir'), findsOneWidget);
     expect(find.text('Produk tidak ditemukan'), findsOneWidget);
-    expect(find.text('Bawaan'), findsNWidgets(2)); // subtitle status
+    expect(find.text('Belum ada produk'), findsOneWidget);
+    expect(find.text('Bawaan'), findsNWidgets(3)); // subtitle status
     expect(find.byKey(const ValueKey('kasir-sticker-pick-landing')),
         findsOneWidget);
     expect(find.byKey(const ValueKey('kasir-sticker-reset-landing')),

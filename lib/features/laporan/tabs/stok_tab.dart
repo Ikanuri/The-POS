@@ -1,6 +1,6 @@
 import '../../../core/widgets/app_empty_state.dart';
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import '../../../core/widgets/chart_kit.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
@@ -103,8 +103,8 @@ class StokTab extends ConsumerWidget {
                     const SizedBox(height: 4),
                     Text(formatRupiah(report.grandTotal),
                         style: AppTheme.numStyle(context,
-                            size: 28,
-                            weight: FontWeight.w700,
+                            size: 22,
+                            weight: FontWeight.w600,
                             color: scheme.primary)),
                     if (report.missingCostCount > 0) ...[
                       const SizedBox(height: 6),
@@ -241,87 +241,19 @@ class _CategoryDonut extends StatelessWidget {
       scheme.onError,
       Colors.white,
     ];
-
     const maxSlices = 5;
     final top = categories.take(maxSlices).toList();
     final otherValue =
         categories.skip(maxSlices).fold(0, (a, c) => a + c.value);
-    final hasOther = otherValue > 0;
-    final total = top.fold(0, (a, c) => a + c.value) + otherValue;
-
-    bool isOther(int i) => hasOther && i == top.length;
-    Color colorFor(int i) => isOther(i)
-        ? scheme.surfaceContainerHighest
-        : topColors[i % topColors.length];
-    Color onColorFor(int i) => isOther(i)
-        ? scheme.onSurfaceVariant
-        : onTopColors[i % onTopColors.length];
-
-    final count = top.length + (hasOther ? 1 : 0);
-    final sections = <PieChartSectionData>[];
-    for (var i = 0; i < count; i++) {
-      final value = i < top.length ? top[i].value : otherValue;
-      final pct = total > 0 ? value / total * 100 : 0.0;
-      final small = pct < 8;
-      sections.add(PieChartSectionData(
-        value: value.toDouble(),
-        color: colorFor(i),
-        title: total > 0 ? '${pct.round()}%' : '',
-        radius: 27,
-        titlePositionPercentageOffset: small ? 1.4 : 0.5,
-        titleStyle: TextStyle(
-          fontSize: small ? 9 : 10.5,
-          fontWeight: FontWeight.w700,
-          color: small ? scheme.onSurface : onColorFor(i),
-        ),
-      ));
-    }
-
-    return Row(
-      children: [
-        SizedBox(
-          width: 130,
-          height: 130,
-          child: PieChart(PieChartData(
-            centerSpaceRadius: 26,
-            sectionsSpace: 2,
-            sections: sections,
-          )),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (var i = 0; i < count; i++)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 2),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 10,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: colorFor(i),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          i < top.length ? top[i].label : 'Lainnya',
-                          style: const TextStyle(fontSize: 11),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-        ),
+    return AppDonut(
+      size: 130,
+      slices: [
+        for (var i = 0; i < top.length; i++)
+          DonutSlice(top[i].label, top[i].value, topColors[i % topColors.length],
+              onTopColors[i % onTopColors.length]),
+        if (otherValue > 0)
+          DonutSlice('Lainnya', otherValue, scheme.surfaceContainerHighest,
+              scheme.onSurfaceVariant),
       ],
     );
   }

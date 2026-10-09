@@ -1,6 +1,6 @@
 import '../../../core/widgets/app_empty_state.dart';
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import '../../../core/widgets/chart_kit.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/app_database.dart';
@@ -90,7 +90,7 @@ class PelangganTab extends ConsumerWidget {
       trailing: Text(
         formatRupiah(s.totalSpent),
         style: AppTheme.numStyle(context,
-            size: 14.5, weight: FontWeight.w700, color: scheme.primary),
+            size: 14.5, weight: FontWeight.w600, color: scheme.primary),
       ),
       // Baris ini dulu BUNTU — sekarang membuka statistik belanja
       // pelanggannya, rentang tanggal tab ikut terbawa sbg rentang awal.
@@ -138,88 +138,17 @@ class _TopDonut extends StatelessWidget {
       scheme.onError,
       Colors.white,
     ];
-    // "Lainnya" selalu abu-abu netral — beda jelas dari Top 1 (primary).
-    final otherColor = scheme.surfaceContainerHighest;
-    final onOtherColor = scheme.onSurfaceVariant;
-
-    final hasOther = otherValue > 0;
-    final all = [
-      ...slices,
-      if (hasOther) _Slice('Lainnya', otherValue),
-    ];
-    final total = all.fold(0, (a, s) => a + s.value);
-
-    bool isOther(int i) => hasOther && i == all.length - 1;
-    Color colorFor(int i) =>
-        isOther(i) ? otherColor : topColors[i % topColors.length];
-    Color onColorFor(int i) =>
-        isOther(i) ? onOtherColor : onTopColors[i % onTopColors.length];
-
-    final sections = <PieChartSectionData>[];
-    for (var i = 0; i < all.length; i++) {
-      final double pct = total > 0 ? all[i].value / total * 100 : 0;
-      // Slice kecil (<8%) → angka tidak muat di dalam ring; dorong ke luar
-      // ring (lurus dengan porsinya) memakai warna teks netral agar terbaca.
-      final small = pct < 8;
-      sections.add(PieChartSectionData(
-        value: all[i].value.toDouble(),
-        color: colorFor(i),
-        title: total > 0 ? '${pct.round()}%' : '',
-        radius: 27,
-        titlePositionPercentageOffset: small ? 1.4 : 0.5,
-        titleStyle: TextStyle(
-          fontSize: small ? 9 : 10.5,
-          fontWeight: FontWeight.w700,
-          color: small ? scheme.onSurface : onColorFor(i),
-        ),
-      ));
-    }
-
-    return Row(
-      children: [
-        SizedBox(
-          width: 150,
-          height: 150,
-          child: PieChart(
-            PieChartData(
-              centerSpaceRadius: 30,
-              sectionsSpace: 2,
-              sections: sections,
-            ),
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (var i = 0; i < all.length; i++)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 2),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 10,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: colorFor(i),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(all[i].label,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 12)),
-                      ),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-        ),
+    return AppDonut(
+      size: 150,
+      slices: [
+        for (var i = 0; i < slices.length; i++)
+          DonutSlice(slices[i].label, slices[i].value,
+              topColors[i % topColors.length],
+              onTopColors[i % onTopColors.length]),
+        // "Lainnya" selalu abu-abu netral — beda jelas dari Top 1 (primary).
+        if (otherValue > 0)
+          DonutSlice('Lainnya', otherValue, scheme.surfaceContainerHighest,
+              scheme.onSurfaceVariant),
       ],
     );
   }

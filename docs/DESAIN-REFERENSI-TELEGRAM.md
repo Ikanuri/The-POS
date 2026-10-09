@@ -209,3 +209,23 @@ Fokus: struktur layar, navigasi, kerapatan, alur interaksi. Diukur dari kode
 bilah, pencarian terakhir, tahan-tab, kerapatan) aman; pola yang menyembunyikan
 elemen (FAB hilang saat gulir, header menciut) atau melakukan-dulu-tanya-nanti
 (undo) HARUS dipilah per layar, terutama yang menyentuh uang/stok.
+
+## 21. Grafik (org.telegram.ui.Charts) — analisis & penerapan (9 Okt 2026)
+
+Sumber: `Charts/BaseChartView`, `LinearChartView`, `BarChartView`, `StackLinearChartView`, `PieChartView`, `ChartPickerDelegate`, `view_data/ChartHorizontalLinesData`, `LegendSignatureView`, `ChartData`. ~5900 baris.
+
+**Pola yang ditemukan**
+| Pola Telegram | Rincian terukur | Status di The POS |
+|---|---|---|
+| Garis bantu angka bulat | 6 garis (0..5), langkah `ceil(max/5)` dibulatkan ke kelipatan 10; label **singkat** (`formatWholeNumber`: K/M/B) di ATAS garis, rata kiri DI DALAM area (tanpa lajur sumbu); garis memudar bila terlalu rapat | **Diterapkan**: `niceAxis` (langkah {1,2,2.5,5}x10^k) + `ChartGridPainter` + `abbrevNumber` (rb/jt/M/T) |
+| Skala bergerak halus | `currentMaxHeight` -> `animateToMaxHeight` 400 ms FastOutSlowIn; garis bantu lama & baru cross-fade 200 ms | **Diterapkan** (400 ms `fastOutSlowIn`; garis & data memakai nilai animasi yang sama — cross-fade 2 set garis TIDAK ditiru, tak perlu) |
+| Seleksi | garis tegak 1,5dp + titik 10dp berhalo warna latar + kartu `LegendSignatureView` (judul tebal 14, baris berwarna) yang PINDAH SISI di tengah layar, fade 200 ms; haptik waveform 2 ms tiap pindah indeks | **Diterapkan**: `StatsTrendChart` (garis, titik berhalo, kartu putih), `AppBarChart` + `ChartTooltipCard` (pindah sisi), `chartTick()` = `selectionClick` |
+| Batang terpilih | batang lain di-blend ke warna latar (`blendColor`) mengikuti `selectionA` 200 ms; kelompok terpilih tetap penuh | **Diterapkan**: `AppBarChart` & grafik per jam Ringkasan (non-terpilih meredup) + geser (scrub) memindahkan pilihan |
+| Gaya garis | stroke 2dp, join bulat, cap BULAT (cap PERSEGI bila >100 titik); tanpa kurva (segmen lurus) | **Diterapkan** (`isStrokeCapRound: n <= 100`, `isStrokeJoinRound`) |
+| Label tanggal bawah | langkah kelipatan 2 (`highestOneBit << 1`), set lama/baru cross-fade, alpha memudar di tepi kiri/kanan | Sebagian: jumlah label dibatasi (<= ~6) via interval/`every`; fade tepi & cross-fade tidak |
+| Pie | irisan terpilih "keluar", persen di tengah, legenda dgn centang | **Diterapkan**: `AppDonut` (irisan membesar, persen+nama di tengah, legenda meredup, haptik); menggantikan 5 donat duplikat |
+| Picker (minimap + zoom rentang) | penggeser rentang dengan grafik mini 46dp, bayangan & pegangan 24dp | **TIDAK**: rentang tanggal sudah ada di header Laporan; minimap = ~600 baris, nilai rendah untuk 8–31 titik |
+| Stack (batang/area bertumpuk), dua sumbu (kiri/kanan), "zoom ke jam" saat ketuk | | **TIDAK**: data kita tidak berseri-banyak bertumpuk |
+| Kartu header dgn checkbox seri (nyalakan/matikan garis) | | **TIDAK** dulu: grafik kita 1–2 seri; legenda donat cukup |
+
+Berkas: `lib/core/widgets/chart_kit.dart` (`abbrevNumber`, `niceAxis`, `ChartGridPainter`, `ChartTooltipCard`, `AppBarChart`, `AppDonut`, `chartTick`), `lib/features/laporan/stats/stats_common.dart` (`StatsTrendChart`). Test: `test/chart_kit_test.dart`.

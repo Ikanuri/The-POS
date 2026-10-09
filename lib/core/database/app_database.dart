@@ -399,6 +399,7 @@ class AppDatabase extends _$AppDatabase {
     // semua perangkat. Lihat `KasirStickerService` / `KasirLandingText`.
     'kasir_sticker_landing',
     'kasir_sticker_notfound',
+    'kasir_sticker_empty',
     'kasir_landing_title',
     'kasir_landing_subtitle',
     // Kuota antrian pre-order per produk — ditetapkan owner, dibaca kasir

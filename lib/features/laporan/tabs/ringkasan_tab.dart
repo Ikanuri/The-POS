@@ -1,5 +1,5 @@
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import '../../../core/widgets/chart_kit.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/data_refresh_provider.dart';
@@ -228,29 +228,14 @@ class _PaymentDonut extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final entries = byMethod.entries.toList();
-    return SizedBox(
-      height: 180,
-      child: PieChart(
-        PieChartData(
-          centerSpaceRadius: 40,
-          sectionsSpace: 2,
-          sections: entries.map((e) {
-            final pct = total > 0 ? (e.value / total * 100) : 0.0;
-            return PieChartSectionData(
-              value: e.value.toDouble(),
-              color: _methodColor(e.key, scheme),
-              title: '${pct.round()}%',
-              radius: 50,
-              titleStyle: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: _methodOnColor(e.key, scheme),
-              ),
-            );
-          }).toList(),
-        ),
-      ),
+    return AppDonut(
+      size: 160,
+      showLegend: false,
+      slices: [
+        for (final e in byMethod.entries)
+          DonutSlice(_methodLabel(e.key), e.value, _methodColor(e.key, scheme),
+              _methodOnColor(e.key, scheme)),
+      ],
     );
   }
 }

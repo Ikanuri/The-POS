@@ -177,7 +177,7 @@ class _TxTile extends ConsumerWidget {
         style: AppTheme.numStyle(
           context,
           size: 15,
-          weight: FontWeight.w700,
+          weight: FontWeight.w600,
           color: isVoid ? scheme.onSurfaceVariant : scheme.primary,
         ).copyWith(
           decoration: isVoid ? TextDecoration.lineThrough : null,

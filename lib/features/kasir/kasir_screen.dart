@@ -2336,6 +2336,20 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
                                             .valueOrNull!,
                                         size: 120,
                                       )
+                                    else if (query.isEmpty &&
+                                        ref
+                                                .watch(kasirStickerProvider(
+                                                    KasirStickerSlot.empty))
+                                                .valueOrNull !=
+                                            null)
+                                      AppSticker(
+                                        key: const Key('empty-sticker'),
+                                        json: ref
+                                            .watch(kasirStickerProvider(
+                                                KasirStickerSlot.empty))
+                                            .valueOrNull!,
+                                        size: 120,
+                                      )
                                     else
                                     Container(
                                       width: 56,
@@ -3280,7 +3294,7 @@ void _dialSetProductQty({
   if (lines.isEmpty) {
     if (d.baseUnitId.isEmpty) return;
     onQuickAdd(product, d);
-    if (target > 1) notifier.setEffectiveQty(d.baseUnitId, target);
+    if (target != 1) notifier.setEffectiveQty(d.baseUnitId, target);
     return;
   }
   notifier.setEffectiveQty(lines.first.productUnitId, target);

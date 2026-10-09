@@ -15,7 +15,7 @@ Dokumen lain: `DESAIN-REFERENSI-HTML.md` (asal gaya), `DESAIN-REFERENSI-TELEGRAM
 3. **Kartu melayang, bukan garis**: pemisah utama = kartu berbayangan hangat +
    garis tipis 1px `line`; hindari `Divider` tebal & kotak berborder keras.
 4. **Satu fokus per layar**: judul serif/tegas, satu aksi utama (aksen), aksi lain
-   netral/outline. Angka & nominal SELALU `AppTheme.numStyle` (Newsreader).
+   netral/outline. Angka & nominal SELALU `AppTheme.numStyle` (Newsreader) — ukuran terkendali: hero maks 30/w600, judul layar 21/w600, nominal kartu 14.5–15.5/w600; JANGAN w700 + ukuran >30 (terasa berlebihan).
 5. **Warna fungsi** (`AppTheme.*Fg/Bg`): scan biru, antrian emas, riwayat ungu, tempel
    hijau-zaitun, hutang merah, kembalian hijau, laci rose, pinjaman indigo, pre-order teal.
    Lingkaran ikon/ chip berwarna = `Bg` + ikon `Fg`.

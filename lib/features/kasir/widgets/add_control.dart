@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -28,6 +29,9 @@ class AddControl extends StatefulWidget {
   /// "Revolver": menggeser tombol "+" ke KIRI memunculkan pita bertanda
   /// (seperti tuner radio) untuk input qty cepat — geser kiri = qty naik,
   /// balik ke kanan = turun (minimum 1; menghapus tetap lewat tombol "-").
+  /// Revolver VERTIKAL = pecahan: geser ke ATAS 0,25 / 0,5 / 0,75; geser ke
+  /// BAWAH 0,10 / 0,11 / 0,12 ... (naik 0,01 per langkah). Keduanya saling
+  /// melengkapi dalam satu geseran: atas ke 0,25 lalu kiri ke 5 -> 5,25.
   /// Menerima qty ABSOLUT (bukan selisih) supaya aman dipanggil beberapa kali
   /// per frame tanpa terpengaruh closure basi. null = fitur nonaktif.
   final void Function(double qty)? onSetQty;
@@ -79,31 +83,71 @@ class _AddControlState extends State<AddControl> {
   // aktif, rendering selalu normal (lihat `qtyOnLeft` di build).
   bool _qtyOnLeft = false;
 
-  // ── Revolver (geser "+" ke kiri) ──────────────────────────────────────────
+  // ── Revolver (geser "+" ke kiri = bilangan bulat, atas/bawah = pecahan) ───
   final LayerLink _dialLink = LayerLink();
   OverlayEntry? _dialOverlay;
   final ValueNotifier<double> _dialValue = ValueNotifier(0);
-  double _dialBase = 0;
-  double _dialAcc = 0;
+  double _dialBaseInt = 0; // bagian bulat saat geseran dimulai
+  double _dialBaseFrac = 0; // pecahan awal (dipertahankan sampai digeser vertikal)
+  double _dialAccX = 0; // geser horizontal terkumpul (kiri = positif)
+  double _dialAccY = 0; // geser vertikal terkumpul (bawah = positif)
+  bool _dialYTouched = false;
   double _dialVel = 0;
+  double _dialVelY = 0;
   bool _dialing = false;
+  int _dialLastTs = 0;
 
   // Satu langkah qty = sekian px geser pelan; makin cepat jari, makin besar
   // pengali (lihat `_dialUpdate`).
   static const _kPxPerStep = 11.0;
   static const _kDialMax = 9999.0;
 
-  bool get _dialEnabled =>
-      widget.onSetQty != null && widget.qty >= 0 && widget.qty % 1 == 0;
+  // Pecahan: ATAS = 0,25/0,5/0,75 (tiap [_kUpPx] px, zona mati di awal);
+  // BAWAH = 0,10 mulai [_kDownDeadPx] px lalu +0,01 tiap [_kDownPx] px.
+  static const _kUpPx = 20.0;
+  static const _kDownDeadPx = 10.0;
+  static const _kDownPx = 6.0;
 
-  void _dialStart(DragStartDetails d, double circleSize) {
+  bool get _dialEnabled => widget.onSetQty != null && widget.qty >= 0;
+
+  /// Pecahan dari geser vertikal terkumpul [v] (bawah = positif).
+  static double fractionForOffset(double v) {
+    if (v <= -_kUpPx) {
+      final n = math.min(3, (-v / _kUpPx).floor());
+      return 0.25 * n;
+    }
+    if (v >= _kDownDeadPx) {
+      final n = ((v - _kDownDeadPx) / _kDownPx).floor();
+      return math.min(0.99, 0.10 + 0.01 * n);
+    }
+    return 0;
+  }
+
+  double _dialCompute() {
+    final frac = _dialYTouched ? fractionForOffset(_dialAccY) : _dialBaseFrac;
+    var whole = (_dialBaseInt + _dialAccX.round()).clamp(0, _kDialMax).toDouble();
+    // Tanpa pecahan, minimum 1 (menghapus tetap lewat tombol "-").
+    if (frac == 0 && whole < 1) whole = 1;
+    return ((whole + frac) * 100).round() / 100;
+  }
+
+  /// Revolver boleh dimulai dari geser VERTIKAL hanya bila stepper sudah
+  /// "hidup" (qty > 0) — dari "+" idle, geser vertikal tetap menggulir daftar
+  /// (tidak menambah produk tanpa sengaja).
+  bool _verticalStartAllowed() => widget.qty > 0;
+
+  void _dialStart(double circleSize) {
     if (!_dialEnabled) return;
     _dialing = true;
-    _dialBase = widget.qty;
-    _dialAcc = 0;
+    _dialBaseInt = widget.qty.floorToDouble();
+    _dialBaseFrac = ((widget.qty - _dialBaseInt) * 100).round() / 100;
+    _dialAccX = 0;
+    _dialAccY = 0;
+    _dialYTouched = false;
     _dialVel = 0;
-    _dialLastTs = d.sourceTimeStamp?.inMilliseconds ?? 0;
-    _dialValue.value = math.max(1, widget.qty);
+    _dialVelY = 0;
+    _dialLastTs = 0;
+    _dialValue.value = math.max(widget.qty, 0.01);
     _activate();
     final box = context.findRenderObject() as RenderBox?;
     final right = box == null
@@ -132,31 +176,30 @@ class _AddControlState extends State<AddControl> {
     HapticFeedback.selectionClick();
   }
 
-  void _dialUpdate(DragUpdateDetails d) {
+  void _dialUpdate(Offset delta, Duration? ts) {
     if (!_dialing) return;
-    final dx = d.delta.dx;
-    final dtMs = math.max(
-        1, (d.sourceTimeStamp ?? const Duration(milliseconds: 16)).inMilliseconds -
-            _dialLastTs);
-    _dialLastTs = (d.sourceTimeStamp ?? Duration.zero).inMilliseconds;
-    final v = dx.abs() / math.min(dtMs, 50);
-    _dialVel = _dialVel * 0.7 + v * 0.3;
-    // Pelan (<~0.4 px/ms) = 1x; makin cepat makin besar, dibatasi 6x.
-    final mult = 1 + math.min(5.0, math.max(0.0, _dialVel - 0.4) * 3.5);
-    _dialAcc += (-dx) * mult / _kPxPerStep;
+    final nowMs = (ts ?? Duration.zero).inMilliseconds;
+    final dtMs = math.min(50, math.max(1, nowMs - _dialLastTs));
+    _dialLastTs = nowMs;
+    // Kecepatan dihaluskan per sumbu: pelan (<~0.4 px/ms) = 1x; makin cepat
+    // makin besar, dibatasi 6x.
+    _dialVel = _dialVel * 0.7 + (delta.dx.abs() / dtMs) * 0.3;
+    _dialVelY = _dialVelY * 0.7 + (delta.dy.abs() / dtMs) * 0.3;
+    double mult(double v) => 1 + math.min(5.0, math.max(0.0, v - 0.4) * 3.5);
+    _dialAccX += (-delta.dx) * mult(_dialVel) / _kPxPerStep;
     // Jangan menumpuk "utang" geser di bawah batas minimum/maksimum.
-    _dialAcc = _dialAcc.clamp(1 - _dialBase, _kDialMax - _dialBase);
-    final next = (_dialBase + _dialAcc).round().clamp(1, _kDialMax.toInt());
-    if (next.toDouble() != _dialValue.value) {
-      _dialValue.value = next.toDouble();
+    _dialAccX = _dialAccX.clamp(-_dialBaseInt, _kDialMax - _dialBaseInt);
+    _dialAccY += delta.dy * mult(_dialVelY);
+    if (!_dialYTouched && _dialAccY.abs() >= 4) _dialYTouched = true;
+    final next = _dialCompute();
+    if (next != _dialValue.value) {
+      _dialValue.value = next;
       HapticFeedback.selectionClick();
-      widget.onSetQty!(next.toDouble());
+      widget.onSetQty!(next);
     }
   }
 
-  int _dialLastTs = 0;
-
-  void _dialEnd([DragEndDetails? _]) {
+  void _dialEnd() {
     if (!_dialing) return;
     _dialing = false;
     _dialOverlay?.remove();
@@ -268,11 +311,23 @@ class _AddControlState extends State<AddControl> {
         final mainCircle = GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: _handleTap,
-          onHorizontalDragStart:
-              _dialEnabled ? (d) => _dialStart(d, circleSize) : null,
-          onHorizontalDragUpdate: _dialEnabled ? _dialUpdate : null,
-          onHorizontalDragEnd: _dialEnabled ? _dialEnd : null,
-          onHorizontalDragCancel: _dialEnabled ? _dialEnd : null,
+          child: RawGestureDetector(
+            behavior: HitTestBehavior.opaque,
+            gestures: _dialEnabled
+                ? {
+                    _DialGestureRecognizer:
+                        GestureRecognizerFactoryWithHandlers<
+                            _DialGestureRecognizer>(
+                      () => _DialGestureRecognizer(
+                          allowVertical: _verticalStartAllowed),
+                      (r) {
+                        r.onStart = () => _dialStart(circleSize);
+                        r.onUpdate = _dialUpdate;
+                        r.onEnd = _dialEnd;
+                      },
+                    ),
+                  }
+                : const {},
           child: AnimatedScale(
             scale: isActive ? _kActiveScale : 1.0,
             duration: _kActiveScaleDuration,
@@ -293,6 +348,7 @@ class _AddControlState extends State<AddControl> {
                     : _qtyLabel(label, circleSize, color: greenSlot),
               ),
             ),
+          ),
           ),
         );
 
@@ -404,7 +460,7 @@ class _DialPill extends StatelessWidget {
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    v.toInt().toString(),
+                    _fmtDial(v),
                     style: AppTheme.numStyle(context,
                         size: height * 0.62,
                         weight: FontWeight.w700,
@@ -428,6 +484,102 @@ class _DialPill extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Untuk test: pemetaan geser vertikal -> pecahan.
+@visibleForTesting
+double fractionForOffsetForTest(double v) =>
+    _AddControlState.fractionForOffset(v);
+
+/// Angka pita: bulat bila tanpa pecahan, selain itu maks 2 desimal tanpa nol
+/// di ujung ("5.25", "5.1").
+String _fmtDial(double v) {
+  if (v % 1 == 0) return v.toInt().toString();
+  var t = v.toStringAsFixed(2);
+  while (t.endsWith('0')) {
+    t = t.substring(0, t.length - 1);
+  }
+  return t;
+}
+
+/// Pengenal gestur revolver: melacak satu pointer, menerima kemenangan
+/// setelah bergeser > [slop] px bila arahnya HORIZONTAL (atau vertikal saat
+/// [allowVertical]); selain itu menolak sehingga daftar di bawahnya tetap
+/// bisa digulir. Setelah diterima, seluruh sumbu diteruskan ke [onUpdate].
+class _DialGestureRecognizer extends OneSequenceGestureRecognizer {
+  _DialGestureRecognizer({required this.allowVertical});
+
+  final bool Function() allowVertical;
+  VoidCallback? onStart;
+  void Function(Offset delta, Duration? timeStamp)? onUpdate;
+  VoidCallback? onEnd;
+
+  static const slop = 8.0;
+  int? _pointer;
+  Offset _origin = Offset.zero;
+  bool _accepted = false;
+
+  @override
+  void addAllowedPointer(PointerDownEvent event) {
+    if (_pointer != null) return;
+    _pointer = event.pointer;
+    _origin = event.position;
+    _accepted = false;
+    startTrackingPointer(event.pointer, event.transform);
+  }
+
+  @override
+  void handleEvent(PointerEvent event) {
+    if (event.pointer != _pointer) return;
+    if (event is PointerMoveEvent) {
+      if (_accepted) {
+        onUpdate?.call(event.delta, event.timeStamp);
+        return;
+      }
+      final d = event.position - _origin;
+      if (d.distance > slop) {
+        final horizontal = d.dx.abs() > d.dy.abs();
+        if (horizontal || allowVertical()) {
+          resolve(GestureDisposition.accepted);
+        } else {
+          resolve(GestureDisposition.rejected);
+          stopTrackingPointer(event.pointer);
+          _pointer = null;
+        }
+      }
+    } else if (event is PointerUpEvent || event is PointerCancelEvent) {
+      if (_accepted) {
+        onEnd?.call();
+      } else {
+        // Belum menang (mis. tap biasa): mundur dari arena supaya recognizer
+        // lain (tap) yang menang saat `sweep`.
+        resolve(GestureDisposition.rejected);
+      }
+      stopTrackingPointer(event.pointer);
+      _pointer = null;
+      _accepted = false;
+    }
+  }
+
+  @override
+  void acceptGesture(int pointer) {
+    _accepted = true;
+    onStart?.call();
+  }
+
+  @override
+  void rejectGesture(int pointer) {
+    stopTrackingPointer(pointer);
+    if (_accepted) onEnd?.call();
+    _pointer = null;
+    _accepted = false;
+  }
+
+  @override
+  void didStopTrackingLastPointer(int pointer) {}
+
+  @override
+  String get debugDescription => 'dial';
 }
 
 class _RulerPainter extends CustomPainter {

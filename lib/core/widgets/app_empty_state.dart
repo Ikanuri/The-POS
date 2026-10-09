@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_motion.dart';
+import 'app_sticker.dart';
 
 /// Status kosong gaya landing: lingkaran ikon lembut + satu kalimat (+ saran).
 /// Pakai ini untuk semua "Belum ada…/Tidak ada…" di layar penuh/daftar.
 class AppEmptyState extends StatelessWidget {
   const AppEmptyState(this.message,
-      {super.key, this.icon = Icons.inbox_outlined, this.hint, this.action});
+      {super.key,
+      this.icon = Icons.inbox_outlined,
+      this.hint,
+      this.action,
+      this.sticker});
 
   final String message;
   final IconData icon;
@@ -14,6 +19,9 @@ class AppEmptyState extends StatelessWidget {
 
   /// Aksi utama opsional (mis. tombol Tambah).
   final Widget? action;
+
+  /// JSON Lottie stiker (hasil `.tgs`); bila ada, menggantikan lingkaran ikon.
+  final String? sticker;
 
   @override
   Widget build(BuildContext context) {
@@ -34,15 +42,19 @@ class AppEmptyState extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: cs.primary.withOpacity(0.12),
+              if (sticker != null)
+                AppSticker(
+                    key: const Key('empty-sticker'), json: sticker!, size: 132)
+              else
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: cs.primary.withOpacity(0.12),
+                  ),
+                  child: Icon(icon, size: 26, color: cs.primary),
                 ),
-                child: Icon(icon, size: 26, color: cs.primary),
-              ),
               const SizedBox(height: 14),
               Text(
                 message,

@@ -6,14 +6,18 @@ import 'package:flutter/services.dart' show rootBundle;
 import '../database/app_database.dart';
 import 'catalog_sticker_service.dart';
 
-/// Dua slot stiker animasi (Lottie `.tgs`) di layar Kasir — mengikuti stiker
+/// Slot stiker animasi (Lottie `.tgs`) di layar Kasir — mengikuti stiker
 /// katalog HTML: bawaan aplikasi, bisa diganti unggahan `.tgs` owner.
 enum KasirStickerSlot {
   /// Landing Kasir, di atas "Mau jual apa hari ini?".
   landing('Landing Kasir', 'assets/stickers/home.tgs'),
 
   /// Daftar produk kosong karena pencarian tidak menemukan apa pun.
-  notFound('Produk tidak ditemukan', 'assets/stickers/notfound.tgs');
+  notFound('Produk tidak ditemukan', 'assets/stickers/notfound.tgs'),
+
+  /// Daftar produk kosong (belum ada produk / kategori tanpa produk) di Kasir
+  /// dan halaman Produk.
+  empty('Belum ada produk', 'assets/stickers/empty.tgs');
 
   const KasirStickerSlot(this.label, this.assetPath);
   final String label;

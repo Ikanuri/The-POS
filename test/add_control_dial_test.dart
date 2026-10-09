@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:the_pos/features/kasir/widgets/add_control.dart';
 
-/// Revolver qty: geser "+" ke KIRI = qty naik, balik ke kanan = turun
+/// Revolver qty (bulat = horizontal, pecahan = vertikal): geser "+" ke KIRI = qty naik, balik ke kanan = turun
 /// (minimum 1). Pita muncul di kiri selama digeser, hilang saat dilepas.
 void main() {
   setUp(() => AddControl.clearActive());
@@ -105,21 +105,159 @@ void main() {
         reason: 'jarak sama tapi lebih cepat = loncatan lebih besar');
   });
 
-  testWidgets('qty desimal & onSetQty null: tidak ada revolver',
-      (tester) async {
-    final calls = await pumpStepper(tester, 2.5);
+  testWidgets('onSetQty null: tidak ada revolver', (tester) async {
+    final calls = await pumpStepper(tester, 3, dial: false);
     final g = await tester.startGesture(tester.getCenter(plus()));
-    await g.moveBy(const Offset(-120, 0));
+    for (var i = 0; i < 6; i++) {
+      await g.moveBy(const Offset(-30, 0),
+          timeStamp: Duration(milliseconds: 100 * (i + 1)));
+      await tester.pump(const Duration(milliseconds: 100));
+    }
     await g.up();
     await tester.pumpAndSettle();
     expect(calls, isEmpty);
+  });
 
-    final calls2 = await pumpStepper(tester, 3, dial: false);
-    final g2 = await tester.startGesture(tester.getCenter(plus()));
-    await g2.moveBy(const Offset(-120, 0));
-    await g2.up();
-    await tester.pumpAndSettle();
-    expect(calls2, isEmpty);
+  // Geser pelan (100 ms/langkah) supaya pengali kecepatan = 1x.
+  Future<void> drag(WidgetTester tester, TestGesture g, Offset step, int n,
+      {int startMs = 0}) async {
+    for (var i = 0; i < n; i++) {
+      await g.moveBy(step,
+          timeStamp: Duration(milliseconds: startMs + 100 * (i + 1)));
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+  }
+
+  group('revolver vertikal (pecahan)', () {
+    testWidgets('geser ATAS: 0.25 -> 0.5 -> 0.75 (qty bulat 3 dipertahankan)',
+        (tester) async {
+      final calls = await pumpStepper(tester, 3);
+      final g = await tester.startGesture(tester.getCenter(plus()));
+      // 8px slop pertama ditelan; lalu 25px -> 0.25
+      await drag(tester, g, const Offset(0, -9), 1);
+      await drag(tester, g, const Offset(0, -21), 1, startMs: 100);
+      expect(calls.last, 3.25);
+      await drag(tester, g, const Offset(0, -20), 1, startMs: 200);
+      expect(calls.last, 3.5);
+      await drag(tester, g, const Offset(0, -20), 1, startMs: 300);
+      expect(calls.last, 3.75);
+      await drag(tester, g, const Offset(0, -60), 1, startMs: 400);
+      expect(calls.last, 3.75, reason: 'maksimum 0.75');
+      await g.up();
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('geser BAWAH: 0.10 lalu naik 0.01 per langkah', (tester) async {
+      final calls = await pumpStepper(tester, 3);
+      final g = await tester.startGesture(tester.getCenter(plus()));
+      await drag(tester, g, const Offset(0, 9), 1);
+      await drag(tester, g, const Offset(0, 10), 1, startMs: 100);
+      expect(calls.last, 3.1);
+      await drag(tester, g, const Offset(0, 6), 1, startMs: 200);
+      expect(calls.last, 3.11);
+      await drag(tester, g, const Offset(0, 6), 1, startMs: 300);
+      expect(calls.last, 3.12);
+      await g.up();
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('vertikal lalu horizontal: atas 0.25 lalu kiri ke 5 -> 5.25',
+        (tester) async {
+      final calls = await pumpStepper(tester, 3);
+      final g = await tester.startGesture(tester.getCenter(plus()));
+      await drag(tester, g, const Offset(0, -9), 1);
+      await drag(tester, g, const Offset(0, -21), 1, startMs: 100);
+      expect(calls.last, 3.25);
+      await drag(tester, g, const Offset(-11, 0), 2, startMs: 200);
+      expect(calls.last, 5.25, reason: 'titik berhenti = 5 + 0.25');
+      await g.up();
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('horizontal lalu vertikal: kiri ke 5 lalu atas 0.25 -> 5.25',
+        (tester) async {
+      final calls = await pumpStepper(tester, 3);
+      final g = await tester.startGesture(tester.getCenter(plus()));
+      await drag(tester, g, const Offset(-9, 0), 1);
+      await drag(tester, g, const Offset(-11, 0), 2, startMs: 100);
+      expect(calls.last, 5);
+      await drag(tester, g, const Offset(0, -21), 1, startMs: 300);
+      expect(calls.last, 5.25);
+      // Kembali ke tengah (zona mati) = pecahan hilang.
+      await drag(tester, g, const Offset(0, 21), 1, startMs: 400);
+      expect(calls.last, 5);
+      await g.up();
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('qty desimal awal: pecahan dipertahankan saat geser horizontal',
+        (tester) async {
+      final calls = await pumpStepper(tester, 2.5);
+      final g = await tester.startGesture(tester.getCenter(plus()));
+      await drag(tester, g, const Offset(-9, 0), 1);
+      await drag(tester, g, const Offset(-11, 0), 2, startMs: 100);
+      expect(calls.last, 4.5);
+      await g.up();
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('pita menampilkan angka desimal selama digeser',
+        (tester) async {
+      await pumpStepper(tester, 3);
+      final g = await tester.startGesture(tester.getCenter(plus()));
+      await drag(tester, g, const Offset(0, -9), 1);
+      await drag(tester, g, const Offset(0, -21), 1, startMs: 100);
+      expect(find.text('3.25'), findsWidgets);
+      await g.up();
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('"+" idle: geser VERTIKAL tidak jadi revolver (daftar tetap '
+        'bisa digulir)', (tester) async {
+      final calls = <double>[];
+      final controller = ScrollController();
+      await tester.binding.setSurfaceSize(const Size(360, 800));
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: ListView(
+            controller: controller,
+            children: [
+              for (var i = 0; i < 30; i++)
+                SizedBox(
+                  height: 60,
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: AddControl(
+                        qty: 0,
+                        size: 46,
+                        onTap: () {},
+                        onSetQty: calls.add),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ));
+      final g = await tester.startGesture(
+          tester.getCenter(find.byType(AddControl).first));
+      await drag(tester, g, const Offset(0, -20), 4);
+      await g.up();
+      await tester.pumpAndSettle();
+      expect(calls, isEmpty);
+      expect(controller.offset, greaterThan(0), reason: 'daftar tergulir');
+    });
+
+    test('fractionForOffset: zona mati & batas', () {
+      expect(fractionForOffsetForTest(0), 0);
+      expect(fractionForOffsetForTest(-19), 0);
+      expect(fractionForOffsetForTest(-20), 0.25);
+      expect(fractionForOffsetForTest(-45), 0.5);
+      expect(fractionForOffsetForTest(-200), 0.75);
+      expect(fractionForOffsetForTest(9), 0);
+      expect(fractionForOffsetForTest(10), 0.1);
+      expect(fractionForOffsetForTest(16), 0.11);
+      expect(fractionForOffsetForTest(9999), 0.99);
+    });
   });
 
   testWidgets('tap biasa tetap memanggil onTap (tidak jadi revolver)',
