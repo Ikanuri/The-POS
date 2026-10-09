@@ -9,6 +9,10 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-10-09 (penyesuaian desain Kasir gaya Baru)
 
+- feat(kasir): `eff80c4` — pop-up Sync LAN: pilihan Host/Klien, QR host, kamera klien (v3.3.0+203)
+- feat(ui): `892b151` — toast & banner gaya baru (AppToast, AppNoticeCard)
+- feat(kasir): `e6c09ae` — keyboard tidak mengecilkan layar Kasir gaya Baru, cart bar berjarak, banner di atas stiker
+- docs: `fa92ca9` — hasil uji diagnostik #1
 - fix(kasir): `dd9916f` — pencarian global, saklar keyboard shell, pil cari stabil saat keyboard naik, salin pengaturan lengkap (v3.2.2+202)
 - feat(diag): `0247df1` — build diagnostik performa (layar Diagnostik Performa, meter frame) + perbaikan Ticker saat dispose (v3.2.1+201)
 - feat(kasir): `19680d4` — tombol pojok (FAB) dihapus, empat tombol bulat pindah permanen ke header (landing berketerangan + saklar tema; kompak saat mengetik + grid/list); hint tidak terpotong (akar: jendela terjepit tinggi TextField); nominal cart bar FittedBox; kosongkan teks & tombol X tetap fokus; struktur Stack kolom cari stabil (akar bug kursor hilang) (v3.2.0+200)

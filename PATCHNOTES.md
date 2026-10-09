@@ -8,6 +8,12 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 9 Oktober 2026 (v3.3.0 — Notifikasi baru & Sync LAN)
+
+- **Notifikasi (toast) didesain ulang**: kartu putih membulat di bagian atas layar, dengan ikon berwarna dan tombol aksi, tampil di atas stiker dan di atas dialog. Berlaku juga untuk notif sinkron di latar belakang.
+- **Pop-up Sync LAN kini punya pilihan Host dan Klien**: Host menampilkan QR, Klien langsung memindai QR dengan kamera di pop-up (isi IP/Token manual tetap tersedia).
+- **Kasir gaya Baru**: keyboard tidak lagi menaikkan seluruh layar; kartu keranjang tetap di bawah dan kini punya jarak ke tepi layar.
+
 ## 9 Oktober 2026 (Kasir Gaya Baru: pencarian & keyboard)
 
 - **Pencarian di Kasir gaya Baru kini selalu mencari ke SEMUA produk**, walau sedang memilih kategori. Kosongkan kolom cari untuk kembali ke daftar kategori.
