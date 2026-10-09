@@ -363,19 +363,25 @@ void main() {
       await tester.tap(find.byKey(const Key('hdr-sync')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('quick-sync-dialog')), findsOneWidget);
+      // Owner: mode Host terpilih, ada pilihan Host/Klien.
+      expect(find.byKey(const Key('quick-sync-mode')), findsOneWidget);
       expect(find.byKey(const Key('quick-sync-host')), findsOneWidget);
-      expect(find.byKey(const Key('quick-sync-ip')), findsNothing);
+      expect(find.byKey(const Key('quick-sync-camera')), findsNothing);
 
       await _drain(tester);
       await db.close();
     });
 
-    testWidgets('Sync LAN untuk kasir: kolom IP/Token + Sinkron sekarang',
+    testWidgets('Sync LAN untuk kasir: mode Klien (kamera) + isian manual',
         (tester) async {
       final db = AppDatabase(NativeDatabase.memory());
       await _addProduct(db, 'Gula Pasir');
       await _pumpKasir(tester, db, prefs: modern, deviceRole: 'kasir');
       await tester.tap(find.byKey(const Key('hdr-sync')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('quick-sync-camera')), findsOneWidget);
+      await tester.ensureVisible(find.byKey(const Key('quick-sync-manual')));
+      await tester.tap(find.byKey(const Key('quick-sync-manual')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('quick-sync-ip')), findsOneWidget);
       expect(find.byKey(const Key('quick-sync-token')), findsOneWidget);
@@ -384,7 +390,7 @@ void main() {
       // Tanpa IP/Token -> pesan, tidak crash.
       await tester.tap(find.byKey(const Key('quick-sync-go')));
       await tester.pumpAndSettle();
-      expect(find.text('Isi IP dan Token host dulu'), findsOneWidget);
+      expect(find.text('Pindai QR host atau isi IP dan Token dulu'), findsOneWidget);
       await _drain(tester);
       await db.close();
     });
