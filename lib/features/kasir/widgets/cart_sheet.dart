@@ -154,6 +154,7 @@ class _CartSheetState extends ConsumerState<CartSheet> {
 
   @override
   void dispose() {
+    _cancelScrollTimers();
     for (final t in _ghostTimers.values) {
       t.cancel();
     }
@@ -178,15 +179,43 @@ class _CartSheetState extends ConsumerState<CartSheet> {
     _needsInitialScroll = widget.scrollToBottom;
   }
 
+  // Token supaya gulir susulan milik scan sebelumnya tidak menimpa scan baru.
+  int _scrollToken = 0;
+  final List<Timer> _scrollTimers = [];
+
+  void _cancelScrollTimers() {
+    for (final t in _scrollTimers) {
+      t.cancel();
+    }
+    _scrollTimers.clear();
+  }
+
   void _scheduleScroll(ScrollController sc) {
+    final token = ++_scrollToken;
+    void toBottom(Duration d) {
+      if (!mounted || token != _scrollToken || !sc.hasClients) return;
+      final max = sc.position.maxScrollExtent;
+      if ((max - sc.offset).abs() < 0.5) return;
+      if (d == Duration.zero) {
+        sc.jumpTo(max);
+      } else {
+        sc.animateTo(max, duration: d, curve: Curves.easeOut);
+      }
+    }
+
+    _cancelScrollTimers();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !sc.hasClients) return;
-      sc.animateTo(
-        sc.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeOut,
-      );
+      toBottom(const Duration(milliseconds: 220));
     });
+    for (final ms in const [120, 240, 360, 500]) {
+      _scrollTimers.add(Timer(Duration(milliseconds: ms), () {
+        toBottom(const Duration(milliseconds: 100));
+      }));
+    }
+    // Pemungkas: setelah semua animasi masuk selesai, pastikan mentok.
+    _scrollTimers.add(Timer(const Duration(milliseconds: 650), () {
+      toBottom(Duration.zero);
+    }));
   }
 
   /// Item 24d/56 — transfer keranjang lewat QR, sepenuhnya offline. Dua
@@ -1821,7 +1850,10 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                       return StepperActiveScope(
                         child: ListView.separated(
                           controller: scrollCtrl,
-                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          // Ruang atas/bawah = tinggi pemudaran tepi
+                          // (`ScrollEdgeFade` 8/14) + 4, supaya baris terakhir
+                          // saat mentok bawah TIDAK ikut memudar.
+                          padding: const EdgeInsets.fromLTRB(0, 8, 0, 18),
                           itemCount: itemCount,
                           separatorBuilder: (_, __) => Divider(
                               height: 1,

@@ -8,6 +8,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 10 Oktober 2026 (v3.20.1 — Keranjang scan HID mentok bawah)
+
+- **Perbaikan keranjang saat scan barcode HID**: item yang baru masuk kini selalu terlihat penuh. Sebelumnya daftar berhenti menggulir sekitar satu baris sebelum dasar (karena baris baru masih membuka dengan animasi), dan baris terakhir bisa ikut tampak memudar.
+
 ## 10 Oktober 2026 (v3.20.0 — Keranjang & modal produk Gaya Landing)
 
 - **Keranjang**: judul bergaya serif, nomor nota jadi pil terracotta, pengingat Hutang dan DP Pre-order kini pil berwarna lembut (bukan pita penuh), baris yang sudah dicentang di-highlight dengan sudut membulat, daftar memudar halus di tepi, dan footer Total/Bayar berpanel dengan sudut atas membulat. **Susunan dan ukuran baris tidak berubah** (tetap padat), begitu juga stepper dan semua tombol.
