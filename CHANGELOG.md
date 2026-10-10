@@ -9,6 +9,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-10-09 (penyesuaian desain Kasir gaya Baru)
 
+- feat(ui): `fa6c50c` — saklar tema ala GoPay di pojok kanan atas (v3.17.0+224)
 - fix(scanner): `7b2bba2` — saring kotak bingkai (median + perataan) (v3.16.2+223)
 - fix(scanner): `307edd0` — bingkai bertahan saat kunci ditahan, gerak mulus (v3.16.1+222)
 - feat(scanner): `bd43910` — kunci target barcode + dial revolver (v3.16.0+221)
