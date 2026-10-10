@@ -63,6 +63,39 @@ sekarang, TIDAK ada rencana eksekusi._
 
 ---
 
+## Item 95 — Stok berkurang saat produk diklik di Kasir, sebelum checkout (10 Okt 2026) — MENUNGGU DIKERJAKAN, DI BRANCH `main-beta`
+
+**Permintaan user**: produk yang diklik/ditambah di Kasir, meski belum checkout,
+harus sudah mengurangi stok. **Kerjakan di branch `main-beta`** (bukan
+`claude/prototype-redesign-flutter`). **Belum dianalisis dalam & belum ada
+kode** — Claude wajib MENGINGATKAN user soal ini saat user mulai bekerja di
+`main-beta`.
+
+**Kondisi sekarang (dugaan, belum diverifikasi menyeluruh)**: stok baru
+berkurang saat transaksi disimpan (`saveTransaction` /
+`saveTransactionWithDebtSettlements`, `app_database.dart` ~3901/3981), bukan
+saat item masuk keranjang (`cartProvider`, family per `cartId`).
+
+**Pertanyaan desain yang harus dijawab SEBELUM coding**:
+1. Mekanisme: reservasi stok (soft hold, tabel/kolom terpisah) vs pengurangan
+   langsung pada stok.
+2. Keranjang dikosongkan / baris dihapus / qty diturunkan / app ditinggalkan →
+   stok HARUS kembali. Cart tersimpan di SharedPreferences (`cart_v1_*`) —
+   bagaimana pemulihan bila app crash atau ditutup saat keranjang berisi?
+3. Pesanan ditahan (`held_orders`) dan Laci Meja: tetap menahan stok?
+4. Multi-perangkat (owner + kasir via sync LAN): apakah stok yang ditahan
+   keranjang kasir A terlihat di perangkat B? Sync hanya append/merge manual —
+   hati-hati konflik.
+5. Interaksi dengan pre-order, stok minus (`allow_negative_stock`), produk
+   non-stok, varian, dan satuan berrasio (`ratioToBase`).
+6. Pra-Bayar, Lunasi Hutang, mode Tambah Belanjaan (`cartId` = txId), mode
+   Katalog (`kCatalogCartId` — BUKAN transaksi, jangan menahan stok).
+7. Laporan stok, indikator stok menipis, dan Cek Stok: ikut hitung reservasi?
+8. Perubahan skema DB (`schemaVersion` naik) → WAJIB uji di beta (restore
+   backup produksi ke app beta) sebelum merge ke main.
+
+---
+
 ## Item 94 — Overflow 4px baris stepper Order Restock (Cek Stok) di lebar 360 (3 Okt 2026) — TEMUAN, BELUM DIEKSEKUSI
 
 Ditemukan saat menguji Item 93: baris `[−] [qty] [+] [satuan ▾]` per produk
