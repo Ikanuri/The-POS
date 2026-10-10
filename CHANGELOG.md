@@ -9,6 +9,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-10-09 (penyesuaian desain Kasir gaya Baru)
 
+- feat(ui): `a5d6e0c` — keranjang & modal tap produk Gaya Landing, hanya gaya (v3.20.0+228)
 - feat(ui): `0052946` — pemudaran alfa Kasir, saklar tema di Welcome (default terang), keranjang HID penuh (v3.19.0+227)
 - feat(ui): `4f39de7` — saklar tema persis GoPay + daftar Kasir memudar (v3.18.0+226)
 - fix(ui): `e80d250` — bayangan saklar tema ikut saklar diagnostik (v3.17.1+225)
