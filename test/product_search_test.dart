@@ -1,158 +1,192 @@
+import 'dart:io';
+
+import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:the_pos/core/database/app_database.dart';
+import 'package:the_pos/core/services/order_page_service.dart';
+import 'package:the_pos/core/utils/product_search.dart';
 
-/// Membuktikan `findTxIdsWithProduct` & `findProductMatchesForQuery` tetap
-/// benar setelah diubah dari 1-langkah (JOIN transaction_items+products lalu
-/// filter LIKE — menyisir SELURUH riwayat transaksi tiap pencarian) menjadi
-/// 2-langkah (cari product id dulu di tabel products yang kecil, baru lookup
-/// transaction_items via index product_id) — optimasi ini TIDAK BOLEH
-/// mengubah hasil, cuma caranya mencari.
-Future<void> _seed(AppDatabase db) async {
-  await db.into(db.products).insert(
-      ProductsCompanion.insert(id: 'p-indomie', name: 'Indomie Goreng'));
-  await db.into(db.products).insert(
-      ProductsCompanion.insert(id: 'p-mie-sedaap', name: 'Mie Sedaap Soto'));
-  await db.into(db.products)
-      .insert(ProductsCompanion.insert(id: 'p-beras', name: 'Beras Premium'));
-
-  await db.into(db.transactions).insert(TransactionsCompanion.insert(
-        id: 'tx1',
-        localId: 'K1-1',
-        status: 'lunas',
-        total: 10000,
-        paid: 10000,
-        changeAmount: 0,
-        paymentMethod: 'tunai',
-      ));
-  await db.into(db.transactionItems).insert(TransactionItemsCompanion.insert(
-        id: 'ti1',
-        transactionId: 'tx1',
-        productId: 'p-indomie',
-        productUnitId: 'u1',
-        qty: 2,
-        priceAtSale: 3000,
-        originalPrice: 3000,
-        subtotal: 6000,
-      ));
-
-  await db.into(db.transactions).insert(TransactionsCompanion.insert(
-        id: 'tx2',
-        localId: 'K1-2',
-        status: 'lunas',
-        total: 20000,
-        paid: 20000,
-        changeAmount: 0,
-        paymentMethod: 'tunai',
-      ));
-  // tx2 punya 2 item "mie" (nama beda) — keduanya harus ikut kecantol.
-  await db.into(db.transactionItems).insert(TransactionItemsCompanion.insert(
-        id: 'ti2',
-        transactionId: 'tx2',
-        productId: 'p-mie-sedaap',
-        productUnitId: 'u1',
-        qty: 1,
-        priceAtSale: 3500,
-        originalPrice: 3500,
-        subtotal: 3500,
-      ));
-  await db.into(db.transactionItems).insert(TransactionItemsCompanion.insert(
-        id: 'ti3',
-        transactionId: 'tx2',
-        productId: 'p-beras',
-        productUnitId: 'u1',
-        qty: 1,
-        priceAtSale: 16500,
-        originalPrice: 16500,
-        subtotal: 16500,
-      ));
-
-  await db.into(db.transactions).insert(TransactionsCompanion.insert(
-        id: 'tx3',
-        localId: 'K1-3',
-        status: 'lunas',
-        total: 16500,
-        paid: 16500,
-        changeAmount: 0,
-        paymentMethod: 'tunai',
-      ));
-  // tx3 cuma beras — TIDAK boleh kecantol pencarian "mie".
-  await db.into(db.transactionItems).insert(TransactionItemsCompanion.insert(
-        id: 'ti4',
-        transactionId: 'tx3',
-        productId: 'p-beras',
-        productUnitId: 'u1',
-        qty: 1,
-        priceAtSale: 16500,
-        originalPrice: 16500,
-        subtotal: 16500,
-      ));
-}
-
+/// Pencarian produk toleran (urutan kata bebas, tanda baca/aksen/spasi
+/// diabaikan, satuan dinormalkan, ikut cari kode & kategori). Kasir/Produk
+/// (Dart) dan katalog HTML (JS) memakai aturan YANG SAMA.
 void main() {
-  group('findTxIdsWithProduct', () {
-    test('cocok substring "mie" (case-insensitive) mengembalikan tx1 & tx2, bukan tx3',
-        () async {
-      final db = AppDatabase(NativeDatabase.memory());
-      await _seed(db);
-
-      final ids = await db.findTxIdsWithProduct('MIE');
-      expect(ids, {'tx1', 'tx2'});
-
-      await db.close();
+  group('ProductSearch.normalize', () {
+    test('huruf kecil, tanda baca jadi spasi, aksen dibuang', () {
+      expect(
+          ProductSearch.normalize('Cone-Snack  KUNING!'), 'cone snack kuning');
+      expect(ProductSearch.normalize('Café Crème'), 'cafe creme');
     });
-
-    test('query kosong → set kosong (tidak ikut nyantol semua produk)',
-        () async {
-      final db = AppDatabase(NativeDatabase.memory());
-      await _seed(db);
-
-      expect(await db.findTxIdsWithProduct(''), isEmpty);
-      expect(await db.findTxIdsWithProduct('   '), isEmpty);
-
-      await db.close();
-    });
-
-    test('tidak ada produk cocok → set kosong', () async {
-      final db = AppDatabase(NativeDatabase.memory());
-      await _seed(db);
-
-      expect(await db.findTxIdsWithProduct('nasi goreng'), isEmpty);
-
-      await db.close();
+    test('satuan dinormalkan', () {
+      expect(ProductSearch.normalize('Gula 500 gr'), 'gula 500g');
+      expect(ProductSearch.normalize('Gula 500gram'), 'gula 500g');
+      expect(ProductSearch.normalize('Minyak 1 liter'), 'minyak 1l');
+      expect(ProductSearch.normalize('Susu 250 ml'), 'susu 250ml');
+      expect(ProductSearch.normalize('Beras 5 kg'), 'beras 5kg');
     });
   });
 
-  group('findProductMatchesForQuery', () {
-    test('mengembalikan detail qty & harga per transaksi, termasuk 2 item '
-        'berbeda dalam satu transaksi yang sama', () async {
-      final db = AppDatabase(NativeDatabase.memory());
-      await _seed(db);
+  group('ProductSearch.matches', () {
+    bool m(String q, String name, {String? kode, String? group}) =>
+        ProductSearch(q).matches(name, kode: kode, group: group);
 
-      final matches = await db.findProductMatchesForQuery('mie');
-      expect(matches.keys, containsAll(['tx1', 'tx2']));
-      expect(matches.containsKey('tx3'), isFalse,
-          reason: 'tx3 cuma beras, tidak boleh ikut kecantol pencarian mie');
+    test('urutan kata bebas', () {
+      expect(m('goreng indomie', 'Indomie Goreng'), isTrue);
+      expect(m('indomie goreng', 'Indomie Goreng'), isTrue);
+      expect(m('indomie soto', 'Indomie Goreng'), isFalse);
+    });
+    test('tanda baca & spasi diabaikan', () {
+      expect(m('cone snack', 'Cone-Snack Kuning'), isTrue);
+      expect(m('conesnack', 'Cone-Snack Kuning'), isTrue);
+      expect(m('cone-snack', 'Cone Snack Kuning'), isTrue);
+    });
+    test('satuan', () {
+      expect(m('gula 500gr', 'Gula Pasir 500 g'), isTrue);
+      expect(m('500 gram gula', 'Gula Pasir 500g'), isTrue);
+    });
+    test('kode & kategori ikut dicari', () {
+      expect(m('gbf', 'Gajah Baru Filter', kode: 'GBF'), isTrue);
+      expect(m('minuman', 'Teh Botol', group: 'Minuman'), isTrue);
+      expect(m('teh minuman', 'Teh Botol', group: 'Minuman'), isTrue);
+      expect(m('minuman', 'Teh Botol'), isFalse);
+    });
+    test('potongan di tengah kata tetap cocok (perilaku lama)', () {
+      expect(m('ndom', 'Indomie Goreng'), isTrue);
+    });
+    test('kueri kosong = cocok semua', () {
+      expect(m('', 'Apa saja'), isTrue);
+      expect(m('   ', 'Apa saja'), isTrue);
+    });
+    test('SEMUA yang dulu cocok (potongan berurutan) tetap cocok', () {
+      const names = [
+        'Indomie Goreng',
+        'Cone-Snack Kuning',
+        'Gula 1.5 kg',
+        'A/B C'
+      ];
+      for (final n in names) {
+        final lower = n.toLowerCase();
+        for (var i = 0; i < lower.length; i++) {
+          for (var j = i + 1; j <= lower.length; j++) {
+            final sub = lower.substring(i, j);
+            if (sub.trim().isEmpty) continue;
+            expect(ProductSearch(sub).matches(n), isTrue,
+                reason: '"$sub" dulu cocok di "$n"');
+          }
+        }
+      }
+    });
+  });
 
-      expect(matches['tx1']!.single.name, 'Indomie Goreng');
-      expect(matches['tx1']!.single.qty, 2);
-      expect(matches['tx1']!.single.price, 3000);
+  group('database', () {
+    late AppDatabase db;
+    setUp(() => db = AppDatabase(NativeDatabase.memory()));
+    tearDown(() async => db.close());
 
-      // tx2 dicari "mie" — cuma item Mie Sedaap yang cocok, BUKAN item
-      // Beras Premium yang juga ada di transaksi yang sama.
-      expect(matches['tx2']!.length, 1);
-      expect(matches['tx2']!.single.name, 'Mie Sedaap Soto');
+    Future<void> add(String id, String name,
+        {String? kode, int? groupId}) async {
+      await db.into(db.products).insert(ProductsCompanion.insert(
+            id: id,
+            name: name,
+            kodeProduk: Value(kode),
+            productGroupId: Value(groupId),
+          ));
+    }
 
-      await db.close();
+    Future<int> group(String name) => db
+        .into(db.productGroups)
+        .insert(ProductGroupsCompanion.insert(name: Value(name)));
+
+    test('searchProducts & watchProducts: urutan bebas, kode, kategori',
+        () async {
+      final minuman = await group('Minuman');
+      await add('1', 'Teh Botol Sosro', groupId: minuman);
+      await add('2', 'Indomie Goreng');
+      await add('3', 'Gajah Baru Filter', kode: 'GBF');
+      Future<List<String>> names(String q) async =>
+          (await db.searchProducts(q)).map((p) => p.name).toList();
+      expect(await names('goreng indomie'), ['Indomie Goreng']);
+      expect(await names('gbf'), ['Gajah Baru Filter']);
+      expect(await names('minuman'), ['Teh Botol Sosro']);
+      expect(await names('botol minuman'), ['Teh Botol Sosro']);
+      expect(await names('zzz'), isEmpty);
+      expect((await names('')).length, 3);
+
+      final w = await db.watchProducts(query: 'sosro botol').first;
+      expect(w.map((p) => p.name), ['Teh Botol Sosro']);
+      final wc =
+          await db.watchProducts(query: 'minuman', groupId: minuman).first;
+      expect(wc.map((p) => p.name), ['Teh Botol Sosro']);
     });
 
-    test('query kosong → map kosong', () async {
+    test('watchProductsForKasir (chip kategori + kueri) memakai aturan sama',
+        () async {
+      final minuman = await group('Minuman');
+      await add('1', 'Teh Botol Sosro', groupId: minuman);
+      await add('2', 'Teh Kotak', groupId: minuman);
+      final r = await db
+          .watchProductsForKasir(query: 'sosro teh', groupId: minuman)
+          .first;
+      expect(r.map((p) => p.name), ['Teh Botol Sosro']);
+    });
+
+    test('stream aktif: hasil ikut berubah saat produk baru ditambah',
+        () async {
+      await add('1', 'Indomie Goreng');
+      final events = <List<String>>[];
+      final sub = db
+          .watchProducts(query: 'goreng indomie')
+          .listen((l) => events.add(l.map((p) => p.name).toList()));
+      addTearDown(sub.cancel);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await add('2', 'Mie Goreng Indomie Jumbo');
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(events.last,
+          containsAll(['Indomie Goreng', 'Mie Goreng Indomie Jumbo']));
+    });
+  });
+
+  group('katalog HTML (JS)', () {
+    Future<String?> nodePath() async {
+      final r = await Process.run('which', ['node']);
+      return r.exitCode == 0 ? (r.stdout as String).trim() : null;
+    }
+
+    test('matchesQuery JS = aturan Dart (dijalankan lewat node)', () async {
+      final node = await nodePath();
+      if (node == null) {
+        markTestSkipped('node tidak tersedia');
+        return;
+      }
       final db = AppDatabase(NativeDatabase.memory());
-      await _seed(db);
-
-      expect(await db.findProductMatchesForQuery(''), isEmpty);
-
-      await db.close();
+      addTearDown(() async => db.close());
+      final html = (await OrderPageService.generateHtml(
+              db: db, storeName: 'T', stickers: {}))
+          .html;
+      final a = html.indexOf('function normSearch(text){');
+      final b = html.indexOf('function fmtCount(n){');
+      expect(a, greaterThan(0));
+      expect(b, greaterThan(a));
+      final js = html.substring(a, b);
+      final script = '''
+var DATA = { products: [
+  {name:'Indomie Goreng', category:'Mie', variants:[]},
+  {name:'Cone-Snack Kuning', category:'Snack', variants:[]},
+  {name:'Gula Pasir 500 g', category:'Sembako', variants:[{name:'Merah'}]},
+  {name:'Teh Botol', category:'Minuman', variants:[]}
+]};
+$js
+function t(q){ var r=[]; for (var i=0;i<DATA.products.length;i++) if (matchesQuery(i,q)) r.push(i); return r.join(','); }
+console.log(JSON.stringify({
+  a: t('goreng indomie'), b: t('cone snack'), c: t('conesnack'),
+  d: t('gula 500gr'), e: t('minuman'), f: t('merah gula'), g: t('zzz'),
+  h: t('ndom'), i: t('')
+}));
+''';
+      final r = await Process.run(node, ['-e', script]);
+      expect(r.exitCode, 0, reason: '${r.stderr}');
+      expect((r.stdout as String).trim(),
+          '{"a":"0","b":"1","c":"1","d":"2","e":"3","f":"2","g":"","h":"0","i":"0,1,2,3"}');
     });
   });
 }

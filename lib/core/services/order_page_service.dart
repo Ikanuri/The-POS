@@ -2072,20 +2072,46 @@ var _matches = [];            // produk yang cocok utk _lastQ (semua, bukan hany
 var _renderedCount = 0;       // berapa dari _matches yang sudah ada di DOM
 var _moreBar = null;          // elemen keterangan + tombol "Tampilkan lagi"
 
-// Indeks pencarian — dihitung SEKALI saat halaman dibuka (nama produk +
-// nama tiap varian, huruf kecil). Aturan cocok sama persis dgn dulu: nama
-// produk cocok ATAU ada varian yang cocok (baris induk tetap tampil).
+// Pencarian TOLERAN (aturan SAMA dgn `ProductSearch` di Dart — ubah bersamaan):
+// urutan kata bebas ("goreng indomie" = "Indomie Goreng"), huruf besar/kecil,
+// aksen, tanda baca & spasi diabaikan ("cone snack" = "Cone-Snack"), satuan
+// dinormalkan ("500 gr" = "500g"), dan ikut mencari NAMA KATEGORI + nama varian.
+// Tiap kata cukup menjadi POTONGAN teks, jadi semua yang dulu cocok tetap cocok.
+function normSearch(text){
+  var t = String(text || '').toLowerCase();
+  try { t = t.normalize('NFD').replace(/[̀-ͯ]/g, ''); } catch (e) {}
+  t = t.replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+  t = t.replace(/(\d+)\s*(kg|ml)\b/g, '$1$2');
+  t = t.replace(/(\d+)\s*(?:gram|gr|g)\b/g, '$1g');
+  t = t.replace(/(\d+)\s*(?:liter|ltr|l)\b/g, '$1l');
+  return t;
+}
+// Indeks pencarian — dihitung SEKALI saat halaman dibuka: nama produk +
+// kategori + nama tiap varian (sudah dinormalkan). Baris induk tetap tampil
+// bila nama/kategori ATAU salah satu varian cocok.
 var SEARCH_INDEX = DATA.products.map(function(p){
-  return {
-    n: String(p.name).toLowerCase(),
-    v: (p.variants || []).map(function(v){ return String(v.name).toLowerCase(); })
-  };
+  var h = normSearch(String(p.name) + ' ' + String(p.category || '') + ' ' +
+    (p.variants || []).map(function(v){ return String(v.name); }).join(' '));
+  return { h: h, c: h.replace(/ /g, '') };
 });
+var _sqRaw = null, _sqTokens = [], _sqCompact = '';
+function prepQuery(q){
+  if (q === _sqRaw) return;
+  _sqRaw = q;
+  var n = normSearch(q);
+  _sqTokens = n ? n.split(' ') : [];
+  _sqCompact = _sqTokens.join('');
+}
 function matchesQuery(i, q){
+  prepQuery(q);
+  if (!_sqTokens.length) return true;
   var ix = SEARCH_INDEX[i];
-  if (ix.n.indexOf(q) >= 0) return true;
-  for (var k = 0; k < ix.v.length; k++) { if (ix.v[k].indexOf(q) >= 0) return true; }
-  return false;
+  var all = true;
+  for (var k = 0; k < _sqTokens.length; k++) {
+    if (ix.h.indexOf(_sqTokens[k]) < 0) { all = false; break; }
+  }
+  if (all) return true;
+  return _sqCompact.length >= 2 && ix.c.indexOf(_sqCompact) >= 0;
 }
 function fmtCount(n){ return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); }
 

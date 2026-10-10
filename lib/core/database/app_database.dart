@@ -1,3 +1,4 @@
+import '../utils/product_search.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -2875,29 +2876,58 @@ class AppDatabase extends _$AppDatabase {
 
   // ───────────────────────── Product queries ─────────────────────────
 
-  Future<List<Product>> searchProducts(String query) {
-    final q = (select(products)..where((t) => t.isActive.equals(true)));
-    if (query.isNotEmpty) {
-      q.where((t) =>
-          t.name.lower().contains(query.toLowerCase()) |
-          t.kodeProduk.lower().contains(query.toLowerCase()));
+  Future<List<Product>> searchProducts(String query) async {
+    final search = ProductSearch(query);
+    if (search.isEmpty) {
+      final q = (select(products)..where((t) => t.isActive.equals(true)));
+      q.orderBy([(t) => OrderingTerm.asc(t.name)]);
+      return q.get();
     }
-    q.orderBy([(t) => OrderingTerm.asc(t.name)]);
-    return q.get();
+    // Pencarian toleran (urutan kata bebas, tanda baca diabaikan, ikut cari
+    // kode & nama kategori) — disaring di Dart; SQL `LIKE` tak bisa itu.
+    final j = select(products).join([
+      leftOuterJoin(productGroups,
+          productGroups.id.equalsExp(products.productGroupId)),
+    ])
+      ..where(products.isActive.equals(true))
+      ..orderBy([OrderingTerm.asc(products.name)]);
+    final rows = await j.get();
+    return _filterBySearch(rows, search);
   }
 
+  List<Product> _filterBySearch(List<TypedResult> rows, ProductSearch search) =>
+      [
+        for (final r in rows)
+          if (search.matches(r.readTable(products).name,
+              kode: r.readTable(products).kodeProduk,
+              group: r.readTableOrNull(productGroups)?.name))
+            r.readTable(products),
+      ];
+
   Stream<List<Product>> watchProducts({String query = '', int? groupId}) {
+    final search = ProductSearch(query);
+    if (!search.isEmpty) {
+      // Pencarian toleran: urutan kata bebas, tanda baca/aksen/spasi
+      // diabaikan, satuan dinormalkan, dan ikut mencari KODE (SKU) serta NAMA
+      // KATEGORI. Contoh: "GBF" -> "Gajah Baru Filter" (kode); "minuman" ->
+      // semua produk kategori Minuman. Disaring di Dart (SQL tak bisa).
+      final j = select(products).join([
+        leftOuterJoin(productGroups,
+            productGroups.id.equalsExp(products.productGroupId)),
+      ])
+        ..where(products.isActive.equals(true))
+        // Sembunyikan varian (produk anak) dari katalog utama.
+        ..where(products.parentProductId.isNull());
+      if (groupId != null) {
+        j.where(products.productGroupId.equals(groupId));
+      }
+      j.orderBy([OrderingTerm.asc(products.name)]);
+      return j.watch().map((rows) => _filterBySearch(rows, search));
+    }
     final q = (select(products)
       ..where((t) => t.isActive.equals(true))
       // Sembunyikan varian (produk anak) dari katalog utama.
       ..where((t) => t.parentProductId.isNull()));
-    if (query.isNotEmpty) {
-      // Cari berdasarkan nama ATAU kode produk (SKU). Contoh: ketik "GBF"
-      // memunculkan "Gajah Baru Filter" yang kode_produk-nya GBF.
-      q.where((t) =>
-          t.name.lower().contains(query.toLowerCase()) |
-          t.kodeProduk.lower().contains(query.toLowerCase()));
-    }
     if (groupId != null) {
       q.where((t) => t.productGroupId.equals(groupId));
     }
@@ -2925,15 +2955,21 @@ class AppDatabase extends _$AppDatabase {
       ..where(products.parentProductId.isNull())
       ..where(products.productGroupId.equals(groupId) |
           productGroupTags.groupId.equals(groupId));
-    if (query.isNotEmpty) {
-      final ql = query.toLowerCase();
-      q.where(products.name.lower().contains(ql) |
-          products.kodeProduk.lower().contains(ql));
+    final search = ProductSearch(query);
+    // Nama kategori ikut dicari (pencarian toleran, lihat [watchProducts]).
+    if (!search.isEmpty) {
+      q.join([
+        leftOuterJoin(productGroups,
+            productGroups.id.equalsExp(products.productGroupId)),
+      ]);
     }
     q.orderBy([OrderingTerm.asc(products.name)]);
-    return q
-        .watch()
-        .map((rows) => rows.map((r) => r.readTable(products)).toList());
+    if (search.isEmpty) {
+      return q
+          .watch()
+          .map((rows) => rows.map((r) => r.readTable(products)).toList());
+    }
+    return q.watch().map((rows) => _filterBySearch(rows, search));
   }
 
   /// Harga dasar (tier minQty=1) tiap produk pada satuan DASARnya — dipakai

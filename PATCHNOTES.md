@@ -8,6 +8,15 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 10 Oktober 2026 (v3.24.0 — Pencarian produk lebih pintar)
+
+- **Pencarian produk kini toleran**, di Kasir, daftar Produk, pemilih produk, dan katalog pelanggan:
+  - **Urutan kata bebas**: "goreng indomie" menemukan "Indomie Goreng".
+  - **Tanda baca, spasi, huruf besar/kecil diabaikan**: "cone snack" atau "conesnack" menemukan "Cone-Snack".
+  - **Satuan disamakan**: "500 gr", "500gram", dan "500g" sama.
+  - **Ikut mencari nama kategori**: ketik "minuman" untuk melihat semua produk kategori Minuman. Kode produk tetap ikut dicari.
+  - Semua yang dulu bisa dicari tetap bisa dicari.
+
 ## 10 Oktober 2026 (v3.23.0 — Penanda scan HID: angka membal + batang "terakhir di-scan")
 
 - **Scan HID produk yang sudah ada di keranjang**: highlight warna penuh diganti dua penanda yang lebih tenang. Angka jumlah di kiri baris (`3×`) membesar sekejap dan berwarna terracotta, dan sebuah **batang tipis terracotta di tepi kiri baris** menandai produk terakhir yang di-scan. Batang itu bertahan sampai scan berikutnya atau keranjang ditutup, jadi tidak terlewat walau mata sedang di barcode. Produk baru (paling bawah) hanya diberi batang, tanpa angka membal. Aturan "Kurangi animasi" dihormati (angka hanya berubah warna).
