@@ -217,7 +217,14 @@ extension _KasirModernX on _KasirScreenState {
                                 _searchFocus.unfocus();
                                 return false;
                               },
-                              child: Column(
+                              // Daftar memudar halus ke warna latar di bawah kolom
+                              // cari/chip & di atas bilah tab (bukan terpotong).
+                              child: ScrollEdgeFade(
+                                  top: 18,
+                                  bottom: 26,
+                                  color: Color.lerp(cs.surface,
+                                      AppTheme.canvasColor(dark), 0.4),
+                                  child: Column(
                                 children: [
                                   Expanded(
                                     child: isLanding
@@ -260,7 +267,7 @@ extension _KasirModernX on _KasirScreenState {
                                           ),
                                   ),
                                 ],
-                              ),
+                              )),
                             ),
                           ),
                         ),
@@ -1007,134 +1014,95 @@ class _LightRocker extends StatelessWidget {
   final bool dark;
   final VoidCallback onTap;
 
+  /// Ukuran ubin (persegi). Semua proporsi di bawah diambil dari saklar
+  /// GoPay (diukur dari screenshot): lekukan 34% x 56% ubin, muka kotak 76%
+  /// tinggi lekukan.
+  static const double size = 46;
+
   /// Saklar "ilusi optik" ala GoPay: SEBENARNYA hanya satu kotak yang
-  /// bergeser naik/turun di dalam lekukan; tebal tepi bawah (bayangan gelap)
-  /// & sorot atas yang berubah mengikuti posisi membuatnya tampak seperti
-  /// saklar fisik yang ditekan. Terang = kotak di atas (tepi tebal di bawah),
-  /// gelap = kotak turun (tepi menipis).
+  /// bergeser naik/turun di dalam lekukan. Gelap = kotak di ATAS, lubang
+  /// hitam tampak di bawahnya; terang = kotak di BAWAH, lubang putih tampak
+  /// di atasnya.
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     final dur = AppMotion.dur(context, AppMotion.medium);
+    const wellW = size * 0.344;
+    const wellH = size * 0.56;
+    const faceH = wellH * 0.76;
+    const travel = wellH - faceH - 1.6; // sisa ruang geser (dalam garis tepi)
     return Semantics(
       button: true,
       label: dark ? 'Ganti ke mode terang' : 'Ganti ke mode gelap',
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
-        child: Container(
-          width: 44,
-          height: 52,
-          decoration: BoxDecoration(
-            color: dark ? const Color(0xFF2A2623) : Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: cs.outlineVariant, width: 0.8),
-            boxShadow: _sh(const [
-              BoxShadow(
-                  color: Color(0x26000000),
-                  blurRadius: 8,
-                  offset: Offset(0, 3)),
-            ]),
-          ),
-          alignment: Alignment.center,
-          child: TweenAnimationBuilder<double>(
-            tween: Tween(end: dark ? 1.0 : 0.0),
-            duration: dur,
-            curve: AppMotion.easeOutBack,
-            builder: (context, t, _) {
-              final dy = (t - 0.5) * 8; // -4 (atas) .. +4 (bawah)
-              final lip = 3.0 - 1.5 * t; // tebal tepi bawah menipis saat turun
-              final well = Color.lerp(
-                  const Color(0xFFE2DCCC), const Color(0xFF161412), t)!;
-              return Container(
-                width: 30,
-                height: 44,
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(end: dark ? 0.0 : 1.0), // 0 = gelap (kotak atas)
+          duration: dur,
+          curve: AppMotion.easeOutBack,
+          builder: (context, k, _) {
+            // k: 0 = gelap, 1 = terang (warna ikut berpindah mulus).
+            final kc = k.clamp(0.0, 1.0);
+            Color c(int dk, int lt) => Color.lerp(Color(dk), Color(lt), kc)!;
+            return Container(
+              width: size,
+              height: size,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(size * 0.227),
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    c(0xFF2C2F34, 0xFFFBFCFE),
+                    c(0xFF252A2E, 0xFFF7F8FA)
+                  ],
+                ),
+                boxShadow: _sh([
+                  BoxShadow(
+                      color: Color.lerp(const Color(0x66000000),
+                          const Color(0x1F000000), kc)!,
+                      blurRadius: 6,
+                      offset: const Offset(0, 2)),
+                ]),
+              ),
+              alignment: Alignment.center,
+              child: Container(
+                width: wellW,
+                height: wellH,
                 decoration: BoxDecoration(
-                  color: well,
-                  borderRadius: BorderRadius.circular(11),
-                  // Lekukan: tepi dalam atas sedikit lebih gelap (inset).
-                  border: Border.all(
-                      color: Color.lerp(
-                          const Color(0xFFDDD6C6), const Color(0xFF0B0A09), t)!,
-                      width: 0.8),
+                  // Lubang di balik kotak: hitam (gelap) / putih (terang).
+                  color: c(0xFF08090B, 0xFFFBFBFB),
+                  borderRadius: BorderRadius.circular(wellW * 0.26),
+                  border:
+                      Border.all(color: c(0xFF141519, 0xFFDFE0E4), width: 0.8),
                 ),
                 child: Stack(
-                  alignment: Alignment.center,
                   children: [
-                    Transform.translate(
-                      offset: Offset(0, dy),
-                      child: SizedBox(
-                        width: 22,
-                        height: 26,
-                        child: Stack(
-                          clipBehavior: Clip.none,
-                          children: [
-                            // Tebal/tepi kotak (bagian yang tampak "tenggelam").
-                            Positioned(
-                              left: 0,
-                              right: 0,
-                              top: lip,
-                              bottom: -lip,
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(9),
-                                  color: Color.lerp(const Color(0xFFCFC6B0),
-                                      const Color(0xFF050404), t),
-                                ),
-                              ),
-                            ),
-                            // Muka kotak.
-                            Positioned.fill(
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(9),
-                                  boxShadow: _sh([
-                                    BoxShadow(
-                                        color: Color(
-                                            dark ? 0x80000000 : 0x2E000000),
-                                        blurRadius: 3,
-                                        offset: const Offset(0, 1.5)),
-                                  ]),
-                                  gradient: LinearGradient(
-                                    begin: Alignment.topCenter,
-                                    end: Alignment.bottomCenter,
-                                    colors: dark
-                                        ? const [
-                                            Color(0xFF3B3632),
-                                            Color(0xFF26221F)
-                                          ]
-                                        : const [
-                                            Color(0xFFFFFFFF),
-                                            Color(0xFFEFE9DA)
-                                          ],
-                                  ),
-                                  border: Border.all(
-                                      color: dark
-                                          ? const Color(0xFF4A443E)
-                                          : const Color(0xFFFFFFFF),
-                                      width: 0.8),
-                                ),
-                                child: Center(
-                                  child: Icon(
-                                      dark
-                                          ? Icons.nightlight_round
-                                          : Icons.wb_sunny_rounded,
-                                      size: 12,
-                                      color: dark
-                                          ? const Color(0xFF9FB4E8)
-                                          : const Color(0xFFE59A2E)),
-                                ),
-                              ),
-                            ),
-                          ],
+                    Positioned(
+                      left: 0.4,
+                      right: 0.4,
+                      // k=0 -> menempel atas, k=1 -> menempel bawah.
+                      top: 0.4 + travel * k,
+                      height: faceH,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(wellW * 0.24),
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              c(0xFF1A1E21, 0xFFE6E7E9),
+                              c(0xFF252A2E, 0xFFF9FAFC),
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   ],
                 ),
-              );
-            },
-          ),
+              ),
+            );
+          },
         ),
       ),
     );

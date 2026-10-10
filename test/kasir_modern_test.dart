@@ -697,11 +697,13 @@ void main() {
           greaterThan(w * 0.8));
       expect(find.byKey(const Key('hdr-grid')), findsNothing,
           reason: 'grid/list tidak tampil di landing');
-      // Saklar = kotak yang bergeser (ilusi saklar), bukan Switch/toggle;
-      // ikon di kotak mengikuti mode (terang = matahari).
+      // Saklar = kotak yang bergeser (ilusi saklar ala GoPay), bukan
+      // Switch/toggle, dan tanpa ikon.
       expect(find.byType(Switch), findsNothing);
-      expect(find.byIcon(Icons.wb_sunny_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.wb_sunny_rounded), findsNothing);
       expect(find.byIcon(Icons.nightlight_round), findsNothing);
+      expect(tester.getSize(find.byKey(const Key('hdr-theme'))),
+          const Size(46, 46));
 
       // Tidak ada lingkaran kedua: semua border TextField dimatikan.
       final dec = tester

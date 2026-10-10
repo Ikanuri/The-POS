@@ -8,6 +8,11 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 10 Oktober 2026 (v3.18.0 — Saklar persis GoPay & daftar Kasir memudar)
+
+- **Saklar Mode Terang/Gelap kini persis desain GoPay** (hanya ukurannya lebih kecil): ubin persegi dengan satu lekukan; saat gelap kotaknya di atas dan lubang hitam tampak di bawah, saat terang kotaknya turun dan lubang putih tampak di atas. Tanpa ikon.
+- **Daftar produk di layar Kasir memudar halus** di bawah kolom cari/kategori dan di atas bilah tab, tidak lagi terpotong tegas.
+
 ## 10 Oktober 2026 (v3.17.0 — Saklar tema baru)
 
 - **Saklar Mode Terang/Gelap** didesain ulang: kini sebuah kotak yang bergeser naik-turun di dalam lekukan, dengan bayangan sehingga tampak seperti saklar sungguhan (terinspirasi saklar di GoPay).
