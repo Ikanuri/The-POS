@@ -8,6 +8,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 10 Oktober 2026 (v3.23.0 — Penanda scan HID: angka membal + batang "terakhir di-scan")
+
+- **Scan HID produk yang sudah ada di keranjang**: highlight warna penuh diganti dua penanda yang lebih tenang. Angka jumlah di kiri baris (`3×`) membesar sekejap dan berwarna terracotta, dan sebuah **batang tipis terracotta di tepi kiri baris** menandai produk terakhir yang di-scan. Batang itu bertahan sampai scan berikutnya atau keranjang ditutup, jadi tidak terlewat walau mata sedang di barcode. Produk baru (paling bawah) hanya diberi batang, tanpa angka membal. Aturan "Kurangi animasi" dihormati (angka hanya berubah warna).
+
 ## 10 Oktober 2026 (v3.22.0 — Highlight produk yang di-scan HID)
 
 - **Scan barcode HID produk yang sudah ada di keranjang**: selain keranjang menggulir ke barisnya, baris itu kini di-highlight sekejap (tint terracotta yang memudar sekitar 1,4 detik) supaya jelas produk mana yang bertambah jumlahnya. Produk yang baru ditambahkan (paling bawah) sengaja tidak di-highlight karena sudah ada animasi masuk dan gulir.

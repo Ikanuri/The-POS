@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -211,16 +212,21 @@ class _CartSheetState extends ConsumerState<CartSheet> {
     _scrollToUnit(sig.unitId, isNew: sig.isNew);
   }
 
-  // Waktu highlight terakhir per baris (scan HID produk yang SUDAH ada).
-  // Berbasis waktu (bukan penghitung) supaya baris yang dibangun ulang saat
-  // di-scroll (daftar malas) tidak memutar ulang highlight yang sudah lewat.
+  // Penanda "terakhir di-scan HID": batang aksen di tepi kiri baris, BERTAHAN
+  // sampai scan berikutnya / sheet ditutup (baris baru maupun yang sudah ada).
+  String? _lastScannedUnitId;
+
+  // Waktu "angka jumlah membal" terakhir per baris — HANYA produk yang SUDAH
+  // ada (qty bertambah); baris baru sudah punya animasi masuk. Berbasis waktu
+  // (bukan penghitung) supaya baris yang dibangun ulang saat di-scroll
+  // (daftar malas) tidak memutar ulang animasi yang sudah lewat.
   final Map<String, DateTime> _flashAt = {};
 
   void _scrollToUnit(String unitId, {bool isNew = true}) {
-    if (!isNew) {
-      // Baris baru TIDAK di-highlight (sudah ada animasi masuk + gulir).
-      setState(() => _flashAt[unitId] = DateTime.now());
-    }
+    setState(() {
+      _lastScannedUnitId = unitId;
+      if (!isNew) _flashAt[unitId] = DateTime.now();
+    });
     final sc = _listScroll;
     if (sc == null || !sc.hasClients) return;
     final ordered = orderCartItems(ref.read(cartProvider(widget.cartId)));
@@ -1999,6 +2005,8 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                                 child: _ScanFlash(
                                   unitId: item.productUnitId,
                                   flashAt: _flashAt[item.productUnitId],
+                                  marked:
+                                      _lastScannedUnitId == item.productUnitId,
                                   child: _CartItemTile(
                               // Susulan (permintaan user, fitur getar+tap-lagi
                               // minus): key stabil PER-ITEM wajib supaya state
@@ -2544,7 +2552,7 @@ class _CartItemTileState extends ConsumerState<_CartItemTile>
                   if (effectiveQty > 0)
                     Padding(
                       padding: const EdgeInsets.only(right: 6),
-                      child: Text(
+                      child: _ScanBumpText(
                         '${effectiveQty % 1 == 0 ? effectiveQty.toInt() : effectiveQty}\u00d7',
                         style: AppTheme.numStyle(context,
                             size: 13,
@@ -2890,15 +2898,23 @@ class _CartItemTileState extends ConsumerState<_CartItemTile>
   }
 }
 
-/// Highlight sekejap pada baris produk yang baru di-scan scanner HID (produk
-/// yang SUDAH ada di keranjang, qty bertambah): tint aksen memudar ~1,4 dtk di
-/// BELAKANG baris (tile tidak diubah). Hanya satu animasi ringan untuk SATU
-/// baris, dan tidak ada apa pun yang dilukis lagi setelah selesai.
+/// Penanda scan HID pada baris keranjang (menggantikan tint penuh):
+///  * **A — angka jumlah membal**: badge `n×` membesar sekejap + berwarna aksen
+///    (HANYA produk yang SUDAH ada, qty bertambah) lewat [_ScanBumpScope];
+///  * **B — batang "terakhir di-scan"**: batang aksen tipis di tepi kiri baris
+///    yang BERTAHAN sampai scan berikutnya / sheet ditutup.
+/// Keduanya dilukis di luar tile (tile tidak diubah, kecuali badge qty yang
+/// membaca [_ScanBumpScope]); struktur pohon SELALU sama supaya state baris
+/// (mis. getar minus) tidak ter-reset.
 class _ScanFlash extends StatefulWidget {
   const _ScanFlash(
-      {required this.unitId, required this.flashAt, required this.child});
+      {required this.unitId,
+      required this.flashAt,
+      required this.marked,
+      required this.child});
   final String unitId;
   final DateTime? flashAt;
+  final bool marked;
   final Widget child;
 
   @override
@@ -2907,7 +2923,7 @@ class _ScanFlash extends StatefulWidget {
 
 class _ScanFlashState extends State<_ScanFlash>
     with SingleTickerProviderStateMixin {
-  static const _life = Duration(milliseconds: 1400);
+  static const _life = Duration(milliseconds: 700);
   late final AnimationController _c =
       AnimationController(vsync: this, duration: _life)..value = 1;
 
@@ -2939,39 +2955,89 @@ class _ScanFlashState extends State<_ScanFlash>
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
+    return _ScanBumpScope(
       animation: _c,
-      child: widget.child,
-      builder: (context, child) {
-        // Struktur pohon SELALU sama (Stack + overlay + child) supaya state
-        // baris (mis. getar minus) tidak ter-reset saat highlight mulai/selesai.
-        final t = _c.value;
-        final active = t < 1;
-        // Tahan penuh ~25% pertama, lalu memudar.
-        final a = !active
-            ? 0.0
-            : (t < 0.25
-                ? 1.0
-                : 1 - Curves.easeOut.transform((t - 0.25) / 0.75));
-        return Stack(
-          fit: StackFit.passthrough,
-          children: [
-            Positioned.fill(
-              child: IgnorePointer(
-                child: active
-                    ? Container(
-                        key: Key('scan-flash-${widget.unitId}'),
-                        margin: const EdgeInsets.symmetric(horizontal: 8),
-                        decoration: BoxDecoration(
-                          color: AppTheme.accent.withOpacity(0.28 * a),
-                          borderRadius: BorderRadius.circular(14),
+      child: Stack(
+        fit: StackFit.passthrough,
+        children: [
+          Positioned.fill(
+            child: IgnorePointer(
+              child: TweenAnimationBuilder<double>(
+                tween: Tween(end: widget.marked ? 1.0 : 0.0),
+                duration: AppMotion.dur(context, AppMotion.medium),
+                curve: AppMotion.easeOutQuint,
+                builder: (context, v, _) {
+                  if (v <= 0 && !widget.marked) return const SizedBox.shrink();
+                  return Align(
+                    alignment: Alignment.centerLeft,
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 3),
+                      child: Opacity(
+                        opacity: v.clamp(0.0, 1.0),
+                        child: FractionallySizedBox(
+                          heightFactor: 0.6 * v.clamp(0.0, 1.0),
+                          child: Container(
+                            key: Key('scan-marker-${widget.unitId}'),
+                            width: 3,
+                            decoration: BoxDecoration(
+                              color: AppTheme.accent,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
                         ),
-                      )
-                    : const SizedBox.shrink(),
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
-            child!,
-          ],
+          ),
+          widget.child,
+        ],
+      ),
+    );
+  }
+}
+
+/// Menyalurkan animasi "membal" dari [_ScanFlash] ke badge qty di dalam tile.
+class _ScanBumpScope extends InheritedWidget {
+  const _ScanBumpScope({required this.animation, required super.child});
+  final Animation<double> animation;
+
+  static Animation<double>? maybeOf(BuildContext context) => context
+      .dependOnInheritedWidgetOfExactType<_ScanBumpScope>()
+      ?.animation;
+
+  @override
+  bool updateShouldNotify(_ScanBumpScope old) => animation != old.animation;
+}
+
+/// Teks badge qty `n×`: saat [_ScanBumpScope] berjalan, membesar sekejap
+/// (puncak ~1,45x) dan berwarna aksen, lalu kembali normal. "Kurangi animasi"
+/// -> hanya warna, tanpa membesar.
+class _ScanBumpText extends StatelessWidget {
+  const _ScanBumpText(this.text, {required this.style});
+  final String text;
+  final TextStyle style;
+
+  @override
+  Widget build(BuildContext context) {
+    final anim = _ScanBumpScope.maybeOf(context);
+    if (anim == null) return Text(text, style: style);
+    final reduced = AppMotion.reduced(context);
+    return AnimatedBuilder(
+      animation: anim,
+      builder: (context, _) {
+        final t = anim.value;
+        if (t >= 1) return Text(text, style: style);
+        final k = math.sin(math.pi * t); // 0 -> 1 -> 0
+        return Transform.scale(
+          scale: reduced ? 1.0 : 1 + 0.45 * k,
+          alignment: Alignment.centerLeft,
+          child: Text(text,
+              style: style.copyWith(
+                  color: Color.lerp(style.color, AppTheme.accent, k),
+                  fontWeight: FontWeight.w800)),
         );
       },
     );

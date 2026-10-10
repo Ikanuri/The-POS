@@ -167,20 +167,30 @@ void scanExistingTests() {
     // Scan HID produk ke-2 yang sudah ada: qty +1 lalu sinyal.
     n.addItem(item(2));
     CartSheetScanSignal.notify('U2', isNew: false);
-    await tester.pump(const Duration(milliseconds: 400));
-    expect(find.byKey(const Key('scan-flash-U2')), findsOneWidget,
-        reason: 'produk yang SUDAH ada diberi highlight sekejap');
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('scan-flash-U2')), findsNothing,
-        reason: 'highlight memudar & hilang (tak ada yang dilukis lagi)');
+    await tester.pump(const Duration(milliseconds: 20));
+    await tester.pump(const Duration(milliseconds: 150));
+    // A: angka jumlah membal (badge `2×` membesar di tengah animasi).
+    double badgeScale() {
+      final t = find.ancestor(
+          of: find.text('2\u00d7'), matching: find.byType(Transform));
+      return tester.widget<Transform>(t.first).transform.storage[0];
+    }
 
+    expect(badgeScale(), greaterThan(1.05),
+        reason: 'angka jumlah membesar sekejap pada produk yang SUDAH ada');
+    await tester.pumpAndSettle();
+    expect(badgeScale(), 1.0, reason: 'kembali normal setelah animasi');
+    // B: batang "terakhir di-scan" BERTAHAN setelah animasi selesai.
+    expect(find.byKey(const Key('scan-marker-U2')), findsOneWidget);
     expect(find.text('Produk ke-2'), findsOneWidget,
         reason: 'baris produk yang di-scan harus terlihat');
     final y = tester.getCenter(find.text('Produk ke-2')).dy;
     expect(y, inInclusiveRange(0, 700));
   });
 
-  testWidgets('baris BARU (scan HID) TIDAK di-highlight', (tester) async {
+  testWidgets(
+      'baris BARU (scan HID): tanpa angka membal, tetap diberi batang penanda',
+      (tester) async {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(() async => db.close());
     final container = ProviderContainer(overrides: [
@@ -226,8 +236,17 @@ void scanExistingTests() {
     CartSheetScanSignal.notify('U99', isNew: true);
     for (var i = 0; i < 10; i++) {
       await tester.pump(const Duration(milliseconds: 100));
-      expect(find.byKey(const Key('scan-flash-U99')), findsNothing);
+      // Tidak ada animasi membal pada baris baru.
+      final t = find.ancestor(
+          of: find.text('1\u00d7'), matching: find.byType(Transform));
+      for (final e in t.evaluate()) {
+        final sc = (e.widget as Transform).transform.storage[0];
+        expect(sc, lessThanOrEqualTo(1.0 + 1e-9));
+      }
     }
+    await tester.pumpAndSettle();
+    // Baris baru tetap diberi batang penanda (terakhir di-scan).
+    expect(find.byKey(const Key('scan-marker-U99')), findsOneWidget);
     await tester.pumpAndSettle();
   });
 }
