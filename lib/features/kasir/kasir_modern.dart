@@ -1088,13 +1088,13 @@ class _LightRocker extends StatelessWidget {
                               child: DecoratedBox(
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(9),
-                                  boxShadow: [
+                                  boxShadow: _sh([
                                     BoxShadow(
                                         color: Color(
                                             dark ? 0x80000000 : 0x2E000000),
                                         blurRadius: 3,
                                         offset: const Offset(0, 1.5)),
-                                  ],
+                                  ]),
                                   gradient: LinearGradient(
                                     begin: Alignment.topCenter,
                                     end: Alignment.bottomCenter,
