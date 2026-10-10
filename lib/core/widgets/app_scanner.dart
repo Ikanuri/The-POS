@@ -84,6 +84,8 @@ class _AppScannerState extends ConsumerState<AppScanner> {
   Timer? _releaseTimer;
   BarcodeCapture? _latest;
   final _lock = ScanTargetLock(release: Duration.zero);
+  final _rect = ScanRectFilter();
+  String? _rectFor;
 
   @override
   void initState() {
@@ -139,6 +141,8 @@ class _AppScannerState extends ConsumerState<AppScanner> {
           barcodes: [locked], image: cap.image, raw: cap.raw, size: cap.size);
     } else {
       _lock.reset();
+      _rect.reset();
+      _rectFor = null;
       _follow.lostAfter = const Duration(milliseconds: 450);
     }
 
@@ -147,7 +151,19 @@ class _AppScannerState extends ConsumerState<AppScanner> {
       return;
     }
     final b = locked ?? AppScanner.pickBarcode(candidates, size);
-    if (b != null) _follow.report(b.corners, size);
+    if (b != null) {
+      var corners = b.corners;
+      if (lockMs > 0 && corners.isNotEmpty) {
+        // Ganti target = mulai penyaring dari nol (tak mewarisi kotak lama).
+        if (_rectFor != b.rawValue) {
+          _rect.reset();
+          _rectFor = b.rawValue;
+        }
+        final r = _rect.add(boundsOf(corners));
+        corners = [r.topLeft, r.topRight, r.bottomRight, r.bottomLeft];
+      }
+      _follow.report(corners, size);
+    }
 
     if (widget.lockDelay > Duration.zero) {
       // Satu-tembak: teruskan hasil TERBARU setelah bingkai terkunci.
@@ -190,4 +206,3 @@ class _AppScannerState extends ConsumerState<AppScanner> {
     );
   }
 }
-

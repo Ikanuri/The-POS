@@ -8,6 +8,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 10 Oktober 2026 (v3.16.2 — Bingkai scanner tidak lompat)
+
+- **Kunci Target Scanner**: kotak bingkai kini disaring supaya tidak melompat naik ke atas barcode atau melebar ke teks di sekitarnya saat barcode bergerak; geraknya lebih stabil.
+
 ## 10 Oktober 2026 (v3.16.1 — Kunci target lebih mulus)
 
 - **Kunci Target Scanner**: bingkai kini bertahan di barcode yang terkunci dan tidak lagi mantul ke tengah saat barcode sesaat tak terbaca; geraknya juga lebih mulus mengikuti barcode.

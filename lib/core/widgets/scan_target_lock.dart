@@ -48,3 +48,44 @@ class ScanTargetLock {
     return b;
   }
 }
+
+/// Penyaring kotak untuk mode kunci target: sudut barcode 1D dari ML Kit
+/// sering berubah-ubah antar-frame (kotak sesaat naik/melebar ke teks di
+/// sekitarnya). Median 3 sampel per sisi membuang lonjakan SATU frame, lalu
+/// perataan eksponensial menghaluskan sisanya. Bekerja di ruang gambar.
+class ScanRectFilter {
+  ScanRectFilter({this.alpha = 0.6});
+
+  /// Bobot sampel baru pada perataan (1 = tanpa perataan).
+  final double alpha;
+
+  final List<Rect> _hist = [];
+  Rect? _out;
+
+  void reset() {
+    _hist.clear();
+    _out = null;
+  }
+
+  static double _median3(double a, double b, double c) {
+    final l = [a, b, c]..sort();
+    return l[1];
+  }
+
+  Rect add(Rect r) {
+    _hist.add(r);
+    if (_hist.length > 3) _hist.removeAt(0);
+    final med = _hist.length < 3
+        ? r
+        : Rect.fromLTRB(
+            _median3(_hist[0].left, _hist[1].left, _hist[2].left),
+            _median3(_hist[0].top, _hist[1].top, _hist[2].top),
+            _median3(_hist[0].right, _hist[1].right, _hist[2].right),
+            _median3(_hist[0].bottom, _hist[1].bottom, _hist[2].bottom),
+          );
+    final prev = _out;
+    final out = prev == null ? med : Rect.lerp(prev, med, alpha)!;
+    _out = out;
+    return out;
+  }
+}
