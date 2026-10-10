@@ -25,6 +25,14 @@ void main() {
         databaseProvider.overrideWithValue(db),
         // Tanpa animasi berulang di test; thumbnail memakai ikon cadangan.
         kasirStickerProvider.overrideWith((ref, slot) async => null),
+        deviceProvider.overrideWith((ref) => DeviceNotifier()
+          ..state = const DeviceIdentity(
+            storeUuid: 'u',
+            storeKey: 'k',
+            deviceName: 'X',
+            deviceCode: 'O1',
+            deviceRole: 'owner',
+          )),
       ],
       child: MaterialApp(
         theme: AppTheme.light(),
@@ -36,7 +44,8 @@ void main() {
     expect(find.text('Landing Kasir'), findsOneWidget);
     expect(find.text('Produk tidak ditemukan'), findsOneWidget);
     expect(find.text('Belum ada produk'), findsOneWidget);
-    expect(find.text('Bawaan'), findsNWidgets(3)); // subtitle status
+    // 3 subtitle status slot + 1 tombol reset di editor teks (owner).
+    expect(find.text('Bawaan'), findsNWidgets(4));
     expect(find.byKey(const ValueKey('kasir-sticker-pick-landing')),
         findsOneWidget);
     expect(find.byKey(const ValueKey('kasir-sticker-reset-landing')),
@@ -50,6 +59,14 @@ void main() {
       overrides: [
         databaseProvider.overrideWithValue(db),
         kasirStickerProvider.overrideWith((ref, slot) async => null),
+        deviceProvider.overrideWith((ref) => DeviceNotifier()
+          ..state = const DeviceIdentity(
+            storeUuid: 'u',
+            storeKey: 'k',
+            deviceName: 'X',
+            deviceCode: 'O1',
+            deviceRole: 'owner',
+          )),
       ],
       child: MaterialApp(
         theme: AppTheme.light(),
@@ -126,15 +143,40 @@ void main() {
     await db.close();
   });
 
-  testWidgets('teks landing: kasir/asisten TIDAK melihat editor (owner only)',
-      (tester) async {
+  testWidgets(
+      'teks landing: kasir/asisten BOLEH mengubah, tapi SEMENTARA (override '
+      'lokal, key host tak disentuh)', (tester) async {
     for (final role in ['kasir', 'asisten']) {
       final db = AppDatabase(NativeDatabase.memory());
+      // Nilai resmi dari host (sudah tersinkron ke key aslinya).
+      await db.setSetting('kasir_landing_title', 'Judul Owner');
       await pumpSheet(tester, db, role);
-      expect(find.byKey(const Key('landing-text-title')), findsNothing,
+      expect(find.byKey(const Key('landing-text-title')), findsOneWidget,
           reason: role);
-      expect(find.text('Teks landing hanya dapat diubah oleh owner.'),
-          findsOneWidget);
+      expect(find.byKey(const Key('landing-local-note')), findsOneWidget);
+      // Nilai yang berlaku (dari host) tampil sbg isi awal.
+      expect(
+          tester
+              .widget<TextField>(find.byKey(const Key('landing-text-title')))
+              .controller!
+              .text,
+          'Judul Owner');
+
+      await tester.enterText(
+          find.byKey(const Key('landing-text-title')), 'Judul Kasir');
+      await tester.tap(find.byKey(const Key('landing-text-save')));
+      await tester.pumpAndSettle();
+      expect(await db.getSetting('local_kasir_landing_title'), 'Judul Kasir');
+      expect(await db.getSetting('kasir_landing_title'), 'Judul Owner',
+          reason: 'nilai host TIDAK boleh tertimpa edit lokal');
+      expect((await KasirLandingText.load(db)).title, 'Judul Kasir');
+
+      // "Ikuti owner" = buang override lokal -> kembali ke nilai host.
+      await tester.tap(find.byKey(const Key('landing-text-reset')));
+      await tester.pumpAndSettle();
+      expect((await db.getSetting('local_kasir_landing_title')) ?? '', isEmpty);
+      expect((await KasirLandingText.load(db)).title, 'Judul Owner');
+
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(milliseconds: 10));
       await db.close();

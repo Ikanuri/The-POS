@@ -339,25 +339,14 @@ class _ModernHeader extends StatelessWidget {
         alignment: Alignment.topCenter,
         child: Row(
           children: [
-            Container(
-              width: 34,
-              height: 34,
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Color(0xFFD97757), Color(0xFFC96442)],
-                ),
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: _sh(const [
-                  BoxShadow(
-                      color: Color(0x59C96442),
-                      blurRadius: 12,
-                      offset: Offset(0, 4)),
-                ]),
-              ),
-              child: const Icon(Icons.shopping_basket_rounded,
-                  color: Colors.white, size: 18),
+            PeachLogoBadge(
+              size: 34,
+              shadows: _sh(const [
+                BoxShadow(
+                    color: Color(0x59C96442),
+                    blurRadius: 12,
+                    offset: Offset(0, 4)),
+              ]),
             ),
             // Nama hanya di landing; boleh menyusut/ellipsis bila sempit.
             Expanded(

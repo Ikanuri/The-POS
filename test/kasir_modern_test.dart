@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:the_pos/core/widgets/peach_logo.dart';
 import 'package:the_pos/core/database/app_database.dart';
 import 'package:the_pos/core/providers/device_provider.dart';
 import 'package:the_pos/core/theme/app_theme.dart';
@@ -311,7 +312,7 @@ void main() {
       expect(tester.getCenter(find.byKey(const Key('hdr-grid'))).dx,
           lessThan(tester.getCenter(find.byKey(const Key('hdr-theme'))).dx));
       expect(find.text('The POS'), findsNothing);
-      expect(find.byIcon(Icons.shopping_basket_rounded), findsOneWidget);
+      expect(find.byType(PeachLogoBadge), findsOneWidget);
       expect(find.byKey(const Key('fab-main')), findsNothing);
 
       await _drain(tester);
@@ -691,7 +692,7 @@ void main() {
       await _pumpKasir(tester, db, prefs: modern);
 
       expect(find.text('The POS'), findsOneWidget);
-      expect(find.byIcon(Icons.shopping_basket_rounded), findsOneWidget);
+      expect(find.byType(PeachLogoBadge), findsOneWidget);
       const w = 430.0;
       expect(tester.getCenter(find.byKey(const Key('hdr-theme'))).dx,
           greaterThan(w * 0.8));

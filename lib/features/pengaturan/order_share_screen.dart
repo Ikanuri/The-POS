@@ -477,7 +477,7 @@ class _OrderShareScreenState extends ConsumerState<OrderShareScreen> {
             alignment: Alignment.centerLeft,
             child: Text(
                 'Ganti dengan berkas stiker animasi .tgs (format stiker '
-                'Telegram, maks 64 KB). Berkas tidak valid ditolak.',
+                'Telegram, maks 200 KB). Berkas tidak valid ditolak.',
                 style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
           ),
         ),

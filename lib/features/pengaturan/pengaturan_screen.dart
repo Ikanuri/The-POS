@@ -595,18 +595,19 @@ class PengaturanScreen extends ConsumerWidget {
                         onChanged: (v) =>
                             ref.read(kasirLandingProvider.notifier).set(v),
                       ),
-                      // Stiker & teks landing ikut tersinkron ke perangkat
-                      // lain -> hanya owner yang boleh mengubahnya.
-                      if (ref.watch(deviceProvider).isOwner)
-                        ListTile(
-                          key: const Key('setting-kasir-sticker'),
-                          leading: SettingsIconBubble(Icons.emoji_emotions_outlined, AppTheme.tealFg(isDark), AppTheme.tealBg(isDark)),
-                          title: const Text('Stiker & Teks Landing Kasir'),
-                          subtitle: const Text(
-                              'Stiker .tgs + teks di bawahnya (tersinkron)'),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () => KasirStickerSheet.show(context),
-                        ),
+                      // Owner: setting toko (tersinkron ke semua perangkat).
+                      // Non-owner: boleh mengubah SEMENTARA di perangkatnya;
+                      // kembali mengikuti owner saat sinkron.
+                      ListTile(
+                        key: const Key('setting-kasir-sticker'),
+                        leading: SettingsIconBubble(Icons.emoji_emotions_outlined, AppTheme.tealFg(isDark), AppTheme.tealBg(isDark)),
+                        title: const Text('Stiker & Teks Landing Kasir'),
+                        subtitle: Text(ref.watch(deviceProvider).isOwner
+                            ? 'Stiker .tgs + teks di bawahnya (tersinkron)'
+                            : 'Sementara di perangkat ini; kembali mengikuti owner saat sinkron'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => KasirStickerSheet.show(context),
+                      ),
                     ],
                   ),
                 ),

@@ -1,3 +1,4 @@
+import 'kasir_sticker_service.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -1513,6 +1514,12 @@ class LanSyncService {
       // berikutnya otomatis retry dari titik lama (aman, cuma kirim/terima
       // agak lebih banyak, bukan kehilangan data).
       await _saveDownloadWatermark(db, downloadSyncStartedAt);
+      // Stiker & teks landing Kasir: override LOKAL perangkat ini dibuang
+      // sekarang — host/owner adalah sumber kebenaran, tampilan kembali
+      // mengikuti nilai terakhir dari host (yang tersimpan di key aslinya).
+      try {
+        await KasirLocalOverrides.clear(db);
+      } catch (_) {/* jangan sampai menggagalkan sync */}
       // Item 17 Fase 2 — watermark upload HANYA dimajukan setelah sampai
       // titik ini: respons 200 sudah diterima & lolos verifikasi HMAC (baris
       // di atas), yang textbook artinya host SUDAH menyimpan upload kita

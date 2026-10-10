@@ -59,6 +59,7 @@ import '../../core/widgets/press_scale.dart';
 import '../../core/widgets/skeleton.dart';
 import '../../core/services/kasir_sticker_service.dart';
 import '../../core/widgets/app_sticker.dart';
+import '../../core/widgets/peach_logo.dart';
 
 part 'kasir_modern.dart';
 
@@ -3123,30 +3124,13 @@ class _KasirTopbarState extends State<_KasirTopbar> {
               // tanpa menggeser tombol lain (tetap rapi di HP & tablet).
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [Color(0xFFD97757), Color(0xFFC96442)],
-                    ),
-                    borderRadius: BorderRadius.circular(10),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x1A302416),
-                        blurRadius: 4,
-                        offset: Offset(0, 1),
-                      ),
-                    ],
+                const PeachLogoBadge(size: 36, shadows: [
+                  BoxShadow(
+                    color: Color(0x1A302416),
+                    blurRadius: 4,
+                    offset: Offset(0, 1),
                   ),
-                  child: const Icon(
-                    Icons.shopping_basket_rounded,
-                    color: Colors.white,
-                    size: 18,
-                  ),
-                ),
+                ]),
                 const SizedBox(width: 8),
                 Expanded(
                   child: LayoutBuilder(

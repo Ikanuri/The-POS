@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:drift/native.dart';
@@ -42,13 +43,34 @@ void main() {
       }
     });
 
-    test('menolak: bukan gzip, kosong, JSON rusak, bukan Lottie, terlalu panjang, '
+    test(
+        'batas .tgs 200 KB: berkas ~100 KB (dulu ditolak di 64 KB) diterima; '
+        '> 200 KB ditolak', () {
+      expect(CatalogStickerService.maxTgsBytes, 200 * 1024);
+      // Data acak (tak bisa dikompresi) -> berkas terkompresi besar tapi valid.
+      final r = Random(7);
+      final rnd = List<int>.generate(150 * 1024, (_) => r.nextInt(256));
+      final big = gz(lottie(layers: [
+        {'nm': base64Encode(rnd)}
+      ]));
+      expect(big.length, inInclusiveRange(64 * 1024 + 1, 200 * 1024),
+          reason:
+              'prasyarat: lebih besar dari batas lama, di bawah batas baru');
+      expect(CatalogStickerService.validateTgs(big).error, isNull);
+      expect(
+          CatalogStickerService.validateTgs(
+                  Uint8List(CatalogStickerService.maxTgsBytes + 1))
+              .error,
+          contains('200 KB'));
+    });
+
+    test(
+        'menolak: bukan gzip, kosong, JSON rusak, bukan Lottie, terlalu panjang, '
         'terlalu besar, memakai expression', () {
       String? err(Uint8List b) => CatalogStickerService.validateTgs(b).error;
       expect(err(Uint8List(0)), isNotNull);
       expect(err(Uint8List.fromList(utf8.encode('{"a":1}'))), isNotNull);
-      expect(
-          err(Uint8List.fromList(gzip.encode(utf8.encode('bukan json')))),
+      expect(err(Uint8List.fromList(gzip.encode(utf8.encode('bukan json')))),
           isNotNull);
       expect(err(gz({'foo': 1})), isNotNull);
       expect(err(gz(lottie(op: 5000))), contains('panjang'));
@@ -74,7 +96,8 @@ void main() {
   });
 
   group('loadForPublish', () {
-    test('bawaan; unggahan menggantikan; unggahan rusak jatuh ke bawaan; '
+    test(
+        'bawaan; unggahan menggantikan; unggahan rusak jatuh ke bawaan; '
         'reset kembali ke bawaan', () async {
       final db = AppDatabase(NativeDatabase.memory());
       addTearDown(() async => db.close());
@@ -86,7 +109,8 @@ void main() {
         {'nm': 'punya-owner'}
       ]));
       await CatalogStickerService.setCustom(db, StickerSlot.home, mine);
-      expect(await CatalogStickerService.isCustom(db, StickerSlot.home), isTrue);
+      expect(
+          await CatalogStickerService.isCustom(db, StickerSlot.home), isTrue);
       s = await CatalogStickerService.loadForPublish(db, loadAsset: asset);
       expect(s[StickerSlot.home], contains('punya-owner'));
       expect(s[StickerSlot.closed], isNot(contains('punya-owner')));
@@ -98,7 +122,8 @@ void main() {
 
       await CatalogStickerService.setCustom(db, StickerSlot.home, mine);
       await CatalogStickerService.resetToDefault(db, StickerSlot.home);
-      expect(await CatalogStickerService.isCustom(db, StickerSlot.home), isFalse);
+      expect(
+          await CatalogStickerService.isCustom(db, StickerSlot.home), isFalse);
       s = await CatalogStickerService.loadForPublish(db, loadAsset: asset);
       expect(s[StickerSlot.home], defHome);
     });
@@ -121,11 +146,13 @@ void main() {
   });
 
   group('generateHtml', () {
-    test('ada stiker: JSON per slot + pustaka tersemat SEKALI; tanpa stiker: '
+    test(
+        'ada stiker: JSON per slot + pustaka tersemat SEKALI; tanpa stiker: '
         'tidak ada pustaka', () async {
       final db = AppDatabase(NativeDatabase.memory());
       addTearDown(() async => db.close());
-      final stk = await CatalogStickerService.loadForPublish(db, loadAsset: asset);
+      final stk =
+          await CatalogStickerService.loadForPublish(db, loadAsset: asset);
       final withStk = (await OrderPageService.generateHtml(
               db: db,
               storeName: 'T',
@@ -139,7 +166,10 @@ void main() {
       expect(withStk, isNot(contains('__STICKER_BLOCKS__')));
 
       final none = (await OrderPageService.generateHtml(
-              db: db, storeName: 'T', stickers: {}, stickerPlayer: '/*PLAYER*/'))
+              db: db,
+              storeName: 'T',
+              stickers: {},
+              stickerPlayer: '/*PLAYER*/'))
           .html;
       expect(none, isNot(contains('/*PLAYER*/')));
       expect(none, isNot(contains('application/json" id="stk-')));
@@ -147,15 +177,13 @@ void main() {
 
       // Pemutar tak termuat -> tidak ada blok sama sekali (halaman normal).
       final noPlayer = (await OrderPageService.generateHtml(
-              db: db,
-              storeName: 'T',
-              stickers: stk,
-              stickerPlayer: ''))
+              db: db, storeName: 'T', stickers: stk, stickerPlayer: ''))
           .html;
       expect(noPlayer, isNot(contains('application/json" id="stk-')));
     });
 
-    test('JSON stiker memuat "</script>" tidak menutup blok lebih awal', () async {
+    test('JSON stiker memuat "</script>" tidak menutup blok lebih awal',
+        () async {
       final db = AppDatabase(NativeDatabase.memory());
       addTearDown(() async => db.close());
       final html = (await OrderPageService.generateHtml(
@@ -168,7 +196,8 @@ void main() {
       expect(html, contains(r'<\/script><b>x'));
     });
 
-    test('kerangka: kotak stiker di 4 tempat, halaman tutup & terkirim, '
+    test(
+        'kerangka: kotak stiker di 4 tempat, halaman tutup & terkirim, '
         'urutan tombol Kosongkan | Telegram | WhatsApp', () async {
       final db = AppDatabase(NativeDatabase.memory());
       addTearDown(() async => db.close());
@@ -199,11 +228,13 @@ void main() {
       expect(html, contains('#mbClear{order:0;}'));
       expect(html, contains('#mainBtnTg{order:1;}'));
       expect(html, contains('#mainBtn{order:2;}'));
-      expect(html, contains('#app.order-mode.has-tg #mainBtn{margin-left:8px;}'));
+      expect(
+          html, contains('#app.order-mode.has-tg #mainBtn{margin-left:8px;}'));
     });
   });
 
-  testWidgets('kartu Stiker animasi: 4 slot, Bawaan; berkas tak valid tak '
+  testWidgets(
+      'kartu Stiker animasi: 4 slot, Bawaan; berkas tak valid tak '
       'mengubah apa pun; Reset kembali ke bawaan', (tester) async {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(() async => db.close());
@@ -219,8 +250,8 @@ void main() {
     }
     expect(find.text('Bawaan'), findsNWidgets(4));
 
-    await tester.runAsync(() => CatalogStickerService.setCustom(
-        db, StickerSlot.sent, gz(lottie())));
+    await tester.runAsync(() =>
+        CatalogStickerService.setCustom(db, StickerSlot.sent, gz(lottie())));
     // Provider dibaca ulang saat layar dibangun ulang.
     await tester.pumpWidget(const SizedBox());
     await pumpWithFakeApp(tester,

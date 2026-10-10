@@ -46,9 +46,12 @@ class CatalogStickerService {
     'katalog_sticker_sent',
   ];
 
-  /// Batas berkas `.tgs` (terkompresi) & JSON hasil dekompresi.
-  static const maxTgsBytes = 64 * 1024;
-  static const maxJsonBytes = 200 * 1024;
+  /// Batas berkas `.tgs` (terkompresi) & JSON hasil dekompresi. Berkas .tgs
+  /// 200 KB bisa mengembang jauh lebih besar saat didekompresi (gzip JSON
+  /// biasanya 5-10x), jadi batas JSON ikut dinaikkan (1 MB) supaya batas
+  /// 200 KB itu benar-benar bisa dipakai; jumlah frame tetap dibatasi.
+  static const maxTgsBytes = 200 * 1024;
+  static const maxJsonBytes = 1024 * 1024;
   static const maxFrames = 600;
 
   /// Pustaka pemutar (lottie-web, MIT) — lihat assets/stickers/LOTTIE-LICENSE.md.
@@ -58,7 +61,7 @@ class CatalogStickerService {
   static ({String? json, String? error}) validateTgs(Uint8List bytes) {
     if (bytes.isEmpty) return (json: null, error: 'Berkas kosong');
     if (bytes.length > maxTgsBytes) {
-      return (json: null, error: 'Berkas terlalu besar (maks 64 KB)');
+      return (json: null, error: 'Berkas terlalu besar (maks 200 KB)');
     }
     List<int> raw;
     try {
@@ -67,7 +70,7 @@ class CatalogStickerService {
       return (json: null, error: 'Bukan berkas stiker .tgs yang valid');
     }
     if (raw.length > maxJsonBytes) {
-      return (json: null, error: 'Isi stiker terlalu besar (maks 200 KB)');
+      return (json: null, error: 'Isi stiker terlalu besar (maks 1 MB setelah dibuka)');
     }
     Object? parsed;
     try {

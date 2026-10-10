@@ -8,6 +8,12 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 10 Oktober 2026 (v3.25.0 — Logo persik, stiker lebih besar, klien boleh ubah landing)
+
+- **Logo di pojok kiri atas Kasir kini logo persik The POS**, sama persis dengan logo di katalog pelanggan (menggantikan ikon keranjang).
+- **Batas ukuran stiker .tgs naik jadi 200 KB** (sebelumnya lebih kecil), untuk stiker Kasir maupun katalog.
+- **Kasir (perangkat klien) kini boleh mengganti stiker & teks sapaan layar awal Kasir.** Perubahan itu bersifat sementara di perangkat tersebut: begitu sinkron berikutnya, stiker dan teks kembali mengikuti Owner/host (Owner tetap sumber kebenaran). Tombol "Ikuti owner" tersedia untuk kembali lebih cepat.
+
 ## 10 Oktober 2026 (v3.24.0 — Pencarian produk lebih pintar)
 
 - **Pencarian produk kini toleran**, di Kasir, daftar Produk, pemilih produk, dan katalog pelanggan:
