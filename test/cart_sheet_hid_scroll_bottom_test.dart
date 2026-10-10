@@ -166,12 +166,68 @@ void scanExistingTests() {
 
     // Scan HID produk ke-2 yang sudah ada: qty +1 lalu sinyal.
     n.addItem(item(2));
-    CartSheetScanSignal.notify('U2');
+    CartSheetScanSignal.notify('U2', isNew: false);
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byKey(const Key('scan-flash-U2')), findsOneWidget,
+        reason: 'produk yang SUDAH ada diberi highlight sekejap');
     await tester.pumpAndSettle();
+    expect(find.byKey(const Key('scan-flash-U2')), findsNothing,
+        reason: 'highlight memudar & hilang (tak ada yang dilukis lagi)');
 
     expect(find.text('Produk ke-2'), findsOneWidget,
         reason: 'baris produk yang di-scan harus terlihat');
     final y = tester.getCenter(find.text('Produk ke-2')).dy;
     expect(y, inInclusiveRange(0, 700));
+  });
+
+  testWidgets('baris BARU (scan HID) TIDAK di-highlight', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(() async => db.close());
+    final container = ProviderContainer(overrides: [
+      databaseProvider.overrideWithValue(db),
+      deviceProvider.overrideWith((ref) => DeviceNotifier()
+        ..state = const DeviceIdentity(
+          storeUuid: 's',
+          storeKey: 'k',
+          storeName: 'Toko',
+          deviceName: 'Owner',
+          deviceCode: 'K1',
+          deviceRole: 'owner',
+        )),
+    ]);
+    addTearDown(container.dispose);
+    final n = container.read(cartProvider(kMainCartId).notifier);
+    for (var i = 0; i < 12; i++) {
+      n.addItem(item(i));
+    }
+    await tester.binding.setSurfaceSize(const Size(360, 700));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        theme: AppTheme.light(),
+        home: Scaffold(
+          body: Builder(
+            builder: (ctx) => ElevatedButton(
+              onPressed: () => showModalBottomSheet(
+                context: ctx,
+                isScrollControlled: true,
+                builder: (_) => const CartSheet(scrollToBottom: true),
+              ),
+              child: const Text('buka'),
+            ),
+          ),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('buka'));
+    await tester.pumpAndSettle();
+    n.addItem(item(99));
+    CartSheetScanSignal.notify('U99', isNew: true);
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.byKey(const Key('scan-flash-U99')), findsNothing);
+    }
+    await tester.pumpAndSettle();
   });
 }

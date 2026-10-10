@@ -78,6 +78,7 @@ class CartSheet extends ConsumerStatefulWidget {
     this.cartId = kMainCartId,
     this.scrollToBottom = false,
     this.scrollToUnitId,
+    this.scrollToUnitIsNew = true,
     this.payRoute = '/kasir/bayar',
   });
   final String cartId;
@@ -87,6 +88,10 @@ class CartSheet extends ConsumerStatefulWidget {
   /// digulir ke item itu (item baru = paling bawah; produk yang sama dgn yang
   /// sudah ada hanya bertambah qty-nya, bisa di mana saja di daftar).
   final String? scrollToUnitId;
+
+  /// `scrollToUnitId` adalah baris BARU (true) atau produk yang sudah ada
+  /// dgn qty bertambah (false -> diberi highlight sekejap).
+  final bool scrollToUnitIsNew;
   final String payRoute;
 
   @override
@@ -203,10 +208,19 @@ class _CartSheetState extends ConsumerState<CartSheet> {
     final sig = CartSheetScanSignal.notifier.value;
     if (sig == null || sig.seq == _lastSignalSeq) return;
     _lastSignalSeq = sig.seq;
-    _scrollToUnit(sig.unitId);
+    _scrollToUnit(sig.unitId, isNew: sig.isNew);
   }
 
-  void _scrollToUnit(String unitId) {
+  // Waktu highlight terakhir per baris (scan HID produk yang SUDAH ada).
+  // Berbasis waktu (bukan penghitung) supaya baris yang dibangun ulang saat
+  // di-scroll (daftar malas) tidak memutar ulang highlight yang sudah lewat.
+  final Map<String, DateTime> _flashAt = {};
+
+  void _scrollToUnit(String unitId, {bool isNew = true}) {
+    if (!isNew) {
+      // Baris baru TIDAK di-highlight (sudah ada animasi masuk + gulir).
+      setState(() => _flashAt[unitId] = DateTime.now());
+    }
     final sc = _listScroll;
     if (sc == null || !sc.hasClients) return;
     final ordered = orderCartItems(ref.read(cartProvider(widget.cartId)));
@@ -1528,7 +1542,9 @@ class _CartSheetState extends ConsumerState<CartSheet> {
           final target = widget.scrollToUnitId;
           if (target != null) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) _scrollToUnit(target);
+              if (mounted) {
+                _scrollToUnit(target, isNew: widget.scrollToUnitIsNew);
+              }
             });
           } else {
             _scheduleScroll(scrollCtrl);
@@ -1980,7 +1996,10 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                               enabled: isNewRow,
                               child: KeyedSubtree(
                                 key: _rowKey(item.productUnitId),
-                                child: _CartItemTile(
+                                child: _ScanFlash(
+                                  unitId: item.productUnitId,
+                                  flashAt: _flashAt[item.productUnitId],
+                                  child: _CartItemTile(
                               // Susulan (permintaan user, fitur getar+tap-lagi
                               // minus): key stabil PER-ITEM wajib supaya state
                               // "bersenjata" (`_armed`)/timer TIDAK bocor ke
@@ -1993,7 +2012,7 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                               isVariant: item.isVariant,
                               effectiveQty: effQty,
                               cartId: widget.cartId,
-                            )));
+                            ))));
                           },
                         ),
                       );
@@ -2867,6 +2886,94 @@ class _CartItemTileState extends ConsumerState<_CartItemTile>
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Highlight sekejap pada baris produk yang baru di-scan scanner HID (produk
+/// yang SUDAH ada di keranjang, qty bertambah): tint aksen memudar ~1,4 dtk di
+/// BELAKANG baris (tile tidak diubah). Hanya satu animasi ringan untuk SATU
+/// baris, dan tidak ada apa pun yang dilukis lagi setelah selesai.
+class _ScanFlash extends StatefulWidget {
+  const _ScanFlash(
+      {required this.unitId, required this.flashAt, required this.child});
+  final String unitId;
+  final DateTime? flashAt;
+  final Widget child;
+
+  @override
+  State<_ScanFlash> createState() => _ScanFlashState();
+}
+
+class _ScanFlashState extends State<_ScanFlash>
+    with SingleTickerProviderStateMixin {
+  static const _life = Duration(milliseconds: 1400);
+  late final AnimationController _c =
+      AnimationController(vsync: this, duration: _life)..value = 1;
+
+  @override
+  void initState() {
+    super.initState();
+    _maybeStart(null);
+  }
+
+  @override
+  void didUpdateWidget(_ScanFlash old) {
+    super.didUpdateWidget(old);
+    _maybeStart(old.flashAt);
+  }
+
+  void _maybeStart(DateTime? previous) {
+    final at = widget.flashAt;
+    if (at == null || at == previous) return;
+    final elapsed = DateTime.now().difference(at);
+    if (elapsed >= _life) return; // sudah lewat (baris dibangun ulang)
+    _c.forward(from: elapsed.inMicroseconds / _life.inMicroseconds);
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _c,
+      child: widget.child,
+      builder: (context, child) {
+        // Struktur pohon SELALU sama (Stack + overlay + child) supaya state
+        // baris (mis. getar minus) tidak ter-reset saat highlight mulai/selesai.
+        final t = _c.value;
+        final active = t < 1;
+        // Tahan penuh ~25% pertama, lalu memudar.
+        final a = !active
+            ? 0.0
+            : (t < 0.25
+                ? 1.0
+                : 1 - Curves.easeOut.transform((t - 0.25) / 0.75));
+        return Stack(
+          fit: StackFit.passthrough,
+          children: [
+            Positioned.fill(
+              child: IgnorePointer(
+                child: active
+                    ? Container(
+                        key: Key('scan-flash-${widget.unitId}'),
+                        margin: const EdgeInsets.symmetric(horizontal: 8),
+                        decoration: BoxDecoration(
+                          color: AppTheme.accent.withOpacity(0.28 * a),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ),
+            ),
+            child!,
+          ],
+        );
+      },
     );
   }
 }

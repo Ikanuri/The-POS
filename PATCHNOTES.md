@@ -8,6 +8,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 10 Oktober 2026 (v3.22.0 — Highlight produk yang di-scan HID)
+
+- **Scan barcode HID produk yang sudah ada di keranjang**: selain keranjang menggulir ke barisnya, baris itu kini di-highlight sekejap (tint terracotta yang memudar sekitar 1,4 detik) supaya jelas produk mana yang bertambah jumlahnya. Produk yang baru ditambahkan (paling bawah) sengaja tidak di-highlight karena sudah ada animasi masuk dan gulir.
+
 ## 10 Oktober 2026 (v3.21.1 — Cart bar tanpa bayangan, garis tegas hilang)
 
 - **Cart bar tidak lagi memakai bayangan.** Bayangannya meluas ke bawah lalu terpotong lurus di atas bilah tab sehingga tampak sebagai garis tegas; kini hilang. Pemudaran daftar di dekat cart bar juga dibuat transparan penuh sedikit sebelum tepi, jadi tidak ada jejak kartu yang mengintip.

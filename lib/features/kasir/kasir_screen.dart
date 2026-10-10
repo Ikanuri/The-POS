@@ -1410,13 +1410,20 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
         return;
       }
       await _ensureParentInCart(resolved.item);
+      // Produk yang SUDAH ada di keranjang (qty bertambah) vs baris baru:
+      // hanya yang sudah ada diberi highlight di sheet keranjang.
+      final existed = ref
+          .read(cartProvider(_cartId))
+          .any((c) => c.productUnitId == resolved.item.productUnitId);
       ref.read(cartProvider(_cartId).notifier).addItem(resolved.item);
       HapticFeedback.heavyImpact();
       // Sheet yang SUDAH terbuka diberi tahu (gulir ke item yang di-scan);
       // bila belum terbuka, dibuka dgn fokus ke item itu.
-      CartSheetScanSignal.notify(resolved.item.productUnitId);
+      CartSheetScanSignal.notify(resolved.item.productUnitId, isNew: !existed);
       _openCartSheet(
-          scrollToBottom: true, scrollToUnitId: resolved.item.productUnitId);
+          scrollToBottom: true,
+          scrollToUnitId: resolved.item.productUnitId,
+          scrollToUnitIsNew: !existed);
       return;
     }
 
@@ -1659,7 +1666,9 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
   /// yang memutus koneksi input keyboard pada field harga). Setelah selesai,
   /// keranjang dibuka kembali agar pengguna tetap dalam alur.
   Future<void> _openCartSheet(
-      {bool scrollToBottom = false, String? scrollToUnitId}) async {
+      {bool scrollToBottom = false,
+      String? scrollToUnitId,
+      bool scrollToUnitIsNew = true}) async {
     if (_cartSheetOpen) return;
     _cartSheetOpen = true;
     final payRoute =
@@ -1671,6 +1680,7 @@ class _KasirScreenState extends ConsumerState<KasirScreen> with RouteAware {
         cartId: _cartId,
         scrollToBottom: scrollToBottom,
         scrollToUnitId: scrollToUnitId,
+        scrollToUnitIsNew: scrollToUnitIsNew,
         payRoute: payRoute,
       ),
     );
