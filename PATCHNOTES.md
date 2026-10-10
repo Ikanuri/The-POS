@@ -8,6 +8,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 10 Oktober 2026 (v3.16.1 — Kunci target lebih mulus)
+
+- **Kunci Target Scanner**: bingkai kini bertahan di barcode yang terkunci dan tidak lagi mantul ke tengah saat barcode sesaat tak terbaca; geraknya juga lebih mulus mengikuti barcode.
+
 ## 9 Oktober 2026 (v3.16.0 — Kunci target scanner, eksperimental)
 
 - **Kunci Target Scanner** (Pengaturan, di bawah Bingkai Scanner): scanner mengunci SATU barcode yang paling dekat ke tengah dan mengabaikan barcode lain di sampingnya, sampai barcode itu menghilang beberapa saat. Lama jeda diatur dengan dial gaya revolver: geser kiri/kanan atau ketuk panah. Default MATI (perilaku lama tidak berubah). Berlaku di Kasir, form produk, dan Sync QR.

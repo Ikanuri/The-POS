@@ -8,7 +8,9 @@ import 'package:the_pos/core/widgets/scan_follow_frame.dart';
 /// kotak tengah, pegas muncul/kunci, interpolasi 75 ms, hilang -> kembali.
 void main() {
   group('pemetaan koordinat', () {
-    test('cover: gambar potret 1080x1920 di view 360x400 (sisi atas/bawah terpotong)', () {
+    test(
+        'cover: gambar potret 1080x1920 di view 360x400 (sisi atas/bawah terpotong)',
+        () {
       const image = Size(1080, 1920);
       const view = Size(360, 400);
       // skala = max(360/1080, 400/1920) = 0.3333; tinggi gambar 640 > 400 -> oy = -120
@@ -29,8 +31,12 @@ void main() {
     });
 
     test('boundsOf + padding', () {
-      final r = boundsOf(const [Offset(10, 20), Offset(50, 20), Offset(50, 40), Offset(10, 40)],
-          padX: 25, padY: 15);
+      final r = boundsOf(const [
+        Offset(10, 20),
+        Offset(50, 20),
+        Offset(50, 40),
+        Offset(10, 40)
+      ], padX: 25, padY: 15);
       expect(r, const Rect.fromLTRB(-15, 5, 75, 55));
     });
   });
@@ -71,7 +77,8 @@ void main() {
     }
 
     // Kamera melaporkan terus (~30 Hz) selama kode terlihat.
-    Future<void> track(WidgetTester tester, List<Offset> corners, int ms) async {
+    Future<void> track(
+        WidgetTester tester, List<Offset> corners, int ms) async {
       for (var t = 0; t < ms; t += 32) {
         ctl.report(corners, image);
         await tester.pump(const Duration(milliseconds: 32));
@@ -127,7 +134,8 @@ void main() {
       expect(ctl.debugAppearing, closeTo(1, 0.01));
     });
 
-    testWidgets('report(): terkunci, bingkai menetap di kotak kode + padding 25x15',
+    testWidgets(
+        'report(): terkunci, bingkai menetap di kotak kode + padding 25x15',
         (tester) async {
       await pump(tester);
       ctl.appear();
@@ -178,6 +186,35 @@ void main() {
       expect(ctl.debugBounds!.center.dx, closeTo(180, 0.5));
     });
 
+    testWidgets(
+        'hold(): kode terkunci tak terbaca -> bingkai TETAP di posisi, tak mantul ke tengah',
+        (tester) async {
+      await pump(tester);
+      ctl.lostAfter = const Duration(milliseconds: 1000);
+      await track(tester, qr(100, 150, 40), 1500);
+      final before = ctl.debugBounds!.center;
+      // 1600 ms (> lostAfter 1000 ms) tanpa laporan, tapi di-hold tiap 100 ms.
+      for (var t = 0; t < 1600; t += 100) {
+        ctl.hold();
+        await advance(tester, 100);
+      }
+      expect(ctl.recognized, isTrue);
+      expect(ctl.debugBounds!.center.dx, closeTo(before.dx, 0.5));
+      expect(ctl.debugBounds!.center.dy, closeTo(before.dy, 0.5));
+      // Berhenti hold & lapor -> lepas setelah lostAfter (1000 ms).
+      await advance(tester, 1200);
+      expect(ctl.recognized, isFalse);
+    });
+
+    testWidgets('lostAfter diperpanjang: 600 ms tanpa laporan belum lepas',
+        (tester) async {
+      await pump(tester);
+      ctl.lostAfter = const Duration(milliseconds: 1000);
+      ctl.report(qr(100, 150, 40), image);
+      await advance(tester, 600);
+      expect(ctl.recognized, isTrue);
+    });
+
     testWidgets('release() melepas kunci manual', (tester) async {
       await pump(tester);
       ctl.report(qr(100, 150, 40), image);
@@ -187,7 +224,8 @@ void main() {
       await advance(tester, 2000);
     });
 
-    testWidgets('terbaca tanpa titik sudut: terkunci tapi bingkai tetap di tengah',
+    testWidgets(
+        'terbaca tanpa titik sudut: terkunci tapi bingkai tetap di tengah',
         (tester) async {
       await pump(tester);
       ctl.report(const [], image);

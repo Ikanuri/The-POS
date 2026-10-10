@@ -124,14 +124,22 @@ class _AppScannerState extends ConsumerState<AppScanner> {
     // Kunci target (eksperimental, 0 = mati): hanya kode terkunci yang
     // diteruskan; barcode lain di sampingnya diabaikan.
     Barcode? locked;
+    _follow.smooth = lockMs > 0;
     if (lockMs > 0) {
       _lock.release = Duration(milliseconds: lockMs);
+      // Bingkai bertahan selama kunci ditahan (tidak mantul ke tengah).
+      _follow.lostAfter = Duration(milliseconds: lockMs < 450 ? 450 : lockMs);
       locked = _lock.select(candidates, size, DateTime.now());
-      if (locked == null) return;
+      if (locked == null) {
+        // Kode terkunci sedang tak terbaca: tahan bingkai di tempatnya.
+        if (_lock.lockedValue != null) _follow.hold();
+        return;
+      }
       cap = BarcodeCapture(
           barcodes: [locked], image: cap.image, raw: cap.raw, size: cap.size);
     } else {
       _lock.reset();
+      _follow.lostAfter = const Duration(milliseconds: 450);
     }
 
     if (!telegram) {

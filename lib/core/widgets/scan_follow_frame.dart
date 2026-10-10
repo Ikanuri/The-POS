@@ -60,6 +60,19 @@ class ScanFollowController {
   /// diproses pada mode scan beruntun.
   void release() => _state?._setRecognized(false);
 
+  /// Lama tanpa laporan sebelum bingkai kembali ke tengah (Telegram ~450 ms).
+  /// Mode kunci target memperpanjangnya agar bingkai tidak mantul ke tengah
+  /// selama kode terkunci masih ditahan.
+  Duration lostAfter = const Duration(milliseconds: 450);
+
+  /// true = lama interpolasi mengikuti jarak antar-laporan (75-280 ms) supaya
+  /// gerak mulus dan tidak "berhenti-jalan" saat deteksi hanya ~4x/detik.
+  bool smooth = false;
+
+  /// Tahan bingkai di posisi terakhir (kode terkunci sedang tak terbaca):
+  /// hanya memperpanjang umur kunci tampilan, tanpa menggeser kotak.
+  void hold() => _state?._hold();
+
   /// Mulai animasi muncul (dipanggil saat kamera siap).
   void appear() => _state?._appear();
 
@@ -89,8 +102,10 @@ class ScanFollowOverlay extends StatefulWidget {
 
 class _ScanFollowOverlayState extends State<ScanFollowOverlay>
     with TickerProviderStateMixin {
-  static const _boundsMs = 75;
-  static const _lostMs = 450;
+  static const _baseBoundsMs = 75;
+  int _boundsMs = _baseBoundsMs;
+  final Stopwatch _wall = Stopwatch()..start();
+  int _lastReportMs = -1;
 
   // Pegas (padanan SpringForce Android, massa 1).
   static final _appearSpring =
@@ -164,7 +179,7 @@ class _ScanFollowOverlayState extends State<ScanFollowOverlay>
   void _onTick(Duration e) {
     _now = e;
     _tick.value++;
-    if (_hasBounds && e - _lastUpdate > const Duration(milliseconds: _boundsMs)) {
+    if (_hasBounds && e - _lastUpdate > Duration(milliseconds: _boundsMs)) {
       _clock.stop();
     }
   }
@@ -195,13 +210,29 @@ class _ScanFollowOverlayState extends State<ScanFollowOverlay>
         SpringSimulation(_lockSpring, _useRecognized.value, v ? 1 : 0, 0));
   }
 
-  void _report(List<Offset> corners, Size imageSize) {
-    if (!mounted || _view.isEmpty) return;
+  void _armLost() {
     _lostTimer?.cancel();
-    _lostTimer = Timer(const Duration(milliseconds: _lostMs), () {
+    _lostTimer = Timer(widget.controller.lostAfter, () {
       if (mounted) _setRecognized(false);
     });
+  }
+
+  void _hold() {
+    if (!mounted || !_recognized) return;
+    _armLost();
+  }
+
+  void _report(List<Offset> corners, Size imageSize) {
+    if (!mounted || _view.isEmpty) return;
+    _armLost();
     _setRecognized(true);
+    final nowMs = _wall.elapsedMilliseconds;
+    if (widget.controller.smooth && _lastReportMs >= 0) {
+      _boundsMs = (nowMs - _lastReportMs).clamp(_baseBoundsMs, 280);
+    } else {
+      _boundsMs = _baseBoundsMs;
+    }
+    _lastReportMs = nowMs;
     if (corners.isEmpty || imageSize.isEmpty) return; // terbaca tanpa posisi
     final pts = [
       for (final c in corners)
