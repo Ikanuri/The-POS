@@ -8,6 +8,11 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 10 Oktober 2026 (v3.17.0 — Saklar tema baru)
+
+- **Saklar Mode Terang/Gelap** didesain ulang: kini sebuah kotak yang bergeser naik-turun di dalam lekukan, dengan bayangan sehingga tampak seperti saklar sungguhan (terinspirasi saklar di GoPay).
+- **Saklar selalu ada di pojok kanan atas layar Kasir**, termasuk saat Anda mengetik/mencari produk (sebelumnya hilang dan digantikan tombol grid/daftar, yang kini ada di sebelah kirinya).
+
 ## 10 Oktober 2026 (v3.16.2 — Bingkai scanner tidak lompat)
 
 - **Kunci Target Scanner**: kotak bingkai kini disaring supaya tidak melompat naik ke atas barcode atau melebar ke teks di sekitarnya saat barcode bergerak; geraknya lebih stabil.

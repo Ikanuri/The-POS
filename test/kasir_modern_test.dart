@@ -304,8 +304,12 @@ void main() {
       }
       expectOrder();
       expectColors();
-      expect(find.byKey(const Key('hdr-theme')), findsNothing);
+      // Saklar tema TETAP di pojok kanan atas (juga saat mengetik); grid/list
+      // ada di sebelah kirinya.
+      expect(find.byKey(const Key('hdr-theme')), findsOneWidget);
       expect(find.byKey(const Key('hdr-grid')), findsOneWidget);
+      expect(tester.getCenter(find.byKey(const Key('hdr-grid'))).dx,
+          lessThan(tester.getCenter(find.byKey(const Key('hdr-theme'))).dx));
       expect(find.text('The POS'), findsNothing);
       expect(find.byIcon(Icons.shopping_basket_rounded), findsOneWidget);
       expect(find.byKey(const Key('fab-main')), findsNothing);
@@ -390,7 +394,8 @@ void main() {
       // Tanpa IP/Token -> pesan, tidak crash.
       await tester.tap(find.byKey(const Key('quick-sync-go')));
       await tester.pumpAndSettle();
-      expect(find.text('Pindai QR host atau isi IP dan Token dulu'), findsOneWidget);
+      expect(find.text('Pindai QR host atau isi IP dan Token dulu'),
+          findsOneWidget);
       await _drain(tester);
       await db.close();
     });
@@ -692,10 +697,11 @@ void main() {
           greaterThan(w * 0.8));
       expect(find.byKey(const Key('hdr-grid')), findsNothing,
           reason: 'grid/list tidak tampil di landing');
-      // Saklar = pelat dengan tuas matahari/bulan, bukan Switch/toggle.
+      // Saklar = kotak yang bergeser (ilusi saklar), bukan Switch/toggle;
+      // ikon di kotak mengikuti mode (terang = matahari).
       expect(find.byType(Switch), findsNothing);
       expect(find.byIcon(Icons.wb_sunny_rounded), findsOneWidget);
-      expect(find.byIcon(Icons.nightlight_round), findsOneWidget);
+      expect(find.byIcon(Icons.nightlight_round), findsNothing);
 
       // Tidak ada lingkaran kedua: semua border TextField dimatikan.
       final dec = tester
@@ -1115,9 +1121,8 @@ void main() {
           .descendant(
               of: find.byType(KasirScreen), matching: find.byType(ListView))
           .first);
-      final barH = tester
-          .getSize(find.byKey(const Key('modern-cart-bar')))
-          .height;
+      final barH =
+          tester.getSize(find.byKey(const Key('modern-cart-bar'))).height;
       expect((lv.padding as EdgeInsets).bottom, greaterThanOrEqualTo(barH));
       await _drain(tester);
       await db.close();

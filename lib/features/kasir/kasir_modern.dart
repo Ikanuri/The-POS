@@ -223,26 +223,30 @@ extension _KasirModernX on _KasirScreenState {
                                     child: isLanding
                                         ? Builder(
                                             builder: (ctx) => _ModernLanding(
-                                            cartId: _cartId,
-                                            extraBottom: _bottomClear(ctx),
-                                            onShowAll: () => ref
-                                                .read(_kasirShowAllProvider(
-                                                        _cartId)
-                                                    .notifier)
-                                                .state = true,
-                                            tileBuilder: (p) =>
-                                                _ProductListTile(
-                                              product: p,
-                                              cartId: _cartId,
-                                              onTapBody: () => _openEntry(p),
-                                              onQuickAdd: _quickAdd,
-                                              onOpenEntry: () => _openEntry(p),
-                                              onBeforeTap:
-                                                  _markSkipSearchCollapse,
-                                              onAfterQtyChange:
-                                                  _highlightSearchIfActive,
-                                            ),
-                                          ))
+                                                  cartId: _cartId,
+                                                  extraBottom:
+                                                      _bottomClear(ctx),
+                                                  onShowAll: () => ref
+                                                      .read(
+                                                          _kasirShowAllProvider(
+                                                                  _cartId)
+                                                              .notifier)
+                                                      .state = true,
+                                                  tileBuilder: (p) =>
+                                                      _ProductListTile(
+                                                    product: p,
+                                                    cartId: _cartId,
+                                                    onTapBody: () =>
+                                                        _openEntry(p),
+                                                    onQuickAdd: _quickAdd,
+                                                    onOpenEntry: () =>
+                                                        _openEntry(p),
+                                                    onBeforeTap:
+                                                        _markSkipSearchCollapse,
+                                                    onAfterQtyChange:
+                                                        _highlightSearchIfActive,
+                                                  ),
+                                                ))
                                         : Builder(
                                             builder: (ctx) =>
                                                 _buildProductResults(
@@ -374,14 +378,7 @@ class _ModernHeader extends StatelessWidget {
               child: AnimatedSwitcher(
                 duration: dur,
                 child: isLanding
-                    ? Padding(
-                        key: const ValueKey('hdr-theme-slot'),
-                        padding: const EdgeInsets.only(left: 6),
-                        child: _LightRocker(
-                            key: const Key('hdr-theme'),
-                            dark: dark,
-                            onTap: onToggleTheme),
-                      )
+                    ? const SizedBox.shrink(key: ValueKey('hdr-grid-none'))
                     : Padding(
                         key: const ValueKey('hdr-grid-slot'),
                         padding: const EdgeInsets.only(left: 6),
@@ -416,6 +413,14 @@ class _ModernHeader extends StatelessWidget {
                         ),
                       ),
               ),
+            ),
+            // Saklar tema TETAP di pojok kanan atas (landing maupun daftar).
+            Padding(
+              padding: const EdgeInsets.only(left: 6),
+              child: _LightRocker(
+                  key: const Key('hdr-theme'),
+                  dark: dark,
+                  onTap: onToggleTheme),
             ),
           ],
         ),
@@ -1002,6 +1007,11 @@ class _LightRocker extends StatelessWidget {
   final bool dark;
   final VoidCallback onTap;
 
+  /// Saklar "ilusi optik" ala GoPay: SEBENARNYA hanya satu kotak yang
+  /// bergeser naik/turun di dalam lekukan; tebal tepi bawah (bayangan gelap)
+  /// & sorot atas yang berubah mengikuti posisi membuatnya tampak seperti
+  /// saklar fisik yang ditekan. Terang = kotak di atas (tepi tebal di bawah),
+  /// gelap = kotak turun (tepi menipis).
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -1016,14 +1026,14 @@ class _LightRocker extends StatelessWidget {
           width: 44,
           height: 52,
           decoration: BoxDecoration(
-            color: dark ? const Color(0xFF332E2A) : const Color(0xFFF4F0E6),
-            borderRadius: BorderRadius.circular(10),
+            color: dark ? const Color(0xFF2A2623) : Colors.white,
+            borderRadius: BorderRadius.circular(14),
             border: Border.all(color: cs.outlineVariant, width: 0.8),
             boxShadow: _sh(const [
               BoxShadow(
-                  color: Color(0x33000000),
-                  blurRadius: 6,
-                  offset: Offset(0, 2)),
+                  color: Color(0x26000000),
+                  blurRadius: 8,
+                  offset: Offset(0, 3)),
             ]),
           ),
           alignment: Alignment.center,
@@ -1032,64 +1042,95 @@ class _LightRocker extends StatelessWidget {
             duration: dur,
             curve: AppMotion.easeOutBack,
             builder: (context, t, _) {
-              // t=0 (terang): sisi atas menekan ke dalam; t=1 (gelap): bawah.
-              final tilt = (t - 0.5) * 0.62;
-              final lightLit = 1 - t.clamp(0.0, 1.0);
-              final darkLit = t.clamp(0.0, 1.0);
-              return Transform(
-                alignment: Alignment.center,
-                transform: Matrix4.identity()
-                  ..setEntry(3, 2, 0.012)
-                  ..rotateX(tilt),
-                child: Container(
-                  width: 30,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(7),
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: dark
-                          ? const [Color(0xFF4A423C), Color(0xFF2B2623)]
-                          : const [Color(0xFFFFFFFF), Color(0xFFE9E1CF)],
+              final dy = (t - 0.5) * 8; // -4 (atas) .. +4 (bawah)
+              final lip = 3.0 - 1.5 * t; // tebal tepi bawah menipis saat turun
+              final well = Color.lerp(
+                  const Color(0xFFE2DCCC), const Color(0xFF161412), t)!;
+              return Container(
+                width: 30,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: well,
+                  borderRadius: BorderRadius.circular(11),
+                  // Lekukan: tepi dalam atas sedikit lebih gelap (inset).
+                  border: Border.all(
+                      color: Color.lerp(
+                          const Color(0xFFDDD6C6), const Color(0xFF0B0A09), t)!,
+                      width: 0.8),
+                ),
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Transform.translate(
+                      offset: Offset(0, dy),
+                      child: SizedBox(
+                        width: 22,
+                        height: 26,
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            // Tebal/tepi kotak (bagian yang tampak "tenggelam").
+                            Positioned(
+                              left: 0,
+                              right: 0,
+                              top: lip,
+                              bottom: -lip,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(9),
+                                  color: Color.lerp(const Color(0xFFCFC6B0),
+                                      const Color(0xFF050404), t),
+                                ),
+                              ),
+                            ),
+                            // Muka kotak.
+                            Positioned.fill(
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(9),
+                                  boxShadow: [
+                                    BoxShadow(
+                                        color: Color(
+                                            dark ? 0x80000000 : 0x2E000000),
+                                        blurRadius: 3,
+                                        offset: const Offset(0, 1.5)),
+                                  ],
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: dark
+                                        ? const [
+                                            Color(0xFF3B3632),
+                                            Color(0xFF26221F)
+                                          ]
+                                        : const [
+                                            Color(0xFFFFFFFF),
+                                            Color(0xFFEFE9DA)
+                                          ],
+                                  ),
+                                  border: Border.all(
+                                      color: dark
+                                          ? const Color(0xFF4A443E)
+                                          : const Color(0xFFFFFFFF),
+                                      width: 0.8),
+                                ),
+                                child: Center(
+                                  child: Icon(
+                                      dark
+                                          ? Icons.nightlight_round
+                                          : Icons.wb_sunny_rounded,
+                                      size: 12,
+                                      color: dark
+                                          ? const Color(0xFF9FB4E8)
+                                          : const Color(0xFFE59A2E)),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                    border: Border.all(
-                        color: dark
-                            ? const Color(0xFF5A5048)
-                            : const Color(0xFFD8CFB8),
-                        width: 0.8),
-                    boxShadow: _sh(const [
-                      BoxShadow(
-                          color: Color(0x40000000),
-                          blurRadius: 3,
-                          offset: Offset(0, 1.5)),
-                    ]),
-                  ),
-                  child: Column(
-                    children: [
-                      Expanded(
-                        child: Center(
-                          child: Icon(Icons.wb_sunny_rounded,
-                              size: 14,
-                              color: Color.lerp(const Color(0xFFB9A98A),
-                                  const Color(0xFFE59A2E), lightLit)),
-                        ),
-                      ),
-                      Container(
-                          height: 0.8,
-                          color: dark
-                              ? const Color(0xFF5A5048)
-                              : const Color(0xFFD8CFB8)),
-                      Expanded(
-                        child: Center(
-                          child: Icon(Icons.nightlight_round,
-                              size: 14,
-                              color: Color.lerp(const Color(0xFF9C9486),
-                                  const Color(0xFF9FB4E8), darkLit)),
-                        ),
-                      ),
-                    ],
-                  ),
+                  ],
                 ),
               );
             },
