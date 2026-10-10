@@ -9,6 +9,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-10-09 (penyesuaian desain Kasir gaya Baru)
 
+- feat(cari): `c1a95d8` — pencarian produk toleran: urutan kata bebas, tanda baca/satuan diabaikan, ikut cari kategori (v3.24.0+234)
 - feat(kasir): `a7d3b73` — penanda scan HID: angka membal + batang terakhir di-scan (v3.23.0+233)
 - feat(kasir): `723c7c1` — highlight baris produk yang di-scan HID (v3.22.0+232)
 - fix(ui): `cc80fab` — cart bar tanpa bayangan, pemudaran bawah transparan penuh (v3.21.1+231)
