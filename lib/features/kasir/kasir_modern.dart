@@ -218,9 +218,13 @@ extension _KasirModernX on _KasirScreenState {
                               },
                               // Daftar memudar halus ke warna latar di bawah kolom
                               // cari/chip & di atas bilah tab (bukan terpotong).
-                              child: ScrollEdgeFade(
+                              // Bawah: memudar SEBELUM sampai cart bar (tinggi
+                              // cart bar + 26), supaya tak ada potongan kartu
+                              // mengintip di bawah/samping cart bar.
+                              child: Builder(
+                                  builder: (fadeCtx) => ScrollEdgeFade(
                                   top: 18,
-                                  bottom: 26,
+                                  bottom: 26 + MediaQuery.paddingOf(fadeCtx).bottom,
                                   mask: true,
                                   child: Column(
                                 children: [
@@ -265,7 +269,7 @@ extension _KasirModernX on _KasirScreenState {
                                           ),
                                   ),
                                 ],
-                              )),
+                              ))),
                             ),
                           ),
                         ),
@@ -286,9 +290,12 @@ extension _KasirModernX on _KasirScreenState {
       // Daftar menggulir DI BELAKANG cart bar (tanpa pita latar bertepi tegas);
       // ruang bawah daftar = tinggi cart bar (atau keyboard bila lebih tinggi).
       extendBody: true,
-      bottomNavigationBar: cart.isEmpty
-          ? null
-          : _buildModernCartBottom(context, cart, cartNotifier, cartMeta),
+      // Cart bar muncul/hilang dengan animasi (tinggi + geser + pudar).
+      bottomNavigationBar: AppSlideSlot(
+        child: cart.isEmpty
+            ? null
+            : _buildModernCartBottom(context, cart, cartNotifier, cartMeta),
+      ),
     );
   }
 }

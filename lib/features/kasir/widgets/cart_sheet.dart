@@ -25,6 +25,7 @@ import '../../../core/services/pick_list_renderer.dart';
 import '../../../core/services/price_service.dart';
 import '../../../core/services/printer_service.dart';
 import '../../../core/theme/app_theme.dart';
+import 'cart_sheet_scan_signal.dart';
 import '../../../core/widgets/scroll_edge_fade.dart';
 import '../../../core/widgets/item_count_badge.dart';
 import '../../../core/widgets/marquee_text.dart';
@@ -76,10 +77,16 @@ class CartSheet extends ConsumerStatefulWidget {
     super.key,
     this.cartId = kMainCartId,
     this.scrollToBottom = false,
+    this.scrollToUnitId,
     this.payRoute = '/kasir/bayar',
   });
   final String cartId;
   final bool scrollToBottom;
+
+  /// Dibuka oleh scan HID: `productUnitId` item yang baru di-scan — daftar
+  /// digulir ke item itu (item baru = paling bawah; produk yang sama dgn yang
+  /// sudah ada hanya bertambah qty-nya, bisa di mana saja di daftar).
+  final String? scrollToUnitId;
   final String payRoute;
 
   @override
@@ -154,6 +161,7 @@ class _CartSheetState extends ConsumerState<CartSheet> {
 
   @override
   void dispose() {
+    CartSheetScanSignal.notifier.removeListener(_onHidScan);
     _cancelScrollTimers();
     for (final t in _ghostTimers.values) {
       t.cancel();
@@ -177,6 +185,60 @@ class _CartSheetState extends ConsumerState<CartSheet> {
   void initState() {
     super.initState();
     _needsInitialScroll = widget.scrollToBottom;
+    CartSheetScanSignal.notifier.addListener(_onHidScan);
+  }
+
+  // Satu GlobalKey per baris (di `KeyedSubtree` pembungkus — state tile
+  // tetap ber-key `ValueKey(productUnitId)` seperti semula) supaya gulir bisa
+  // menemukan baris produk yang di-scan.
+  final Map<String, GlobalKey> _rowKeys = {};
+  GlobalKey _rowKey(String unitId) =>
+      _rowKeys.putIfAbsent(unitId, () => GlobalKey());
+  ScrollController? _listScroll;
+
+  int _lastSignalSeq = 0;
+
+  /// Scan HID saat sheet SUDAH terbuka: gulir ke item yang di-scan.
+  void _onHidScan() {
+    final sig = CartSheetScanSignal.notifier.value;
+    if (sig == null || sig.seq == _lastSignalSeq) return;
+    _lastSignalSeq = sig.seq;
+    _scrollToUnit(sig.unitId);
+  }
+
+  void _scrollToUnit(String unitId) {
+    final sc = _listScroll;
+    if (sc == null || !sc.hasClients) return;
+    final ordered = orderCartItems(ref.read(cartProvider(widget.cartId)));
+    final idx = ordered.indexWhere((c) => c.productUnitId == unitId);
+    // Item baru / paling bawah -> gulir ke dasar (menunggu animasi baris).
+    if (idx < 0 || idx >= ordered.length - 1) {
+      _scheduleScroll(sc);
+      return;
+    }
+    ++_scrollToken; // batalkan gulir-ke-dasar milik scan sebelumnya
+    _cancelScrollTimers();
+    void reveal() {
+      final ctx = _rowKeys[unitId]?.currentContext;
+      if (ctx == null || !ctx.mounted) return;
+      Scrollable.ensureVisible(ctx,
+          alignment: 0.5,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut);
+    }
+
+    if (_rowKeys[unitId]?.currentContext != null) {
+      reveal();
+      return;
+    }
+    // Baris belum terbangun (di luar layar, daftar malas): loncat ke perkiraan
+    // posisinya dulu, lalu pastikan terlihat di frame berikutnya.
+    final frac = ordered.length <= 1 ? 0.0 : idx / (ordered.length - 1);
+    sc.jumpTo((sc.position.maxScrollExtent * frac)
+        .clamp(0.0, sc.position.maxScrollExtent));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) reveal();
+    });
   }
 
   // Token supaya gulir susulan milik scan sebelumnya tidak menimpa scan baru.
@@ -1444,6 +1506,7 @@ class _CartSheetState extends ConsumerState<CartSheet> {
         // harus dihindari). Prioritas: `scrollToBottom` eksplisit (item baru
         // ditambah) MENANG dari posisi tersimpan — user jelas ingin lihat
         // item baru, bukan posisi lama.
+        _listScroll = scrollCtrl;
         if (!_scrollRestoreAttached) {
           _scrollRestoreAttached = true;
           final saved = _cartScrollMemory[widget.cartId];
@@ -1462,7 +1525,14 @@ class _CartSheetState extends ConsumerState<CartSheet> {
         }
         if (_needsInitialScroll && cart.isNotEmpty) {
           _needsInitialScroll = false;
-          _scheduleScroll(scrollCtrl);
+          final target = widget.scrollToUnitId;
+          if (target != null) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) _scrollToUnit(target);
+            });
+          } else {
+            _scheduleScroll(scrollCtrl);
+          }
         }
         if (cart.length > _prevCount && _prevCount > 0) {
           _scheduleScroll(scrollCtrl);
@@ -1908,7 +1978,9 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                             return EnterAnimation(
                               key: ValueKey('enter-$rowKey'),
                               enabled: isNewRow,
-                              child: _CartItemTile(
+                              child: KeyedSubtree(
+                                key: _rowKey(item.productUnitId),
+                                child: _CartItemTile(
                               // Susulan (permintaan user, fitur getar+tap-lagi
                               // minus): key stabil PER-ITEM wajib supaya state
                               // "bersenjata" (`_armed`)/timer TIDAK bocor ke
@@ -1921,7 +1993,7 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                               isVariant: item.isVariant,
                               effectiveQty: effQty,
                               cartId: widget.cartId,
-                            ));
+                            )));
                           },
                         ),
                       );

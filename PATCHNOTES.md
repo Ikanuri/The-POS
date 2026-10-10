@@ -8,6 +8,12 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 10 Oktober 2026 (v3.21.0 — Animasi cart bar & gulir ke item yang di-scan)
+
+- **Cart bar kini muncul dan hilang dengan animasi** (membuka dari bawah sambil bergeser dan memudar, lalu menutup saat keranjang kosong). Ikut aturan "Kurangi animasi".
+- **Tidak ada lagi potongan kartu produk yang mengintip** di bawah atau di samping cart bar dan menempel ke bilah tab: daftar memudar halus sebelum mencapai cart bar.
+- **Scan HID produk yang sudah ada di keranjang**: keranjang menggulir ke baris produk itu, sehingga perubahan jumlahnya terlihat (sebelumnya tidak bergerak karena tidak ada baris baru).
+
 ## 10 Oktober 2026 (v3.20.1 — Keranjang scan HID mentok bawah)
 
 - **Perbaikan keranjang saat scan barcode HID**: item yang baru masuk kini selalu terlihat penuh. Sebelumnya daftar berhenti menggulir sekitar satu baris sebelum dasar (karena baris baru masih membuka dengan animasi), dan baris terakhir bisa ikut tampak memudar.

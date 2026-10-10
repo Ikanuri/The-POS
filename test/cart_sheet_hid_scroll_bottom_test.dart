@@ -8,6 +8,7 @@ import 'package:the_pos/core/providers/device_provider.dart';
 import 'package:the_pos/core/theme/app_theme.dart';
 import 'package:the_pos/features/kasir/cart_provider.dart';
 import 'package:the_pos/features/kasir/widgets/cart_sheet.dart';
+import 'package:the_pos/features/kasir/widgets/cart_sheet_scan_signal.dart';
 
 /// Scan HID: produk masuk ke keranjang -> daftar HARUS menggulir sampai
 /// MENTOK bawah (item terbaru terlihat penuh), baik saat keranjang dibuka oleh
@@ -15,6 +16,7 @@ import 'package:the_pos/features/kasir/widgets/cart_sheet.dart';
 /// membuka tingginya dgn animasi — gulir tidak boleh berhenti sebelum itu
 /// selesai).
 void main() {
+  scanExistingTests();
   setUp(() => CartSheetScrollTestSeam.clear());
   tearDown(() => CartSheetScrollTestSeam.clear());
 
@@ -100,5 +102,76 @@ void main() {
     await tester.pumpAndSettle();
     expect(offset(tester), closeTo(maxExtent(tester), 1.0),
         reason: 'baris baru (animasi tinggi) harus ikut terlihat penuh');
+  });
+}
+
+void scanExistingTests() {
+  CartItem item(int i) => CartItem(
+        productId: 'P$i',
+        productUnitId: 'U$i',
+        productName: 'Produk ke-$i',
+        unitName: 'Pcs',
+        qty: 1,
+        price: 1000,
+        originalPrice: 1000,
+        costPrice: 800,
+      );
+
+  testWidgets(
+      'scan produk YANG SUDAH ADA (qty bertambah) saat sheet terbuka: baris itu '
+      'digulir ke layar', (tester) async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(() async => db.close());
+    final container = ProviderContainer(overrides: [
+      databaseProvider.overrideWithValue(db),
+      deviceProvider.overrideWith((ref) => DeviceNotifier()
+        ..state = const DeviceIdentity(
+          storeUuid: 's',
+          storeKey: 'k',
+          storeName: 'Toko',
+          deviceName: 'Owner',
+          deviceCode: 'K1',
+          deviceRole: 'owner',
+        )),
+    ]);
+    addTearDown(container.dispose);
+    final n = container.read(cartProvider(kMainCartId).notifier);
+    for (var i = 0; i < 40; i++) {
+      n.addItem(item(i));
+    }
+    await tester.binding.setSurfaceSize(const Size(360, 700));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        theme: AppTheme.light(),
+        home: Scaffold(
+          body: Builder(
+            builder: (ctx) => ElevatedButton(
+              onPressed: () => showModalBottomSheet(
+                context: ctx,
+                isScrollControlled: true,
+                builder: (_) => const CartSheet(scrollToBottom: true),
+              ),
+              child: const Text('buka'),
+            ),
+          ),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('buka'));
+    await tester.pumpAndSettle();
+    // Awal: di dasar -> baris ke-2 jauh di luar layar.
+    expect(find.text('Produk ke-2'), findsNothing);
+
+    // Scan HID produk ke-2 yang sudah ada: qty +1 lalu sinyal.
+    n.addItem(item(2));
+    CartSheetScanSignal.notify('U2');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Produk ke-2'), findsOneWidget,
+        reason: 'baris produk yang di-scan harus terlihat');
+    final y = tester.getCenter(find.text('Produk ke-2')).dy;
+    expect(y, inInclusiveRange(0, 700));
   });
 }
