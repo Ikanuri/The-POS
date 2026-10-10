@@ -9,7 +9,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-10-09 (penyesuaian desain Kasir gaya Baru)
 
-- feat(kasir): `HASH_PENDING` — logo persik di header Kasir, batas stiker .tgs 200 KB, klien boleh ubah stiker/teks landing (sementara; kembali ke host saat sync) (v3.25.0+235)
+- feat(kasir): `29dfa4c` — logo persik di header Kasir, batas stiker .tgs 200 KB, klien boleh ubah stiker/teks landing (sementara; kembali ke host saat sync) (v3.25.0+235)
 
 - feat(cari): `c1a95d8` — pencarian produk toleran: urutan kata bebas, tanda baca/satuan diabaikan, ikut cari kategori (v3.24.0+234)
 - feat(kasir): `a7d3b73` — penanda scan HID: angka membal + batang terakhir di-scan (v3.23.0+233)
