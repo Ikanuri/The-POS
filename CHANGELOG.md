@@ -9,7 +9,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-10-09 (penyesuaian desain Kasir gaya Baru)
 
-- feat(ui): `HASHB1` — redesain Gaya Landing: Sync WiFi, Pair Device, layar review usulan; PLAN Item 96 (v3.26.0+236)
+- feat(ui): `773b5db` — redesain Gaya Landing: Sync WiFi, Pair Device, layar review usulan; PLAN Item 96 (v3.26.0+236)
 
 - feat(kasir): `29dfa4c` — logo persik di header Kasir, batas stiker .tgs 200 KB, klien boleh ubah stiker/teks landing (sementara; kembali ke host saat sync) (v3.25.0+235)
 
