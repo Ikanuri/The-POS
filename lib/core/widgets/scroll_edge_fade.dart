@@ -11,6 +11,7 @@ class ScrollEdgeFade extends StatelessWidget {
     this.top = 0,
     this.bottom = 0,
     this.color,
+    this.mask = false,
   });
 
   final Widget child;
@@ -22,8 +23,15 @@ class ScrollEdgeFade extends StatelessWidget {
   /// Warna latar tujuan; default `scaffoldBackgroundColor`.
   final Color? color;
 
+  /// true = pemudaran ALFA murni (konten sendiri memudar menjadi transparan,
+  /// memperlihatkan apa pun yang ada di belakangnya: gradien/blob/warna
+  /// berbeda) — untuk latar yang TIDAK datar (layar Kasir). Memakai
+  /// `ShaderMask(dstIn)`; false = overlay warna datar (lebih murah).
+  final bool mask;
+
   @override
   Widget build(BuildContext context) {
+    if (mask) return _buildMask();
     final bg = color ?? Theme.of(context).scaffoldBackgroundColor;
     Widget strip(double h, bool atTop) => IgnorePointer(
           child: SizedBox(
@@ -66,6 +74,49 @@ class ScrollEdgeFade extends StatelessWidget {
               right: 0,
               child: strip(bottom, false)),
       ],
+    );
+  }
+
+  Widget _buildMask() {
+    if (top <= 0 && bottom <= 0) return child;
+    return ShaderMask(
+      blendMode: BlendMode.dstIn,
+      shaderCallback: (r) {
+        final h = r.height <= 0 ? 1.0 : r.height;
+        final t = (top / h).clamp(0.0, 0.5);
+        final b = (bottom / h).clamp(0.0, 0.5);
+        // Kurva lembut: 0 -> .25 -> .7 -> 1 di sepanjang zona pemudaran.
+        final stops = <double>[];
+        final colors = <Color>[];
+        void add(double st, double a) {
+          stops.add(st);
+          colors.add(Color.fromRGBO(0, 0, 0, a));
+        }
+
+        if (t > 0) {
+          add(0, 0);
+          add(t * 0.4, 0.25);
+          add(t * 0.75, 0.7);
+          add(t, 1);
+        } else {
+          add(0, 1);
+        }
+        if (b > 0) {
+          add(1 - b, 1);
+          add(1 - b * 0.75, 0.7);
+          add(1 - b * 0.4, 0.25);
+          add(1, 0);
+        } else {
+          add(1, 1);
+        }
+        return LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: colors,
+          stops: stops,
+        ).createShader(r);
+      },
+      child: child,
     );
   }
 }

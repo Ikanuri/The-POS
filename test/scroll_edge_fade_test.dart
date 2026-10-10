@@ -3,7 +3,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:the_pos/core/widgets/scroll_edge_fade.dart';
 
 void main() {
-  testWidgets('pemudaran atas/bawah muncul sesuai tinggi & tak menelan sentuhan',
+  maskTests();
+  testWidgets(
+      'pemudaran atas/bawah muncul sesuai tinggi & tak menelan sentuhan',
       (tester) async {
     var taps = 0;
     await tester.pumpWidget(MaterialApp(
@@ -38,5 +40,42 @@ void main() {
         home: Scaffold(body: ScrollEdgeFade(child: SizedBox()))));
     expect(find.byKey(const Key('edge-fade-top')), findsNothing);
     expect(find.byKey(const Key('edge-fade-bottom')), findsNothing);
+  });
+}
+
+void maskTests() {
+  testWidgets(
+      'mask: ShaderMask alfa (bukan strip warna datar) & sentuhan tetap sampai',
+      (tester) async {
+    var taps = 0;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SizedBox(
+          height: 300,
+          child: ScrollEdgeFade(
+            top: 20,
+            bottom: 30,
+            mask: true,
+            child: ListView(children: [
+              for (var i = 0; i < 3; i++)
+                GestureDetector(
+                    onTap: () => taps++,
+                    child: const SizedBox(height: 60, child: Text('item'))),
+            ]),
+          ),
+        ),
+      ),
+    ));
+    expect(find.byType(ShaderMask), findsOneWidget);
+    expect(find.byKey(const Key('edge-fade-top')), findsNothing);
+    expect(find.byKey(const Key('edge-fade-bottom')), findsNothing);
+    await tester.tapAt(const Offset(40, 10));
+    expect(taps, 1);
+  });
+
+  testWidgets('mask tanpa tinggi -> tanpa ShaderMask', (tester) async {
+    await tester.pumpWidget(const MaterialApp(
+        home: Scaffold(body: ScrollEdgeFade(mask: true, child: SizedBox()))));
+    expect(find.byType(ShaderMask), findsNothing);
   });
 }

@@ -8,6 +8,12 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 10 Oktober 2026 (v3.19.0 — Pemudaran mulus, saklar di Welcome, keranjang scanner penuh)
+
+- **Daftar produk di layar Kasir (termasuk landing) kini memudar benar-benar halus**: tidak ada lagi garis pembatas tegas di bawah kolom cari/kategori maupun di atas bilah tab. Warna latar Kasir juga disamakan dengan layar lain.
+- **Layar Welcome punya saklar Terang/Gelap** (gaya GoPay) di pojok kanan atas. Pertama kali aplikasi dibuka, tampilan default TERANG.
+- **Keranjang yang terbuka karena scanner barcode eksternal (HID) kini terbuka penuh**, supaya item terbaru (paling bawah) langsung terlihat.
+
 ## 10 Oktober 2026 (v3.18.0 — Saklar persis GoPay & daftar Kasir memudar)
 
 - **Saklar Mode Terang/Gelap kini persis desain GoPay** (hanya ukurannya lebih kecil): ubin persegi dengan satu lekukan; saat gelap kotaknya di atas dan lubang hitam tampak di bawah, saat terang kotaknya turun dan lubang putih tampak di atas. Tanpa ikon.

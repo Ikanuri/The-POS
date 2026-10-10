@@ -1401,7 +1401,9 @@ class _CartSheetState extends ConsumerState<CartSheet> {
     final activeCategoryId = ref.watch(cartPriceCategoryProvider(widget.cartId));
 
     return DraggableScrollableSheet(
-      initialChildSize: 0.7,
+      // Dibuka oleh scanner HID (`scrollToBottom`): buka PENUH supaya item
+      // terbaru (paling bawah) langsung terlihat tanpa menarik sheet.
+      initialChildSize: widget.scrollToBottom ? 0.95 : 0.7,
       minChildSize: 0.4,
       maxChildSize: 0.95,
       expand: false,

@@ -60,7 +60,6 @@ extension _KasirModernX on _KasirScreenState {
       );
 
   Widget _buildModernBody(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     final cart = ref.watch(cartProvider(_cartId));
     final cartNotifier = ref.read(cartProvider(_cartId).notifier);
     final cartMeta = ref.watch(cartMetaProvider(_cartId));
@@ -222,8 +221,7 @@ extension _KasirModernX on _KasirScreenState {
                               child: ScrollEdgeFade(
                                   top: 18,
                                   bottom: 26,
-                                  color: Color.lerp(cs.surface,
-                                      AppTheme.canvasColor(dark), 0.4),
+                                  mask: true,
                                   child: Column(
                                 children: [
                                   Expanded(
@@ -282,7 +280,9 @@ extension _KasirModernX on _KasirScreenState {
       ),
       // Latar sedikit lebih gelap dari kartu (seperti kanvas katalog HTML) agar
       // cart bar & kartu produk terlihat terpisah dari latar.
-      backgroundColor: Color.lerp(cs.surface, AppTheme.canvasColor(dark), 0.4),
+      // Sama dengan latar shell (kanvas tema) supaya tak ada pembatas warna di
+      // atas bilah tab; BUKAN transparan (rute di luar shell jadi hitam).
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       // Daftar menggulir DI BELAKANG cart bar (tanpa pita latar bertepi tegas);
       // ruang bawah daftar = tinggi cart bar (atau keyboard bila lebih tinggi).
       extendBody: true,
@@ -424,7 +424,7 @@ class _ModernHeader extends StatelessWidget {
             // Saklar tema TETAP di pojok kanan atas (landing maupun daftar).
             Padding(
               padding: const EdgeInsets.only(left: 6),
-              child: _LightRocker(
+              child: ThemeRockerSwitch(
                   key: const Key('hdr-theme'),
                   dark: dark,
                   onTap: onToggleTheme),
@@ -1009,106 +1009,6 @@ class _HeaderBtn extends StatelessWidget {
 /// Sakelar terang/gelap berbentuk SAKLAR LISTRIK (rocker): pelat dengan
 /// tuas dua sisi - sisi atas matahari, sisi bawah bulan - yang miring ke sisi
 /// yang aktif dengan sedikit memantul.
-class _LightRocker extends StatelessWidget {
-  const _LightRocker({super.key, required this.dark, required this.onTap});
-  final bool dark;
-  final VoidCallback onTap;
-
-  /// Ukuran ubin (persegi). Semua proporsi di bawah diambil dari saklar
-  /// GoPay (diukur dari screenshot): lekukan 34% x 56% ubin, muka kotak 76%
-  /// tinggi lekukan.
-  static const double size = 46;
-
-  /// Saklar "ilusi optik" ala GoPay: SEBENARNYA hanya satu kotak yang
-  /// bergeser naik/turun di dalam lekukan. Gelap = kotak di ATAS, lubang
-  /// hitam tampak di bawahnya; terang = kotak di BAWAH, lubang putih tampak
-  /// di atasnya.
-  @override
-  Widget build(BuildContext context) {
-    final dur = AppMotion.dur(context, AppMotion.medium);
-    const wellW = size * 0.344;
-    const wellH = size * 0.56;
-    const faceH = wellH * 0.76;
-    const travel = wellH - faceH - 1.6; // sisa ruang geser (dalam garis tepi)
-    return Semantics(
-      button: true,
-      label: dark ? 'Ganti ke mode terang' : 'Ganti ke mode gelap',
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: TweenAnimationBuilder<double>(
-          tween: Tween(end: dark ? 0.0 : 1.0), // 0 = gelap (kotak atas)
-          duration: dur,
-          curve: AppMotion.easeOutBack,
-          builder: (context, k, _) {
-            // k: 0 = gelap, 1 = terang (warna ikut berpindah mulus).
-            final kc = k.clamp(0.0, 1.0);
-            Color c(int dk, int lt) => Color.lerp(Color(dk), Color(lt), kc)!;
-            return Container(
-              width: size,
-              height: size,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(size * 0.227),
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    c(0xFF2C2F34, 0xFFFBFCFE),
-                    c(0xFF252A2E, 0xFFF7F8FA)
-                  ],
-                ),
-                boxShadow: _sh([
-                  BoxShadow(
-                      color: Color.lerp(const Color(0x66000000),
-                          const Color(0x1F000000), kc)!,
-                      blurRadius: 6,
-                      offset: const Offset(0, 2)),
-                ]),
-              ),
-              alignment: Alignment.center,
-              child: Container(
-                width: wellW,
-                height: wellH,
-                decoration: BoxDecoration(
-                  // Lubang di balik kotak: hitam (gelap) / putih (terang).
-                  color: c(0xFF08090B, 0xFFFBFBFB),
-                  borderRadius: BorderRadius.circular(wellW * 0.26),
-                  border:
-                      Border.all(color: c(0xFF141519, 0xFFDFE0E4), width: 0.8),
-                ),
-                child: Stack(
-                  children: [
-                    Positioned(
-                      left: 0.4,
-                      right: 0.4,
-                      // k=0 -> menempel atas, k=1 -> menempel bawah.
-                      top: 0.4 + travel * k,
-                      height: faceH,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(wellW * 0.24),
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              c(0xFF1A1E21, 0xFFE6E7E9),
-                              c(0xFF252A2E, 0xFFF9FAFC),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        ),
-      ),
-    );
-  }
-}
-
 /// Hint kolom cari yang bergilir seperti placeholder katalog HTML: "Cari
 /// <b>Nama Produk</b>" berganti tiap ~3,4 dtk. Dua lapis (lama & baru)
 /// digerakkan SATU controller: yang lama naik + pudar, yang baru naik dari

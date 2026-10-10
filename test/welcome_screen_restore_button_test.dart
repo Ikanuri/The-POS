@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:the_pos/features/setup/welcome_screen.dart';
@@ -7,7 +8,8 @@ import 'package:the_pos/features/setup/welcome_screen.dart';
 /// "Setup Toko Baru"/"Gabung Toko"), supaya restore langsung tanpa perlu
 /// bikin toko dummy dulu.
 void main() {
-  testWidgets('tombol "Pulihkan dari File" tampil & navigasi ke /setup/pulihkan',
+  testWidgets(
+      'tombol "Pulihkan dari File" tampil & navigasi ke /setup/pulihkan',
       (tester) async {
     final router = GoRouter(routes: [
       GoRoute(path: '/setup', builder: (_, __) => const WelcomeScreen()),
@@ -17,7 +19,8 @@ void main() {
       ),
     ], initialLocation: '/setup');
 
-    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+    await tester.pumpWidget(
+        ProviderScope(child: MaterialApp.router(routerConfig: router)));
 
     expect(find.text('Pulihkan dari File'), findsOneWidget);
     await tester.tap(find.text('Pulihkan dari File'));
