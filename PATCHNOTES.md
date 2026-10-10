@@ -8,6 +8,10 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 10 Oktober 2026 (v3.21.1 — Cart bar tanpa bayangan, garis tegas hilang)
+
+- **Cart bar tidak lagi memakai bayangan.** Bayangannya meluas ke bawah lalu terpotong lurus di atas bilah tab sehingga tampak sebagai garis tegas; kini hilang. Pemudaran daftar di dekat cart bar juga dibuat transparan penuh sedikit sebelum tepi, jadi tidak ada jejak kartu yang mengintip.
+
 ## 10 Oktober 2026 (v3.21.0 — Animasi cart bar & gulir ke item yang di-scan)
 
 - **Cart bar kini muncul dan hilang dengan animasi** (membuka dari bawah sambil bergeser dan memudar, lalu menutup saat keranjang kosong). Ikut aturan "Kurangi animasi".

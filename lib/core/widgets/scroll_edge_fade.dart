@@ -105,6 +105,9 @@ class ScrollEdgeFade extends StatelessWidget {
           add(1 - b, 1);
           add(1 - b * 0.75, 0.7);
           add(1 - b * 0.4, 0.25);
+          // Transparan penuh sedikit sebelum tepi: tak ada jejak konten samar
+          // di celah antara cart bar dan bilah tab.
+          add(1 - b * 0.15, 0);
           add(1, 0);
         } else {
           add(1, 1);

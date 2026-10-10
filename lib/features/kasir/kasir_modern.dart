@@ -223,53 +223,56 @@ extension _KasirModernX on _KasirScreenState {
                               // mengintip di bawah/samping cart bar.
                               child: Builder(
                                   builder: (fadeCtx) => ScrollEdgeFade(
-                                  top: 18,
-                                  bottom: 26 + MediaQuery.paddingOf(fadeCtx).bottom,
-                                  mask: true,
-                                  child: Column(
-                                children: [
-                                  Expanded(
-                                    child: isLanding
-                                        ? Builder(
-                                            builder: (ctx) => _ModernLanding(
-                                                  cartId: _cartId,
-                                                  extraBottom:
-                                                      _bottomClear(ctx),
-                                                  onShowAll: () => ref
-                                                      .read(
-                                                          _kasirShowAllProvider(
-                                                                  _cartId)
-                                                              .notifier)
-                                                      .state = true,
-                                                  tileBuilder: (p) =>
-                                                      _ProductListTile(
-                                                    product: p,
-                                                    cartId: _cartId,
-                                                    onTapBody: () =>
-                                                        _openEntry(p),
-                                                    onQuickAdd: _quickAdd,
-                                                    onOpenEntry: () =>
-                                                        _openEntry(p),
-                                                    onBeforeTap:
-                                                        _markSkipSearchCollapse,
-                                                    onAfterQtyChange:
-                                                        _highlightSearchIfActive,
+                                      top: 18,
+                                      bottom: 26 +
+                                          MediaQuery.paddingOf(fadeCtx).bottom,
+                                      mask: true,
+                                      child: Column(
+                                        children: [
+                                          Expanded(
+                                            child: isLanding
+                                                ? Builder(
+                                                    builder: (ctx) =>
+                                                        _ModernLanding(
+                                                          cartId: _cartId,
+                                                          extraBottom:
+                                                              _bottomClear(ctx),
+                                                          onShowAll: () => ref
+                                                              .read(_kasirShowAllProvider(
+                                                                      _cartId)
+                                                                  .notifier)
+                                                              .state = true,
+                                                          tileBuilder: (p) =>
+                                                              _ProductListTile(
+                                                            product: p,
+                                                            cartId: _cartId,
+                                                            onTapBody: () =>
+                                                                _openEntry(p),
+                                                            onQuickAdd:
+                                                                _quickAdd,
+                                                            onOpenEntry: () =>
+                                                                _openEntry(p),
+                                                            onBeforeTap:
+                                                                _markSkipSearchCollapse,
+                                                            onAfterQtyChange:
+                                                                _highlightSearchIfActive,
+                                                          ),
+                                                        ))
+                                                : Builder(
+                                                    builder: (ctx) =>
+                                                        _buildProductResults(
+                                                            ctx,
+                                                            productsAsync,
+                                                            query,
+                                                            isGrid,
+                                                            modern: true,
+                                                            extraBottom:
+                                                                _bottomClear(
+                                                                    ctx)),
                                                   ),
-                                                ))
-                                        : Builder(
-                                            builder: (ctx) =>
-                                                _buildProductResults(
-                                                    ctx,
-                                                    productsAsync,
-                                                    query,
-                                                    isGrid,
-                                                    modern: true,
-                                                    extraBottom:
-                                                        _bottomClear(ctx)),
                                           ),
-                                  ),
-                                ],
-                              ))),
+                                        ],
+                                      ))),
                             ),
                           ),
                         ),
@@ -1328,13 +1331,9 @@ class _ModernCartBar extends ConsumerWidget {
           borderRadius: BorderRadius.circular(22),
           border: Border.all(
               color: cs.outlineVariant.withOpacity(dark ? 0.9 : 1), width: 1),
-          boxShadow: _sh([
-            BoxShadow(
-              color: dark ? const Color(0x99000000) : const Color(0x385A3C1E),
-              blurRadius: 22,
-              offset: const Offset(0, 6),
-            ),
-          ]),
+          // TANPA bayangan: bayangan yang meluas ke bawah terpotong lurus di
+          // batas area Kasir (di atas bilah tab) dan tampak sbg garis tegas.
+          // Pemisah dari daftar cukup garis tepi + pemudaran daftar.
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
