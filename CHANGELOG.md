@@ -9,6 +9,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-10-09 (penyesuaian desain Kasir gaya Baru)
 
+- feat(ui): `4f39de7` — saklar tema persis GoPay + daftar Kasir memudar (v3.18.0+226)
 - fix(ui): `e80d250` — bayangan saklar tema ikut saklar diagnostik (v3.17.1+225)
 - feat(ui): `fa6c50c` — saklar tema ala GoPay di pojok kanan atas (v3.17.0+224)
 - fix(scanner): `7b2bba2` — saring kotak bingkai (median + perataan) (v3.16.2+223)
