@@ -9,6 +9,7 @@ untuk ringkasan ramah-pengguna lihat [PATCHNOTES.md](PATCHNOTES.md).
 
 ## 2026-10-09 (penyesuaian desain Kasir gaya Baru)
 
+- fix(ui): `cc80fab` — cart bar tanpa bayangan, pemudaran bawah transparan penuh (v3.21.1+231)
 - feat(kasir): `df6982b` — animasi cart bar, pemudaran mengikuti cart bar, gulir ke item scan HID (v3.21.0+230)
 - fix(kasir): `7c0161a` — keranjang scan HID selalu mentok bawah (v3.20.1+229)
 - feat(ui): `a5d6e0c` — keranjang & modal tap produk Gaya Landing, hanya gaya (v3.20.0+228)
