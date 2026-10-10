@@ -8,6 +8,11 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 10 Oktober 2026 (v3.20.0 — Keranjang & modal produk Gaya Landing)
+
+- **Keranjang**: judul bergaya serif, nomor nota jadi pil terracotta, pengingat Hutang dan DP Pre-order kini pil berwarna lembut (bukan pita penuh), baris yang sudah dicentang di-highlight dengan sudut membulat, daftar memudar halus di tepi, dan footer Total/Bayar berpanel dengan sudut atas membulat. **Susunan dan ukuran baris tidak berubah** (tetap padat), begitu juga stepper dan semua tombol.
+- **Modal tap produk**: nama produk bergaya serif, pil "Satuan" terracotta, chip satuan/harga yang dipilih kini terracotta penuh dengan teks putih, dan subtotal lebih jelas berwarna aksen.
+
 ## 10 Oktober 2026 (v3.19.0 — Pemudaran mulus, saklar di Welcome, keranjang scanner penuh)
 
 - **Daftar produk di layar Kasir (termasuk landing) kini memudar benar-benar halus**: tidak ada lagi garis pembatas tegas di bawah kolom cari/kategori maupun di atas bilah tab. Warna latar Kasir juga disamakan dengan layar lain.

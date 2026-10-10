@@ -807,8 +807,8 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                           children: [
                             Expanded(
                               child: Text(widget.product.name,
-                                  style:
-                                      Theme.of(context).textTheme.titleMedium),
+                                  style: AppTheme.numStyle(context,
+                                      size: 20, weight: FontWeight.w600)),
                             ),
                             IconButton(
                               icon: Icon(
@@ -851,17 +851,17 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                             if (_sel != null)
                               Container(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 2),
+                                    horizontal: 10, vertical: 3),
                                 decoration: BoxDecoration(
-                                  color: scheme.secondaryContainer,
-                                  borderRadius: BorderRadius.circular(6),
+                                  color: AppTheme.accent.withOpacity(0.12),
+                                  borderRadius: BorderRadius.circular(999),
                                 ),
                                 child: Text(
                                   'Satuan: ${_sel!.unitName}',
-                                  style: TextStyle(
+                                  style: const TextStyle(
                                       fontSize: 11.5,
-                                      fontWeight: FontWeight.w600,
-                                      color: scheme.onSecondaryContainer),
+                                      fontWeight: FontWeight.w700,
+                                      color: AppTheme.accent),
                                 ),
                               ),
                             if (widget.product.kodeProduk != null)
@@ -1327,7 +1327,9 @@ class _ItemEntrySheetState extends ConsumerState<ItemEntrySheet> {
                               formatRupiah((_effectivePrice * _qty).round() +
                                   _variantTotal),
                               style: AppTheme.numStyle(context,
-                                  size: 18, weight: FontWeight.w700),
+                                  size: 20,
+                                  weight: FontWeight.w700,
+                                  color: scheme.primary),
                             ),
                           ],
                         ),
@@ -1628,18 +1630,18 @@ class _PriceChip extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
             color: selected
-                ? accent.withOpacity(0.12)
+                ? accent
                 : isCategory
                     ? scheme.tertiary.withOpacity(0.06)
                     : scheme.surfaceContainerLowest,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: selected
                   ? accent
                   : isCategory
                       ? scheme.tertiary.withOpacity(0.5)
                       : scheme.outlineVariant,
-              width: selected ? 1.4 : 0.75,
+              width: 0.75,
             ),
           ),
           child: Column(
@@ -1651,7 +1653,8 @@ class _PriceChip extends StatelessWidget {
                 children: [
                   if (isCategory) ...[
                     Icon(Icons.sell_outlined,
-                        size: 11, color: selected ? accent : scheme.tertiary),
+                        size: 11,
+                        color: selected ? Colors.white : scheme.tertiary),
                     const SizedBox(width: 3),
                   ],
                   Text(
@@ -1659,7 +1662,7 @@ class _PriceChip extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 11.5,
                       fontWeight: FontWeight.w600,
-                      color: selected ? accent : scheme.onSurface,
+                      color: selected ? Colors.white : scheme.onSurface,
                     ),
                   ),
                 ],
@@ -1670,7 +1673,7 @@ class _PriceChip extends StatelessWidget {
                 style: AppTheme.numStyle(context,
                     size: 13.5,
                     weight: FontWeight.w700,
-                    color: selected ? accent : scheme.onSurface),
+                    color: selected ? Colors.white : scheme.onSurface),
               ),
             ],
           ),

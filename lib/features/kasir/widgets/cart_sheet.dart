@@ -25,6 +25,7 @@ import '../../../core/services/pick_list_renderer.dart';
 import '../../../core/services/price_service.dart';
 import '../../../core/services/printer_service.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/scroll_edge_fade.dart';
 import '../../../core/widgets/item_count_badge.dart';
 import '../../../core/widgets/marquee_text.dart';
 import '../cart_debt_settlement_provider.dart';
@@ -1483,14 +1484,23 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                     Row(
                   children: [
                     Text('Keranjang',
-                        style: Theme.of(context).textTheme.titleMedium),
+                        style: AppTheme.numStyle(context,
+                            size: 21, weight: FontWeight.w600)),
                     if (meta.displayOrderNumber != null) ...[
                       const SizedBox(width: 8),
-                      Text('#${meta.displayOrderNumber}',
-                          style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: scheme.onSurfaceVariant)),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 9, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppTheme.accent.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text('#${meta.displayOrderNumber}',
+                            style: const TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w700,
+                                color: AppTheme.accent)),
+                      ),
                     ],
                     const Spacer(),
                     IconButton(
@@ -1669,8 +1679,13 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                 ),
                 child: Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  color: scheme.errorContainer.withOpacity(0.25),
+                  margin: const EdgeInsets.fromLTRB(12, 6, 12, 2),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.debtBg(
+                        Theme.of(context).brightness == Brightness.dark),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
                   child: Row(
                     children: [
                       Icon(Icons.account_balance_wallet_outlined,
@@ -1693,7 +1708,6 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                   ),
                 ),
               ),
-            if (showDebtRow) const Divider(height: 1),
             // Fitur "Pelunasi Pre-order" — arsitektur IDENTIK dgn chip
             // "Lunasi Hutang" di atas (lihat dok
             // `preorder_settlement_sheet.dart`), warna tertiary (bukan
@@ -1710,8 +1724,13 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                 ),
                 child: Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  color: scheme.tertiaryContainer.withOpacity(0.25),
+                  margin: const EdgeInsets.fromLTRB(12, 6, 12, 2),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.preorderBg(
+                        Theme.of(context).brightness == Brightness.dark),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
                   child: Row(
                     children: [
                       Icon(Icons.inventory_2_outlined,
@@ -1734,7 +1753,6 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                   ),
                 ),
               ),
-            if (showPreorderSettlementRow) const Divider(height: 1),
             // Fase C "Kategori Harga" — chip toggle "Normal" + tiap
             // PriceCategories terdaftar. Baris ini disembunyikan TOTAL bila
             // gerbang [canToggleCategory] tidak terpenuhi (lihat dok di atas).
@@ -1767,7 +1785,12 @@ class _CartSheetState extends ConsumerState<CartSheet> {
               ),
             if (canToggleCategory) const Divider(height: 1),
             Expanded(
-              child: (cart.isEmpty &&
+              // Daftar memudar halus di tepi atas/bawah (bukan terpotong).
+              child: ScrollEdgeFade(
+                  top: 8,
+                  bottom: 14,
+                  mask: true,
+                  child: (cart.isEmpty &&
                       debtSettlementEntries.isEmpty &&
                       preorderSettlementEntries.isEmpty)
                   ? Center(
@@ -1800,8 +1823,10 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                           controller: scrollCtrl,
                           padding: const EdgeInsets.symmetric(vertical: 4),
                           itemCount: itemCount,
-                          separatorBuilder: (_, __) =>
-                              const Divider(height: 1, indent: 56),
+                          separatorBuilder: (_, __) => Divider(
+                              height: 1,
+                              indent: 56,
+                              color: scheme.outlineVariant.withOpacity(0.55)),
                           itemBuilder: (ctx2, i) {
                             if (i >=
                                 rows.length + debtSettlementEntries.length) {
@@ -1868,10 +1893,27 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                           },
                         ),
                       );
-                    }),
+                    })),
             ),
-            const Divider(height: 1),
-            Padding(
+            // Footer Gaya Landing: panel berlatar kanvas dengan sudut atas
+            // membulat + bayangan ke atas (menggantikan garis pemisah tegas).
+            // Isi & padding footer TIDAK berubah.
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: Color.lerp(scheme.surface,
+                    AppTheme.canvasColor(
+                        Theme.of(context).brightness == Brightness.dark),
+                    0.45),
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(22)),
+                boxShadow: const [
+                  BoxShadow(
+                      color: Color(0x14000000),
+                      blurRadius: 12,
+                      offset: Offset(0, -3)),
+                ],
+              ),
+              child: Padding(
               padding: EdgeInsets.fromLTRB(
                   16, 12, 16, MediaQuery.of(context).viewInsets.bottom + 12),
               child: Row(
@@ -2011,7 +2053,7 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                   ),
                 ],
               ),
-            ),
+            )),
           ],
         );
       },
@@ -2352,14 +2394,20 @@ class _CartItemTileState extends ConsumerState<_CartItemTile>
             // dicentang (verifikasi serah-terima) — supaya kelihatan sekilas
             // baris mana yang sudah/belum dicek, tanpa mengganggu keterbacaan
             // teks (opacity rendah, warna tema `primary`, bukan warna keras).
-            color: item.checked
-                ? scheme.primary.withOpacity(0.08)
-                : Colors.transparent,
+            // Gaya Landing: sudut membulat; margin 8 + padding 8 = jarak tepi
+            // 16 yang SAMA seperti sebelumnya (posisi isi baris tidak bergeser).
+            margin: const EdgeInsets.symmetric(horizontal: 8),
+            decoration: BoxDecoration(
+              color: item.checked
+                  ? scheme.primary.withOpacity(0.10)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(14),
+            ),
             child: Padding(
               // Susulan (permintaan user): jarak ke tepi layar diperlebar di
               // KEDUA sisi (dulu 8/4px — terlalu mepet, checklist+stepper nyaris
               // menempel tepi kanan, nama+nominal nyaris menempel tepi kiri).
-              padding: EdgeInsets.fromLTRB(isVariant ? 40 : 16, 4, 16, 4),
+              padding: EdgeInsets.fromLTRB(isVariant ? 32 : 8, 4, 8, 4),
               child: Row(
                 children: [
                   // Susulan (permintaan user): checkbox verifikasi posisi

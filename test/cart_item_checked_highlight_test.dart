@@ -55,11 +55,14 @@ void main() {
     await pumpCart(tester);
 
     Color? bgFor(String productName) {
-      final container = tester.widget<Container>(find.ancestor(
-        of: find.text(productName),
-        matching: find.byType(Container),
-      ).first);
-      return container.color;
+      final container = tester.widget<Container>(find
+          .ancestor(
+            of: find.text(productName),
+            matching: find.byType(Container),
+          )
+          .first);
+      // Highlight kini di `decoration` (sudut membulat Gaya Landing).
+      return container.color ?? (container.decoration as BoxDecoration?)?.color;
     }
 
     final checkedColor = bgFor('Beras 5kg');
@@ -82,11 +85,14 @@ void main() {
     await pumpCart(tester);
 
     Color? bgFor(String productName) {
-      final container = tester.widget<Container>(find.ancestor(
-        of: find.text(productName),
-        matching: find.byType(Container),
-      ).first);
-      return container.color;
+      final container = tester.widget<Container>(find
+          .ancestor(
+            of: find.text(productName),
+            matching: find.byType(Container),
+          )
+          .first);
+      // Highlight kini di `decoration` (sudut membulat Gaya Landing).
+      return container.color ?? (container.decoration as BoxDecoration?)?.color;
     }
 
     expect(bgFor('Gula 1kg'), Colors.transparent);
