@@ -6,9 +6,11 @@ import '../../core/providers/device_provider.dart';
 import '../../core/providers/sync_state_provider.dart';
 import '../../core/services/lan_sync_service.dart';
 import '../../core/widgets/inline_banner.dart';
+import '../../core/theme/app_theme.dart';
 import '../../core/widgets/qr_sync_widgets.dart';
 import '../laci_meja/laci_meja_proposal_review_screen.dart';
 import '../pelanggan/customer_proposal_review_screen.dart';
+import 'pengaturan_screen.dart' show SettingsIconBubble;
 import 'product_proposal_review_screen.dart';
 import '../../core/theme/app_overlays.dart';
 
@@ -278,6 +280,7 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
     final scheme = Theme.of(context).colorScheme;
     final device = ref.watch(deviceProvider);
     final sync = ref.watch(syncStateProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Sync WiFi')),
@@ -285,7 +288,7 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
         children: [
           inlineBanner(),
           Expanded(child: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(14, 8, 14, 24),
         children: [
           // Host mode — HANYA owner. Master data (produk, harga, IZIN
           // kasir/asisten) sengaja mengalir SATU ARAH host→klien
@@ -306,9 +309,10 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(children: [
-                      Icon(Icons.wifi_tethering_outlined, color: scheme.primary),
-                      const SizedBox(width: 8),
-                      Text('Jadi Host', style: Theme.of(context).textTheme.titleMedium),
+                      SettingsIconBubble(Icons.wifi_tethering_outlined,
+                          AppTheme.riwayatFg(isDark), AppTheme.riwayatBg(isDark)),
+                      const SizedBox(width: 10),
+                      Text('Jadi Host', style: Theme.of(context).textTheme.titleSmall),
                     ]),
                     const SizedBox(height: 8),
                     Text(
@@ -406,13 +410,13 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
             // B-4: Antrian persetujuan sync dari perangkat kasir.
             if (sync.queue.isNotEmpty) ...[
               Row(children: [
-                Icon(Icons.pending_actions_outlined,
-                    color: scheme.tertiary, size: 18),
-                const SizedBox(width: 6),
+                SettingsIconBubble(Icons.pending_actions_outlined,
+                    AppTheme.antrianFg(isDark), AppTheme.antrianBg(isDark)),
+                const SizedBox(width: 10),
                 Text('Menunggu Persetujuan (${sync.queue.length})',
                     style: Theme.of(context).textTheme.titleSmall),
               ]),
-              const SizedBox(height: 6),
+              const SizedBox(height: 10),
               ...sync.queue.map((item) {
                 final mins = DateTime.now()
                     .difference(item.arrivedAt)
@@ -426,9 +430,10 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
                       children: [
                         Row(
                           children: [
-                            Icon(Icons.devices_outlined, size: 16,
-                                color: scheme.onSurface),
-                            const SizedBox(width: 6),
+                            SettingsIconBubble(Icons.devices_outlined,
+                                AppTheme.antrianFg(isDark),
+                                AppTheme.antrianBg(isDark)),
+                            const SizedBox(width: 10),
                             Expanded(
                               child: Text(item.fromIp,
                                   style: TextStyle(
@@ -487,21 +492,21 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
             // saja tanpa perlu setuju/tolak data append-only dulu).
             if (sync.proposals.isNotEmpty) ...[
               Row(children: [
-                Icon(Icons.storefront_outlined,
-                    color: scheme.tertiary, size: 18),
-                const SizedBox(width: 6),
+                SettingsIconBubble(Icons.storefront_outlined,
+                    AppTheme.antrianFg(isDark), AppTheme.antrianBg(isDark)),
+                const SizedBox(width: 10),
                 Text('Usulan Harga/Produk (${sync.proposals.length})',
                     style: Theme.of(context).textTheme.titleSmall),
               ]),
-              const SizedBox(height: 6),
+              const SizedBox(height: 10),
               ...sync.proposals.map((p) {
                 final mins =
                     DateTime.now().difference(p.arrivedAt).inMinutes;
                 return Card(
                   margin: const EdgeInsets.only(bottom: 8),
                   child: ListTile(
-                    leading: Icon(Icons.storefront_outlined,
-                        color: scheme.tertiary),
+                    leading: SettingsIconBubble(Icons.storefront_outlined,
+                        AppTheme.antrianFg(isDark), AppTheme.antrianBg(isDark)),
                     title: Text(p.fromIp,
                         style: const TextStyle(fontWeight: FontWeight.w700)),
                     subtitle: Text(
@@ -531,20 +536,21 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
             // mengganggu — lihat dok `PendingLaciMejaProposal`).
             if (sync.laciMejaProposals.isNotEmpty) ...[
               Row(children: [
-                Icon(Icons.inbox_outlined, color: scheme.tertiary, size: 18),
-                const SizedBox(width: 6),
+                SettingsIconBubble(Icons.inbox_outlined,
+                    AppTheme.laciFg(isDark), AppTheme.laciBg(isDark)),
+                const SizedBox(width: 10),
                 Text('Usulan Laci Meja (${sync.laciMejaProposals.length})',
                     style: Theme.of(context).textTheme.titleSmall),
               ]),
-              const SizedBox(height: 6),
+              const SizedBox(height: 10),
               ...sync.laciMejaProposals.map((p) {
                 final mins =
                     DateTime.now().difference(p.arrivedAt).inMinutes;
                 return Card(
                   margin: const EdgeInsets.only(bottom: 8),
                   child: ListTile(
-                    leading:
-                        Icon(Icons.inbox_outlined, color: scheme.tertiary),
+                    leading: SettingsIconBubble(Icons.inbox_outlined,
+                        AppTheme.laciFg(isDark), AppTheme.laciBg(isDark)),
                     title: Text(p.fromIp,
                         style: const TextStyle(fontWeight: FontWeight.w700)),
                     subtitle: Text(
@@ -574,20 +580,21 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
             // `PendingCustomerProposal`).
             if (sync.customerProposals.isNotEmpty) ...[
               Row(children: [
-                Icon(Icons.person_outline, color: scheme.tertiary, size: 18),
-                const SizedBox(width: 6),
+                SettingsIconBubble(Icons.person_outline,
+                    AppTheme.changeFg(isDark), AppTheme.changeBg(isDark)),
+                const SizedBox(width: 10),
                 Text('Usulan Pelanggan (${sync.customerProposals.length})',
                     style: Theme.of(context).textTheme.titleSmall),
               ]),
-              const SizedBox(height: 6),
+              const SizedBox(height: 10),
               ...sync.customerProposals.map((p) {
                 final mins =
                     DateTime.now().difference(p.arrivedAt).inMinutes;
                 return Card(
                   margin: const EdgeInsets.only(bottom: 8),
                   child: ListTile(
-                    leading:
-                        Icon(Icons.person_outline, color: scheme.tertiary),
+                    leading: SettingsIconBubble(Icons.person_outline,
+                        AppTheme.changeFg(isDark), AppTheme.changeBg(isDark)),
                     title: Text(p.fromIp,
                         style: const TextStyle(fontWeight: FontWeight.w700)),
                     subtitle: Text(
@@ -621,10 +628,11 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(children: [
-                    Icon(Icons.sync_outlined, color: scheme.secondary),
-                    const SizedBox(width: 8),
+                    SettingsIconBubble(Icons.sync_outlined,
+                        AppTheme.scanFg(isDark), AppTheme.scanBg(isDark)),
+                    const SizedBox(width: 10),
                     Text('Hubungkan ke Host',
-                        style: Theme.of(context).textTheme.titleMedium),
+                        style: Theme.of(context).textTheme.titleSmall),
                   ]),
                   const SizedBox(height: 8),
                   Text(
@@ -709,12 +717,12 @@ class _SyncScreenState extends ConsumerState<SyncScreen>
                   if (sync.clientResultMessage != null) ...[
                     const SizedBox(height: 8),
                     Container(
-                      padding: const EdgeInsets.all(10),
+                      padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: sync.clientResultMessage!.startsWith('Gagal')
                             ? scheme.errorContainer
                             : scheme.primaryContainer,
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(14),
                       ),
                       child: Text(
                         sync.clientResultMessage!,
@@ -763,10 +771,10 @@ class _InfoRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Container(
-      padding: const EdgeInsets.only(left: 10, top: 2, bottom: 2, right: 2),
+      padding: const EdgeInsets.only(left: 14, top: 2, bottom: 2, right: 4),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
         children: [
@@ -780,9 +788,9 @@ class _InfoRow extends StatelessWidget {
           ),
           Expanded(
             child: Text(value,
-                style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
+                style: AppTheme.numStyle(context).copyWith(
+                    fontSize: 15.5,
+                    fontWeight: FontWeight.w600,
                     letterSpacing: 0.5)),
           ),
           if (onCopy != null)

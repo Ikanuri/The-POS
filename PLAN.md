@@ -63,6 +63,44 @@ sekarang, TIDAK ada rencana eksekusi._
 
 ---
 
+## Item 96 — Sisa redesain Gaya Landing: apa yang DIREDESAIN vs DILEWATI (10 Okt 2026) — PEDOMAN, DIKERJAKAN BERTAHAP DI BETA
+
+Keputusan bersama user (10 Okt): lanjutkan redesain hanya pada layar yang sering
+dilihat dan murni tampilan. **Komponen bersama yang dipakai**: `AppFormSection`,
+`AppEmptyState`, `AppFilterChip`, `SettingsIconBubble`, `ScrollEdgeFade`,
+`AppStyle.pillSearch` (lihat `docs/STYLE-UIUX.md`). Setiap layar baru WAJIB uji
+widget di lebar 360 (`setSurfaceSize(Size(360, 800))`).
+
+**JANGAN DIREDESAIN (cukup tema global yang sudah berlaku):**
+- Struk: `receipt_screen.dart`, `merged_receipt_screen.dart`, pratinjau struk
+  (`_ReceiptPaper`, `CartPreviewPaper`) — meniru kertas thermal, dipakai cetak/
+  gambar/bagikan; logika `netRemainingOwed()`/`netPaidDisplay()` rawan. Boleh
+  menyentuh HANYA kerangka luar (AppBar/tombol aksi) bila perlu.
+- Cetak/printer: `printer_service.dart`, ESC/POS (gotcha ASCII + raster).
+- Layar pengaman/darurat: `store_key_lost_screen`, `restore_file_screen`,
+  `aktivasi_screen`, `crash_log_screen` (gerbang lisensi dicek PALING AWAL di router).
+- Setup/pairing/welcome (sekali pakai per perangkat; ongkos uji QR/kamera/LAN
+  besar, nilai kecil) — paling akhir atau lewati.
+- Administrasi jarang: `about_screen`, `tutup_buku_screen`, `reset_stock_screen`,
+  `csv_import_screen`.
+
+**DIREDESAIN HATI-HATI (hanya tampilan, alur uang/stok TIDAK disentuh):**
+- `payment_screen.dart` (gotcha: IME harga desync, `AlertDialog` sempit, kembalian).
+- Sheet Kasir: `item_entry_sheet`, `debt_settlement_sheet`,
+  `preorder_settlement_sheet`, `debt_payment_sheet`.
+
+**LAYAK (nilai tinggi, risiko rendah) — urutan kerja:**
+1. `sync_screen`, `order_share_screen`, `pair_device_screen`.
+2. Layar review usulan (produk, pelanggan, Laci Meja), `laci_meja_dashboard_screen`,
+   `riwayat_laci_meja_screen`.
+3. `pelanggan_form_screen`, `price_sync_screen`, `receive_goods_screen`,
+   `stock_opname_screen`, kartu satuan `produk_form_screen`.
+4. `payment_screen` + sheet Kasir (hati-hati, lihat di atas).
+
+Hapus tiap sub-item dari daftar ini begitu selesai & ter-commit.
+
+---
+
 ## Item 94 — Overflow 4px baris stepper Order Restock (Cek Stok) di lebar 360 (3 Okt 2026) — TEMUAN, BELUM DIEKSEKUSI
 
 Ditemukan saat menguji Item 93: baris `[−] [qty] [+] [satuan ▾]` per produk

@@ -47,15 +47,11 @@ class _ProductProposalReviewScreenState
 
     final unitsByProduct = <String, List<Map<String, Object?>>>{};
     for (final u in unitRows) {
-      unitsByProduct
-          .putIfAbsent(u['product_id'] as String, () => [])
-          .add(u);
+      unitsByProduct.putIfAbsent(u['product_id'] as String, () => []).add(u);
     }
     final tiersByUnit = <String, List<Map<String, Object?>>>{};
     for (final t in tierRows) {
-      tiersByUnit
-          .putIfAbsent(t['product_unit_id'] as String, () => [])
-          .add(t);
+      tiersByUnit.putIfAbsent(t['product_unit_id'] as String, () => []).add(t);
     }
     final altsByUnit = <String, List<Map<String, Object?>>>{};
     for (final a in altRows) {
@@ -75,14 +71,12 @@ class _ProductProposalReviewScreenState
     int? baseTierPrice(String productId) {
       final units = unitsByProduct[productId] ?? const [];
       final baseUnit = units
-          .where((u) => u['is_base_unit'] == 1 || u['is_base_unit'] == true)
-          .firstOrNull ??
+              .where((u) => u['is_base_unit'] == 1 || u['is_base_unit'] == true)
+              .firstOrNull ??
           units.firstOrNull;
       if (baseUnit == null) return null;
       final tiers = tiersByUnit[baseUnit['id'] as String] ?? const [];
-      final base = tiers
-          .where((t) => t['min_qty'] == 1)
-          .firstOrNull ??
+      final base = tiers.where((t) => t['min_qty'] == 1).firstOrNull ??
           tiers.firstOrNull;
       return base == null ? null : (base['price'] as num).toInt();
     }
@@ -205,9 +199,10 @@ class _ProductProposalReviewScreenState
 
       // Harga tier dasar per satuan ini (bukan cuma satuan dasar produk).
       final proposedTiers = tiersByUnit[uid] ?? const [];
-      final proposedBase =
-          proposedTiers.where((t) => (t['min_qty'] as num?)?.toInt() == 1).firstOrNull ??
-              proposedTiers.firstOrNull;
+      final proposedBase = proposedTiers
+              .where((t) => (t['min_qty'] as num?)?.toInt() == 1)
+              .firstOrNull ??
+          proposedTiers.firstOrNull;
       List<PriceTier> oldTiers = const [];
       if (existingUnit != null) {
         oldTiers = await db.getPriceTiers(uid);
@@ -222,8 +217,8 @@ class _ProductProposalReviewScreenState
           (u['is_base_unit'] == 1 || u['is_base_unit'] == true);
       if (proposedBase != null && !isBaseUnitRow) {
         final newPrice = (proposedBase['price'] as num).toInt();
-        final oldBase =
-            oldTiers.where((t) => t.minQty == 1).firstOrNull ?? oldTiers.firstOrNull;
+        final oldBase = oldTiers.where((t) => t.minQty == 1).firstOrNull ??
+            oldTiers.firstOrNull;
         if (oldBase != null && oldBase.price != newPrice) {
           changes.add(
               'Harga $newUnitName: Rp ${_fmt(oldBase.price)} → Rp ${_fmt(newPrice)}');
@@ -235,8 +230,9 @@ class _ProductProposalReviewScreenState
       }
 
       // Barcode — dibandingkan sbg SET nilai (id diregenerasi tiap simpan).
-      final proposedBarcodes =
-          (barcodesByUnit[uid] ?? const []).map((b) => b['barcode'] as String).toSet();
+      final proposedBarcodes = (barcodesByUnit[uid] ?? const [])
+          .map((b) => b['barcode'] as String)
+          .toSet();
       if (existingUnit != null) {
         final oldBarcodes =
             (await db.getProductBarcodes(uid)).map((b) => b.barcode).toSet();
@@ -300,7 +296,6 @@ class _ProductProposalReviewScreenState
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final changed = _rows.where((r) => !r.isNew).toList();
     final baru = _rows.where((r) => r.isNew).toList();
 
@@ -315,7 +310,7 @@ class _ProductProposalReviewScreenState
                 inlineBanner(),
                 Expanded(
                   child: ListView(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.fromLTRB(14, 4, 14, 16),
                     children: [
                       if (changed.isNotEmpty) ...[
                         Text('Harga/Produk Berubah (${changed.length})',
@@ -360,21 +355,15 @@ class _ProductProposalReviewScreenState
                 ),
                 Container(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                  decoration: BoxDecoration(
-                    color: scheme.surface,
-                    border: Border(
-                        top: BorderSide(
-                            color: scheme.outlineVariant.withOpacity(0.3))),
-                  ),
+                  color: Theme.of(context).scaffoldBackgroundColor,
                   child: SafeArea(
                     top: false,
                     child: SizedBox(
                       width: double.infinity,
                       height: 48,
                       child: FilledButton(
-                        onPressed: _applying || _selected.isEmpty
-                            ? null
-                            : _apply,
+                        onPressed:
+                            _applying || _selected.isEmpty ? null : _apply,
                         child: _applying
                             ? const SizedBox(
                                 width: 20,
@@ -432,65 +421,70 @@ class _ProposalTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return CheckboxListTile(
-      value: selected,
-      onChanged: (_) => onToggle(),
-      dense: true,
-      controlAffinity: ListTileControlAffinity.leading,
-      title: Text(row.name, style: const TextStyle(fontSize: 13)),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (row.isNew)
-            Text(
-                '${row.unitCount} satuan'
-                '${row.newPrice != null ? ' · Rp ${_fmt(row.newPrice!)}' : ''}',
-                style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant))
-          else ...[
-            if (row.priceChanged)
-              RichText(
-                text: TextSpan(
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      clipBehavior: Clip.antiAlias,
+      child: CheckboxListTile(
+        value: selected,
+        onChanged: (_) => onToggle(),
+        dense: true,
+        controlAffinity: ListTileControlAffinity.leading,
+        title: Text(row.name, style: const TextStyle(fontSize: 13)),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (row.isNew)
+              Text(
+                  '${row.unitCount} satuan'
+                  '${row.newPrice != null ? ' · Rp ${_fmt(row.newPrice!)}' : ''}',
                   style:
-                      TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
-                  children: [
-                    const TextSpan(text: 'Harga: '),
-                    TextSpan(
-                      text: 'Rp ${_fmt(row.oldPrice!)}',
-                      style: const TextStyle(
-                          decoration: TextDecoration.lineThrough,
-                          fontSize: 11),
-                    ),
-                    TextSpan(
-                      text: ' → Rp ${_fmt(row.newPrice!)}',
-                      style: TextStyle(
-                          fontWeight: FontWeight.w600, color: scheme.primary),
-                    ),
-                  ],
+                      TextStyle(fontSize: 12, color: scheme.onSurfaceVariant))
+            else ...[
+              if (row.priceChanged)
+                RichText(
+                  text: TextSpan(
+                    style:
+                        TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                    children: [
+                      const TextSpan(text: 'Harga: '),
+                      TextSpan(
+                        text: 'Rp ${_fmt(row.oldPrice!)}',
+                        style: const TextStyle(
+                            decoration: TextDecoration.lineThrough,
+                            fontSize: 11),
+                      ),
+                      TextSpan(
+                        text: ' → Rp ${_fmt(row.newPrice!)}',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w600, color: scheme.primary),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            // Susulan (permintaan user): tampilkan SEMUA perubahan LAIN
-            // yang terdeteksi (satuan, isi/rasio, barcode, harga
-            // alternatif, dst.), bukan cuma harga — dulu produk yang
-            // diubah satuannya (harga tetap sama) tampil "Tidak ada
-            // perubahan harga" walau usulannya memang sah, nyaris bikin
-            // owner dismiss usulan asli krn dikira glitch.
-            ...row.changes.map((c) => Padding(
-                  padding: const EdgeInsets.only(top: 1),
-                  child: Text(c,
-                      style: TextStyle(
-                          fontSize: 11.5, color: scheme.onSurfaceVariant)),
-                )),
-            if (!row.priceChanged && row.changes.isEmpty)
-              // Seharusnya jarang kejadian (filterUnchangedProposals di
-              // host sudah membuang usulan yang isinya identik SEBELUM
-              // masuk antrian) — kalau tetap muncul, katakan apa adanya
-              // alih-alih menyiratkan ada perubahan harga yang sebenarnya
-              // tidak ada.
-              Text('Tidak ada perubahan terdeteksi',
-                  style:
-                      TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+              // Susulan (permintaan user): tampilkan SEMUA perubahan LAIN
+              // yang terdeteksi (satuan, isi/rasio, barcode, harga
+              // alternatif, dst.), bukan cuma harga — dulu produk yang
+              // diubah satuannya (harga tetap sama) tampil "Tidak ada
+              // perubahan harga" walau usulannya memang sah, nyaris bikin
+              // owner dismiss usulan asli krn dikira glitch.
+              ...row.changes.map((c) => Padding(
+                    padding: const EdgeInsets.only(top: 1),
+                    child: Text(c,
+                        style: TextStyle(
+                            fontSize: 11.5, color: scheme.onSurfaceVariant)),
+                  )),
+              if (!row.priceChanged && row.changes.isEmpty)
+                // Seharusnya jarang kejadian (filterUnchangedProposals di
+                // host sudah membuang usulan yang isinya identik SEBELUM
+                // masuk antrian) — kalau tetap muncul, katakan apa adanya
+                // alih-alih menyiratkan ada perubahan harga yang sebenarnya
+                // tidak ada.
+                Text('Tidak ada perubahan terdeteksi',
+                    style: TextStyle(
+                        fontSize: 11, color: scheme.onSurfaceVariant)),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

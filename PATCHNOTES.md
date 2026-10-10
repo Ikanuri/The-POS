@@ -8,6 +8,12 @@ Untuk catatan teknis lengkap per-commit, lihat [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
+## 10 Oktober 2026 (v3.26.0 — Tampilan baru layar Sync, Pair Device & usulan)
+
+- **Sync WiFi**: judul bagian kini berikon bulat berwarna, kotak IP/Token lebih membulat dengan angka serif, dan antrean persetujuan/usulan tampil rapi sebagai kartu.
+- **Pair Device**: layar bisa digulir (tidak lagi terpotong di HP pendek), pilihan role berbentuk chip, hitung mundur QR berupa label pil.
+- **Tinjau usulan** (produk, pelanggan, Laci Meja): tiap baris kini berupa kartu lembut, tombol terapkan menyatu dengan latar.
+
 ## 10 Oktober 2026 (v3.25.0 — Logo persik, stiker lebih besar, klien boleh ubah landing)
 
 - **Logo di pojok kiri atas Kasir kini logo persik The POS**, sama persis dengan logo di katalog pelanggan (menggantikan ikon keranjang).

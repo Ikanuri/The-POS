@@ -65,38 +65,48 @@ class _CustomerProposalReviewScreenState
                     child: AppEmptyState('Tidak ada usulan'),
                   )
                 : ListView(
-                    padding: const EdgeInsets.all(12),
-                    children: rows.map((r) {
-                      final id = r['id'] as String;
-                      final name = (r['name'] as String?) ?? '(tanpa nama)';
-                      final phone = r['phone'] as String?;
-                      final selected = _selected.contains(id);
-                      return CheckboxListTile(
-                        value: selected,
-                        dense: true,
-                        controlAffinity: ListTileControlAffinity.leading,
-                        title: Text(name, style: const TextStyle(fontSize: 13)),
-                        subtitle: phone != null
-                            ? Text(phone,
-                                style: TextStyle(
-                                    fontSize: 12,
-                                    color: scheme.onSurfaceVariant))
-                            : null,
-                        onChanged: (_) => setState(() {
-                          if (!_selected.add(id)) _selected.remove(id);
-                        }),
-                      );
-                    }).toList(),
+                    padding: const EdgeInsets.fromLTRB(14, 4, 14, 16),
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(4, 0, 4, 10),
+                        child: Text(
+                          '${rows.length} pelanggan diusulkan — hilangkan '
+                          'centang pada yang tidak ingin diterapkan.',
+                          style: TextStyle(
+                              fontSize: 12.5, color: scheme.onSurfaceVariant),
+                        ),
+                      ),
+                      ...rows.map((r) {
+                        final id = r['id'] as String;
+                        final name = (r['name'] as String?) ?? '(tanpa nama)';
+                        final phone = r['phone'] as String?;
+                        final selected = _selected.contains(id);
+                        return Card(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            clipBehavior: Clip.antiAlias,
+                            child: CheckboxListTile(
+                              value: selected,
+                              dense: true,
+                              controlAffinity: ListTileControlAffinity.leading,
+                              title: Text(name,
+                                  style: const TextStyle(fontSize: 13)),
+                              subtitle: phone != null
+                                  ? Text(phone,
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          color: scheme.onSurfaceVariant))
+                                  : null,
+                              onChanged: (_) => setState(() {
+                                if (!_selected.add(id)) _selected.remove(id);
+                              }),
+                            ));
+                      }),
+                    ],
                   ),
           ),
           Container(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-            decoration: BoxDecoration(
-              color: scheme.surface,
-              border: Border(
-                  top:
-                      BorderSide(color: scheme.outlineVariant.withOpacity(0.3))),
-            ),
+            color: Theme.of(context).scaffoldBackgroundColor,
             child: SafeArea(
               top: false,
               child: SizedBox(

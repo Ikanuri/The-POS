@@ -98,7 +98,6 @@ class _LaciMejaProposalReviewScreenState
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final leftBehind = widget.proposal.rows['left_behind_items'] ?? const [];
     final borrowed = widget.proposal.rows['borrowed_items'] ?? const [];
     final preorder = widget.proposal.rows['preorder_entries'] ?? const [];
@@ -112,12 +111,12 @@ class _LaciMejaProposalReviewScreenState
         children: [
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.fromLTRB(14, 4, 14, 16),
               children: [
                 if (leftBehind.isNotEmpty) ...[
                   Text('Titip/Ketinggalan (${leftBehind.length})',
                       style: Theme.of(context).textTheme.titleSmall),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 8),
                   ...leftBehind.map((r) {
                     // Susulan (permintaan user) — baris yang SUDAH diambil
                     // (`collected_at` terisi) tetap masuk usulan (dumpnya
@@ -143,7 +142,7 @@ class _LaciMejaProposalReviewScreenState
                 if (borrowed.isNotEmpty) ...[
                   Text('Pinjaman Barang (${borrowed.length})',
                       style: Theme.of(context).textTheme.titleSmall),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 8),
                   ...borrowed.map((r) {
                     final qty = (r['qty'] as num?)?.toDouble() ?? 0;
                     final returned =
@@ -163,7 +162,7 @@ class _LaciMejaProposalReviewScreenState
                 if (preorder.isNotEmpty) ...[
                   Text('Pre-order (${preorder.length})',
                       style: Theme.of(context).textTheme.titleSmall),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 8),
                   ...preorder.map((r) {
                     final qty = (r['qty_ordered'] as num?)?.toDouble() ?? 0;
                     final deposit = (r['deposit_qty'] as num?)?.toDouble() ?? 0;
@@ -254,12 +253,7 @@ class _LaciMejaProposalReviewScreenState
           ),
           Container(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-            decoration: BoxDecoration(
-              color: scheme.surface,
-              border: Border(
-                  top:
-                      BorderSide(color: scheme.outlineVariant.withOpacity(0.3))),
-            ),
+            color: Theme.of(context).scaffoldBackgroundColor,
             child: SafeArea(
               top: false,
               child: SizedBox(
@@ -290,18 +284,23 @@ class _LaciMejaProposalReviewScreenState
     required String subtitle,
   }) {
     final selected = _selected[table]?.contains(id) ?? false;
-    return CheckboxListTile(
-      value: selected,
-      dense: true,
-      controlAffinity: ListTileControlAffinity.leading,
-      title: Text(title, style: const TextStyle(fontSize: 13)),
-      subtitle: Text(subtitle,
-          style: TextStyle(
-              fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
-      onChanged: (_) => setState(() {
-        final set = _selected.putIfAbsent(table, () => {});
-        if (!set.add(id)) set.remove(id);
-      }),
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      clipBehavior: Clip.antiAlias,
+      child: CheckboxListTile(
+        value: selected,
+        dense: true,
+        controlAffinity: ListTileControlAffinity.leading,
+        title: Text(title, style: const TextStyle(fontSize: 13)),
+        subtitle: Text(subtitle,
+            style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant)),
+        onChanged: (_) => setState(() {
+          final set = _selected.putIfAbsent(table, () => {});
+          if (!set.add(id)) set.remove(id);
+        }),
+      ),
     );
   }
 }
